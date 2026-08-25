@@ -1,0 +1,200 @@
+import { describe, it, before, after, beforeEach, afterEach } from 'mocha';
+import { expect } from 'chai';
+import sinon from 'sinon';
+{{#if (eq testType 'unit')}}
+import { {{pascalCase name}}Service } from '../../../modules/{{kebabCase module}}/{{kebabCase name}}.service';
+import { {{pascalCase name}}Controller } from '../../../modules/{{kebabCase module}}/{{kebabCase name}}.controller';
+import { {{pascalCase name}}Model } from '../../../modules/{{kebabCase module}}/{{kebabCase name}}.model';
+{{/if}}
+{{#if (eq testType 'integration')}}
+import { app } from '../../../app';
+import { MongoMemoryServer } from 'mongodb-memory-server';
+import mongoose from 'mongoose';
+{{/if}}
+{{#if (eq testType 'e2e')}}
+import axios from 'axios';
+import { app } from '../../../app';
+{{/if}}
+
+describe('{{pascalCase name}} {{titleCase testType}} Tests', () => {
+  {{#if (eq testType 'unit')}}
+  let service: {{pascalCase name}}Service;
+  let controller: {{pascalCase name}}Controller;
+  let modelStub: sinon.SinonStubbedInstance<typeof {{pascalCase name}}Model>;
+  
+  beforeEach(() => {
+    modelStub = sinon.stub({{pascalCase name}}Model);
+    service = new {{pascalCase name}}Service();
+    controller = new {{pascalCase name}}Controller();
+  });
+  
+  afterEach(() => {
+    sinon.restore();
+  });
+  
+  describe('Service', () => {
+    it('should get all {{camelCase name}}s', async () => {
+      const mockData = [{ _id: '1', name: 'Test' }];
+      modelStub.find.resolves(mockData);
+      
+      const result = await service.getAll({});
+      
+      expect(result).to.deep.equal(mockData);
+      expect(modelStub.find.calledOnce).to.be.true;
+    });
+    
+    it('should create a {{camelCase name}}', async () => {
+      const mockData = { name: 'Test' };
+      const mockResult = { _id: '1', ...mockData };
+      modelStub.create.resolves(mockResult);
+      
+      const result = await service.create(mockData);
+      
+      expect(result).to.deep.equal(mockResult);
+      expect(modelStub.create.calledWith(mockData)).to.be.true;
+    });
+  });
+  
+  describe('Controller', () => {
+    it('should handle getAll request', async () => {
+      const mockData = [{ _id: '1', name: 'Test' }];
+      const req = { query: {} };
+      const reply = {
+        code: sinon.stub().returnsThis(),
+        send: sinon.stub()
+      };
+      
+      sinon.stub(service, 'getAll').resolves(mockData);
+      
+      await controller.getAll(req as any, reply as any);
+      
+      expect(reply.code.calledWith(200)).to.be.true;
+      expect(reply.send.calledWith(mockData)).to.be.true;
+    });
+  });
+  {{/if}}
+  
+  {{#if (eq testType 'integration')}}
+  let mongoServer: MongoMemoryServer;
+  
+  before(async () => {
+    mongoServer = await MongoMemoryServer.create();
+    const uri = mongoServer.getUri();
+    await mongoose.connect(uri);
+  });
+  
+  after(async () => {
+    await mongoose.disconnect();
+    await mongoServer.stop();
+  });
+  
+  beforeEach(async () => {
+    // Nettoyer la base de données entre les tests
+    const collections = mongoose.connection.collections;
+    for (const key in collections) {
+      await collections[key].deleteMany({});
+    }
+  });
+  
+  it('should create and retrieve a {{camelCase name}}', async () => {
+    // Créer un {{camelCase name}} via l'API
+    const createResponse = await app.inject({
+      method: 'POST',
+      url: '/api/{{kebabCase module}}',
+      payload: {
+        name: 'Test {{pascalCase name}}'
+      },
+      headers: {
+        'Authorization': 'Bearer test-token'
+      }
+    });
+    
+    expect(createResponse.statusCode).to.equal(201);
+    const createdItem = JSON.parse(createResponse.payload);
+    expect(createdItem.name).to.equal('Test {{pascalCase name}}');
+    
+    // Récupérer le {{camelCase name}} créé
+    const getResponse = await app.inject({
+      method: 'GET',
+      url: `/api/{{kebabCase module}}/${createdItem._id}`,
+      headers: {
+        'Authorization': 'Bearer test-token'
+      }
+    });
+    
+    expect(getResponse.statusCode).to.equal(200);
+    const retrievedItem = JSON.parse(getResponse.payload);
+    expect(retrievedItem._id).to.equal(createdItem._id);
+  });
+  {{/if}}
+  
+  {{#if (eq testType 'e2e')}}
+  let server;
+  const baseUrl = 'http://localhost:3000/api';
+  
+  before(async () => {
+    server = await app.listen(3000);
+  });
+  
+  after(async () => {
+    await app.close();
+  });
+  
+  it('should perform complete {{camelCase name}} lifecycle', async () => {
+    // Créer un token de test
+    const loginResponse = await axios.post(`${baseUrl}/auth/login`, {
+      email: 'test@example.com',
+      password: 'password123'
+    });
+    
+    const token = loginResponse.data.token;
+    
+    // Créer un {{camelCase name}}
+    const createResponse = await axios.post(
+      `${baseUrl}/{{kebabCase module}}`,
+      { name: 'E2E Test {{pascalCase name}}' },
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
+    
+    expect(createResponse.status).to.equal(201);
+    const itemId = createResponse.data._id;
+    
+    // Récupérer le {{camelCase name}}
+    const getResponse = await axios.get(
+      `${baseUrl}/{{kebabCase module}}/${itemId}`,
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
+    
+    expect(getResponse.status).to.equal(200);
+    expect(getResponse.data.name).to.equal('E2E Test {{pascalCase name}}');
+    
+    // Mettre à jour le {{camelCase name}}
+    const updateResponse = await axios.put(
+      `${baseUrl}/{{kebabCase module}}/${itemId}`,
+      { name: 'Updated {{pascalCase name}}' },
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
+    
+    expect(updateResponse.status).to.equal(200);
+    
+    // Supprimer le {{camelCase name}}
+    const deleteResponse = await axios.delete(
+      `${baseUrl}/{{kebabCase module}}/${itemId}`,
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
+    
+    expect(deleteResponse.status).to.equal(200);
+    
+    // Vérifier que le {{camelCase name}} a été supprimé
+    try {
+      await axios.get(
+        `${baseUrl}/{{kebabCase module}}/${itemId}`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      throw new Error('Should have failed');
+    } catch (error) {
+      expect(error.response.status).to.equal(404);
+    }
+  });
+  {{/if}}
+});

@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Suppression de compte - YoYo</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <style>
+        :root {
+            --yoyo-primary: #ff6100;
+            --yoyo-secondary: #ff904b;
+            --yoyo-dark: #2c2c2c;
+        }
+        
+        .navbar-brand {
+            color: var(--yoyo-primary) !important;
+            font-weight: bold;
+        }
+        
+        .btn-yoyo {
+            background-color: var(--yoyo-primary);
+            border-color: var(--yoyo-primary);
+            color: white;
+        }
+        
+        .btn-yoyo:hover {
+            background-color: var(--yoyo-secondary);
+            border-color: var(--yoyo-secondary);
+            color: white;
+        }
+        
+        .text-yoyo {
+            color: var(--yoyo-primary);
+        }
+        
+        .alert-danger {
+            border-left: 4px solid #dc3545;
+        }
+        
+        .alert-warning {
+            border-left: 4px solid #ffc107;
+        }
+        
+        .step-number {
+            background-color: var(--yoyo-primary);
+            color: white;
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            margin-right: 15px;
+        }
+        
+        .footer {
+            background-color: var(--yoyo-dark);
+            color: white;
+            margin-top: 60px;
+        }
+    </style>
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="navbar navbar-expand-lg navbar-light bg-white shadow-sm">
+        <div class="container">
+            <a class="navbar-brand" href="#">
+                <i class="fas fa-credit-card me-2"></i>YoYo
+            </a>
+            <div class="navbar-nav ms-auto">
+                <a class="nav-link" href="privacy-policy.html">Confidentialité</a>
+                <a class="nav-link" href="terms-of-service.html">CGU</a>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <div class="container my-5">
+        <div class="row justify-content-center">
+            <div class="col-lg-8">
+                <!-- Header -->
+                <div class="text-center mb-5">
+                    <div class="mb-3">
+                        <i class="fas fa-user-times text-danger" style="font-size: 4rem;"></i>
+                    </div>
+                    <h1 class="text-danger">Suppression de compte</h1>
+                    <p class="lead text-muted">
+                        Nous regrettons que vous souhaitiez supprimer votre compte YoYo.
+                    </p>
+                </div>
+
+                <!-- Important Notice -->
+                <div class="alert alert-danger" role="alert">
+                    <h5 class="alert-heading">
+                        <i class="fas fa-exclamation-triangle me-2"></i>Attention : Action irréversible
+                    </h5>
+                    <p class="mb-0">
+                        La suppression de votre compte est <strong>définitive et irréversible</strong>. 
+                        Toutes vos données seront supprimées de nos serveurs dans un délai de 30 jours.
+                    </p>
+                </div>
+
+                <!-- What will be deleted -->
+                <div class="card mb-4">
+                    <div class="card-header bg-light">
+                        <h5 class="mb-0">
+                            <i class="fas fa-list me-2 text-yoyo"></i>Données qui seront supprimées
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <ul class="list-unstyled">
+                                    <li><i class="fas fa-check text-danger me-2"></i>Informations personnelles</li>
+                                    <li><i class="fas fa-check text-danger me-2"></i>Historique des transactions</li>
+                                    <li><i class="fas fa-check text-danger me-2"></i>Points de fidélité accumulés</li>
+                                    <li><i class="fas fa-check text-danger me-2"></i>Préférences et paramètres</li>
+                                </ul>
+                            </div>
+                            <div class="col-md-6">
+                                <ul class="list-unstyled">
+                                    <li><i class="fas fa-check text-danger me-2"></i>Abonnements actifs</li>
+                                    <li><i class="fas fa-check text-danger me-2"></i>Cartes de fidélité liées</li>
+                                    <li><i class="fas fa-check text-danger me-2"></i>Notifications personnalisées</li>
+                                    <li><i class="fas fa-check text-danger me-2"></i>Données de navigation</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Alternative Options -->
+                <div class="card mb-4">
+                    <div class="card-header bg-light">
+                        <h5 class="mb-0">
+                            <i class="fas fa-lightbulb me-2 text-warning"></i>Alternatives à considérer
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="alert alert-warning">
+                            <p class="mb-3">Avant de supprimer définitivement votre compte, considérez ces options :</p>
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <h6><i class="fas fa-pause me-2"></i>Suspendre temporairement</h6>
+                                    <p class="small text-muted">Désactivez votre compte temporairement, vous pourrez le réactiver plus tard.</p>
+                                </div>
+                                <div class="col-md-6">
+                                    <h6><i class="fas fa-cog me-2"></i>Modifier les paramètres</h6>
+                                    <p class="small text-muted">Ajustez vos préférences de confidentialité et notifications.</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Deletion Process -->
+                <div class="card mb-4">
+                    <div class="card-header bg-light">
+                        <h5 class="mb-0">
+                            <i class="fas fa-clipboard-list me-2 text-yoyo"></i>Processus de suppression
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row mb-3">
+                            <div class="col-auto">
+                                <div class="step-number">1</div>
+                            </div>
+                            <div class="col">
+                                <h6>Demande de suppression</h6>
+                                <p class="text-muted small">Contactez notre support client pour initier la procédure.</p>
+                            </div>
+                        </div>
+                        <div class="row mb-3">
+                            <div class="col-auto">
+                                <div class="step-number">2</div>
+                            </div>
+                            <div class="col">
+                                <h6>Vérification d'identité</h6>
+                                <p class="text-muted small">Confirmation de votre identité pour des raisons de sécurité.</p>
+                            </div>
+                        </div>
+                        <div class="row mb-3">
+                            <div class="col-auto">
+                                <div class="step-number">3</div>
+                            </div>
+                            <div class="col">
+                                <h6>Période de grâce (7 jours)</h6>
+                                <p class="text-muted small">Délai pendant lequel vous pouvez annuler la demande.</p>
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-auto">
+                                <div class="step-number">4</div>
+                            </div>
+                            <div class="col">
+                                <h6>Suppression définitive</h6>
+                                <p class="text-muted small">Suppression complète de toutes vos données sous 30 jours.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Contact Form -->
+                <div class="card">
+                    <div class="card-header bg-danger text-white">
+                        <h5 class="mb-0">
+                            <i class="fas fa-envelope me-2"></i>Demande de suppression de compte
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <form id="deleteAccountForm">
+                            <div class="row mb-3">
+                                <div class="col-md-6">
+                                    <label for="firstName" class="form-label">Prénom *</label>
+                                    <input type="text" class="form-control" id="firstName" required>
+                                </div>
+                                <div class="col-md-6">
+                                    <label for="lastName" class="form-label">Nom *</label>
+                                    <input type="text" class="form-control" id="lastName" required>
+                                </div>
+                            </div>
+                            <div class="mb-3">
+                                <label for="email" class="form-label">Adresse e-mail associée au compte *</label>
+                                <input type="email" class="form-control" id="email" required>
+                            </div>
+                            <div class="mb-3">
+                                <label for="reason" class="form-label">Raison de la suppression (optionnel)</label>
+                                <select class="form-select" id="reason">
+                                    <option value="">Sélectionnez une raison</option>
+                                    <option value="privacy">Préoccupations de confidentialité</option>
+                                    <option value="unused">N'utilise plus l'application</option>
+                                    <option value="duplicate">Compte en double</option>
+                                    <option value="switching">Migration vers un autre service</option>
+                                    <option value="other">Autre</option>
+                                </select>
+                            </div>
+                            <div class="mb-3">
+                                <label for="comments" class="form-label">Commentaires additionnels (optionnel)</label>
+                                <textarea class="form-control" id="comments" rows="3" placeholder="Vos commentaires nous aident à améliorer notre service..."></textarea>
+                            </div>
+                            <div class="form-check mb-4">
+                                <input class="form-check-input" type="checkbox" id="confirmDeletion" required>
+                                <label class="form-check-label" for="confirmDeletion">
+                                    Je comprends que cette action est <strong>irréversible</strong> et que toutes mes données seront définitivement supprimées.
+                                </label>
+                            </div>
+                            <div class="d-grid gap-2 d-md-flex justify-content-md-end">
+                                <button type="button" class="btn btn-secondary me-md-2" onclick="window.history.back();">
+                                    <i class="fas fa-arrow-left me-2"></i>Retour
+                                </button>
+                                <button type="submit" class="btn btn-danger">
+                                    <i class="fas fa-trash me-2"></i>Demander la suppression
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+
+                <!-- Support Contact -->
+                <div class="mt-4 text-center">
+                    <h6>Besoin d'aide ?</h6>
+                    <p class="text-muted">
+                        Contactez notre équipe support : 
+                        <a href="mailto:support@yoyo.app" class="text-yoyo">support@yoyo.app</a>
+                        <br>
+                        Ou appelez-nous au : <strong>+33 1 23 45 67 89</strong>
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="footer py-4">
+        <div class="container">
+            <div class="row align-items-center">
+                <div class="col-md-6">
+                    <p class="mb-0">&copy; 2024 YoYo. Tous droits réservés.</p>
+                </div>
+                <div class="col-md-6 text-md-end">
+                    <a href="privacy-policy.html" class="text-light me-3">Politique de confidentialité</a>
+                    <a href="terms-of-service.html" class="text-light">Conditions d'utilisation</a>
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    <!-- Scripts -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        document.getElementById('deleteAccountForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            // Validation
+            const firstName = document.getElementById('firstName').value;
+            const lastName = document.getElementById('lastName').value;
+            const email = document.getElementById('email').value;
+            const confirmDeletion = document.getElementById('confirmDeletion').checked;
+            
+            if (!firstName || !lastName || !email || !confirmDeletion) {
+                alert('Veuillez remplir tous les champs obligatoires et cocher la case de confirmation.');
+                return;
+            }
+            
+            // Simulation d'envoi de demande
+            if (confirm('Êtes-vous absolument certain de vouloir supprimer votre compte ? Cette action est irréversible.')) {
+                alert('Votre demande de suppression a été transmise. Vous recevrez un e-mail de confirmation sous 24h. Vous avez 7 jours pour annuler cette demande si vous changez d\'avis.');
+                // Ici, vous pourriez envoyer les données à votre API
+                // fetch('/api/delete-account-request', { method: 'POST', body: formData })
+            }
+        });
+    </script>
+</body>
+</html>

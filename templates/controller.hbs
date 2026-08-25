@@ -1,0 +1,34 @@
+import coddyger, { IErrorObject, defines } from 'coddyger';
+import { locale } from '../../public';
+
+const controllerLabel: string = '{{pascalCase name}}Controller';
+
+export class {{pascalCase name}}Controller {
+  constructor() {
+    // Initialisation
+  }
+
+  /**
+   * Méthode principale
+   * @param param Paramètre
+   * @returns Résultat
+   */
+  mainMethod(param: string) {
+    return new Promise(async (resolve, reject) => {
+      try {
+        // Implémentation
+        
+        resolve({
+          status: defines.status.requestOK,
+          message: locale.controller.done,
+          data: { result: param }
+        });
+      } catch (error) {
+        reject(error);
+      }
+    }).catch((e: IErrorObject) => {
+      console.error(e);
+      return coddyger.catchReturn(e, controllerLabel, 'mainMethod');
+    });
+  }
+}

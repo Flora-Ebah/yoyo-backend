@@ -1,0 +1,153 @@
+import { LoggerService, LogLevel } from 'coddyger';
+import { I{{pascalCase name}} } from './{{kebabCase name}}.interface';
+
+/**
+ * Producteur d'événements pour le module {{pascalCase name}}
+ */
+export class {{pascalCase name}}EventProducer {
+  private readonly eventLabel = '{{pascalCase name}}EventProducer';
+  private readonly kafkaClient: any;
+
+  constructor(kafkaClient: any) {
+    this.kafkaClient = kafkaClient;
+  }
+
+  /**
+   * Publie un événement de création
+   * @param item Élément créé
+   */
+  async publishCreated(item: I{{pascalCase name}}): Promise<void> {
+    try {
+      await this.kafkaClient.send({
+        topic: '{{kebabCase name}}.created',
+        messages: [
+          { 
+            key: item._id, 
+            value: JSON.stringify(item)
+          }
+        ]
+      });
+    } catch (error) {
+      LoggerService.log({ 
+        type: LogLevel.Error, 
+        content: error, 
+        location: this.eventLabel, 
+        method: 'publishCreated' 
+      });
+    }
+  }
+
+  /**
+   * Publie un événement de mise à jour
+   * @param item Élément mis à jour
+   */
+  async publishUpdated(item: I{{pascalCase name}}): Promise<void> {
+    try {
+      await this.kafkaClient.send({
+        topic: '{{kebabCase name}}.updated',
+        messages: [
+          { 
+            key: item._id, 
+            value: JSON.stringify(item)
+          }
+        ]
+      });
+    } catch (error) {
+      LoggerService.log({ 
+        type: LogLevel.Error, 
+        content: error, 
+        location: this.eventLabel, 
+        method: 'publishUpdated' 
+      });
+    }
+  }
+
+  /**
+   * Publie un événement de suppression
+   * @param id ID de l'élément supprimé
+   */
+  async publishDeleted(id: string): Promise<void> {
+    try {
+      await this.kafkaClient.send({
+        topic: '{{kebabCase name}}.deleted',
+        messages: [
+          { 
+            key: id, 
+            value: JSON.stringify({ _id: id })
+          }
+        ]
+      });
+    } catch (error) {
+      LoggerService.log({ 
+        type: LogLevel.Error, 
+        content: error, 
+        location: this.eventLabel, 
+        method: 'publishDeleted' 
+      });
+    }
+  }
+}
+
+/**
+ * Consommateur d'événements pour le module {{pascalCase name}}
+ */
+export class {{pascalCase name}}EventConsumer {
+  private readonly eventLabel = '{{pascalCase name}}EventConsumer';
+
+  /**
+   * Traite un événement de création
+   * @param message Message Kafka
+   */
+  async handleCreated(message: any): Promise<void> {
+    try {
+      const item = JSON.parse(message.value.toString());
+      console.log(`{{pascalCase name}} créé: ${item._id}`);
+      // Logique de traitement
+    } catch (error) {
+      LoggerService.log({ 
+        type: LogLevel.Error, 
+        content: error, 
+        location: this.eventLabel, 
+        method: 'handleCreated' 
+      });
+    }
+  }
+
+  /**
+   * Traite un événement de mise à jour
+   * @param message Message Kafka
+   */
+  async handleUpdated(message: any): Promise<void> {
+    try {
+      const item = JSON.parse(message.value.toString());
+      console.log(`{{pascalCase name}} mis à jour: ${item._id}`);
+      // Logique de traitement
+    } catch (error) {
+      LoggerService.log({ 
+        type: LogLevel.Error, 
+        content: error, 
+        location: this.eventLabel, 
+        method: 'handleUpdated' 
+      });
+    }
+  }
+
+  /**
+   * Traite un événement de suppression
+   * @param message Message Kafka
+   */
+  async handleDeleted(message: any): Promise<void> {
+    try {
+      const { _id } = JSON.parse(message.value.toString());
+      console.log(`{{pascalCase name}} supprimé: ${_id}`);
+      // Logique de traitement
+    } catch (error) {
+      LoggerService.log({ 
+        type: LogLevel.Error, 
+        content: error, 
+        location: this.eventLabel, 
+        method: 'handleDeleted' 
+      });
+    }
+  }
+}

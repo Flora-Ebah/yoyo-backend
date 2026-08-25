@@ -1,0 +1,59 @@
+version: '3.8'
+
+services:
+  app:
+    image: ${DOCKER_IMAGE}
+    restart: unless-stopped
+    ports:
+      - "${SERVER_PORT}:3000"
+    environment:
+      # Environment & App Config
+      - ENV=${ENV}
+      - APP_NAME=${APP_NAME}
+      - SERVER_PORT=3001
+      - SERVER_PATH=${SERVER_PATH}
+      - API_VERSION=${API_VERSION}
+      - ORIGINS=${ORIGINS}
+      
+      # Database
+      - USE_DB=${USE_DB}
+      - DB_URI=${DB_URI}
+      - DB_NAME=${DB_NAME}
+      
+      # JWT & Auth
+      - JWT_SECRET=${JWT_SECRET}
+      - JWT_PUBLIC=${JWT_PUBLIC}
+      - JWT_AUTH_SECRET=${JWT_AUTH_SECRET}
+      # L'image ne porte plus de fichier de configuration (B-05) : cette variable doit venir d'ici,
+      # sans quoi les jetons d'accès seraient signés sans date d'expiration.
+      - JWT_TOKEN_EXPIRE=${JWT_TOKEN_EXPIRE}
+      - DEFAULT_ACCOUNT=${DEFAULT_ACCOUNT}
+      
+      # Google Auth
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
+      - DEFAULT_PROFILE_ID=${DEFAULT_PROFILE_ID}
+      
+      # Kafka
+      - KAFKA_BROKER=${KAFKA_BROKER}
+      - KAFKA_CLIENT=${KAFKA_CLIENT}
+      - KAFKA_TOPIC=${KAFKA_TOPIC}
+      - KAFKA_GROUP=${KAFKA_GROUP}
+      - KAFKA_FOREIGNERS=${KAFKA_FOREIGNERS}
+      
+    volumes:
+      - ./uploads:/usr/src/app/uploads
+      - ./logs:/usr/src/app/logs
+      - ./public:/usr/src/app/public
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+networks:
+  app-network:
+    driver: bridge

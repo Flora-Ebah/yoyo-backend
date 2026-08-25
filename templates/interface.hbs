@@ -1,0 +1,48 @@
+/**
+ * Interface pour {{pascalCase name}}
+ */
+export interface I{{pascalCase name}} {
+  {{#includes properties 'id'}}
+  _id?: string;
+  {{/includes}}
+  {{#includes properties 'name'}}
+  name: string;
+  {{/includes}}
+  {{#includes properties 'description'}}
+  description?: string;
+  {{/includes}}
+  {{#includes properties 'status'}}
+  status?: 'active' | 'inactive' | 'pending' | 'deleted';
+  {{/includes}}
+  {{#includes properties 'createdAt'}}
+  createdAt?: Date;
+  {{/includes}}
+  {{#includes properties 'updatedAt'}}
+  updatedAt?: Date;
+  {{/includes}}
+}
+
+/**
+ * Interface pour la création de {{pascalCase name}}
+ */
+export interface I{{pascalCase name}}Create extends Omit<I{{pascalCase name}}, '_id' | 'createdAt' | 'updatedAt'> {}
+
+/**
+ * Interface pour la mise à jour de {{pascalCase name}}
+ */
+export interface I{{pascalCase name}}Update extends Partial<Omit<I{{pascalCase name}}, '_id' | 'createdAt' | 'updatedAt'>> {}
+
+/**
+ * Interface pour les filtres de recherche de {{pascalCase name}}
+ */
+export interface I{{pascalCase name}}Filter {
+  {{#includes properties 'name'}}
+  name?: string;
+  {{/includes}}
+  {{#includes properties 'status'}}
+  status?: 'active' | 'inactive' | 'pending' | 'deleted';
+  {{/includes}}
+  limit?: number;
+  skip?: number;
+  sort?: Record<string, 1 | -1>;
+}

@@ -1,0 +1,13 @@
+/**
+ * Module {{pascalCase name}}
+ * @description {{description}}
+ */
+
+export * from './{{kebabCase name}}.controller';
+export * from './{{kebabCase name}}.service';
+export * from './{{kebabCase name}}.model';
+export * from './{{kebabCase name}}.interface';
+
+{{#if (includes features 'events')}}
+export * from './{{kebabCase name}}.event';
+{{/if}}

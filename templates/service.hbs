@@ -1,0 +1,29 @@
+import coddyger, { LoggerService, LogLevel } from 'coddyger';
+
+export class {{pascalCase name}}Service {
+  private readonly serviceLabel = '{{pascalCase name}}Service';
+
+  constructor() {
+    // Initialisation
+  }
+
+  /**
+   * Méthode principale
+   * @param param Paramètre
+   * @returns Résultat
+   */
+  async mainMethod(param: string): Promise<any> {
+    try {
+      // Implémentation
+      return { result: param };
+    } catch (error) {
+      LoggerService.log({ 
+        type: LogLevel.Error, 
+        content: error, 
+        location: this.serviceLabel, 
+        method: 'mainMethod' 
+      });
+      throw error;
+    }
+  }
+}

@@ -1,0 +1,21 @@
+# 🔐 Fichiers contenant des secrets ou variables sensibles
+.env
+.env.*
+!.env.example
+!.env.sample
+
+# 🛠️ Dossiers de build et dépendances
+node_modules
+dist
+build
+.out
+.next
+
+# 📦 Fichiers système ou spécifiques à l'éditeur
+.vscode
+.DS_Store
+*.log
+*.lock
+
+# 🚫 Ne pas ignorer le code source !
+# Garde src/, pages/, app/, components/ etc. accessibles à l'IA

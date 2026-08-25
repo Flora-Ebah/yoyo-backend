@@ -1,0 +1,33 @@
+import mongoose, { Schema, Document } from 'mongoose';
+import { IData, MongoDbDao } from 'coddyger';
+
+export interface I{{pascalCase name}} {
+  _id?: string;
+  name: string;
+  description?: string;
+  status?: string;
+  createdAt?: Date;
+  updatedAt?: Date;
+}
+
+const schema = new mongoose.Schema<I{{pascalCase name}}>({
+  _id: Schema.Types.ObjectId,
+  name: { type: String, required: true },
+  description: { type: String },
+  status: { 
+    type: String, 
+    enum: ['active', 'inactive', 'suspended', 'removed', 'archived'], 
+    default: 'active' 
+  },
+},
+{ timestamps: true });
+
+const model = mongoose.model<I{{pascalCase name}} & Document>('{{pascalCase name}}', schema);
+
+export class {{pascalCase name}}Set extends MongoDbDao<I{{pascalCase name}} & Document> implements IData<I{{pascalCase name}} & Document> {
+  defaultModel = model;
+
+  constructor() {
+    super();
+  }
+}
