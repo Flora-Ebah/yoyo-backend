@@ -52,6 +52,22 @@ class SeederRunner {
   }
 
   /**
+   * Retire les catégories hors référentiel qui ne sont utilisées par aucune boutique
+   */
+  async pruneCategories(options = {}) {
+    console.log('🧹 Nettoyage des catégories hors référentiel...');
+    await this.categorySeeder.prune(options);
+  }
+
+  /**
+   * Affiche l'état de la taxonomie sans rien modifier
+   */
+  async reportCategories() {
+    console.log('📋 Inventaire des catégories...');
+    await this.categorySeeder.report();
+  }
+
+  /**
    * Exécute seulement le seeder des plans
    */
   async runPlans() {

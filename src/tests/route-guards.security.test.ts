@@ -1,5 +1,6 @@
 import { expect } from 'chai';
 import { TokenMiddleware, PaymentNotifyMiddleware } from '../api/middleware';
+import categoryRoute from '../api/routes/category.route';
 import certificationRoute from '../api/routes/certification.route';
 import clientRoute from '../api/routes/client.route';
 import mainRoute from '../api/routes/main.route';
@@ -306,6 +307,65 @@ describe('[Sécurité] Gardes des routes', () => {
 
 			expect(body.properties.apikey).to.not.have.property('default');
 			expect(JSON.stringify(body)).to.not.contain('TrQpAbG2tByxw0eS');
+		});
+	});
+
+	/**
+	 * [Taxonomie] Les catégories classent les boutiques partenaires : `partner.categories` y fait
+	 * référence, l'app Partenaire y puise sa liste de choix et l'app Client sa barre de filtres.
+	 * L'écriture était en `TokenMiddleware.verify`, franchi par le jeton public embarqué dans les
+	 * binaires mobiles : n'importe qui pouvait renommer ou supprimer une catégorie.
+	 */
+	describe('Catégories — écriture réservée aux administrateurs', () => {
+		const routes = collectRoutes(categoryRoute);
+
+		const writeRoutes: Array<[string, string]> = [
+			['POST', '/category'],
+			['PUT', '/category'],
+			['DELETE', '/category/remove/:id']
+		];
+
+		writeRoutes.forEach(([method, url]) => {
+			it(`${method} ${url} est réservée aux administrateurs`, () => {
+				const route = find(routes, method, url);
+				expect(route, `route ${method} ${url} introuvable`).to.not.be.undefined;
+				expect(route!.preHandler).to.equal(TokenMiddleware.verifyAdmin);
+			});
+		});
+
+		/**
+		 * Les deux applications mobiles lisent cette liste sans être administrateur : la
+		 * verrouiller casserait la création de boutique et le filtrage des partenaires.
+		 */
+		const readRoutes: Array<[string, string]> = [
+			['GET', '/category'],
+			['GET', '/category/findByStatus'],
+			['GET', '/category/details/:id']
+		];
+
+		readRoutes.forEach(([method, url]) => {
+			it(`${method} ${url} reste lisible par les applications`, () => {
+				const route = find(routes, method, url);
+				expect(route, `route ${method} ${url} introuvable`).to.not.be.undefined;
+				expect(route!.preHandler).to.equal(TokenMiddleware.verify);
+			});
+		});
+
+		it("le rang d'affichage est modifiable via l'API", () => {
+			expect(find(routes, 'POST', '/category')!.schema.body.properties).to.have.property('position');
+			expect(find(routes, 'PUT', '/category')!.schema.body.properties).to.have.property('position');
+		});
+
+		/**
+		 * Le service pagine par défaut à 10 : avec 13 catégories, un appel sans pagination
+		 * tronquait la liste et rendait les dernières inatteignables dans les applications.
+		 */
+		it('la liste est triable et non tronquée par défaut', () => {
+			const query = find(routes, 'GET', '/category')!.schema.query;
+
+			expect(query.properties.sort.enum).to.include('position');
+			expect(query.properties.sort.default).to.equal('position');
+			expect(query.properties.orderBy.default).to.equal('asc');
 		});
 	});
 

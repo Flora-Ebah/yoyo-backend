@@ -11,6 +11,7 @@
     "emitDecoratorMetadata": true,
     "allowSyntheticDefaultImports": true,
     "noImplicitAny": false,
+    "rootDir": "./src",
 		"outDir": "./build",
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,

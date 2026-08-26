@@ -14,6 +14,8 @@ const schema = new mongoose.Schema<ICategory>({
   },
   icon: { type: String },
   color: { type: String },
+  // Rang d'affichage éditorial (cf. ICategory.position). 0 = non classé, remonte en tête.
+  position: { type: Number, default: 0 },
 },
 { timestamps: true });
 

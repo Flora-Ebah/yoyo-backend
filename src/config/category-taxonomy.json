@@ -1,0 +1,105 @@
+{
+  "categories": [
+    {
+      "name": "Restaurants, Maquis & bars",
+      "description": "Restaurants, maquis, bars et lieux de restauration",
+      "icon": "restaurant",
+      "color": "#E4572E",
+      "position": 1
+    },
+    {
+      "name": "Cafés, Glaciers & Pâtisseries",
+      "description": "Cafés, salons de thé, glaciers, pâtisseries et boulangeries",
+      "icon": "cafe",
+      "color": "#B07A4B",
+      "position": 2
+    },
+    {
+      "name": "Beauté & Coiffure",
+      "description": "Salons de coiffure, instituts de beauté, esthétique et onglerie",
+      "icon": "cut",
+      "color": "#E1719C",
+      "position": 3
+    },
+    {
+      "name": "Mode & Habillement",
+      "description": "Vêtements, chaussures, maroquinerie et accessoires",
+      "icon": "shirt",
+      "color": "#7B61FF",
+      "position": 4
+    },
+    {
+      "name": "Supérettes & Alimentation",
+      "description": "Supérettes, épiceries, supermarchés et commerces alimentaires",
+      "icon": "cart",
+      "color": "#3DA35D",
+      "position": 5
+    },
+    {
+      "name": "Sport & Loisirs",
+      "description": "Salles de sport, équipements sportifs et activités de loisir",
+      "icon": "basketball",
+      "color": "#1FA2A6",
+      "position": 6
+    },
+    {
+      "name": "Santé & Bien-être",
+      "description": "Pharmacies, cliniques, opticiens, spas et services de bien-être",
+      "icon": "medkit",
+      "color": "#D64550",
+      "position": 7
+    },
+    {
+      "name": "Électronique & Téléphonie",
+      "description": "Téléphonie, informatique, électroménager et accessoires",
+      "icon": "phone-portrait",
+      "color": "#2D7FF9",
+      "position": 8
+    },
+    {
+      "name": "Services Auto",
+      "description": "Garages, lavage, pièces détachées et services automobiles",
+      "icon": "car-sport",
+      "color": "#55606E",
+      "position": 9
+    },
+    {
+      "name": "Hôtel & Hébergement",
+      "description": "Hôtels, résidences meublées et hébergements",
+      "icon": "bed",
+      "color": "#C9A227",
+      "position": 10
+    },
+    {
+      "name": "Maison & Déco",
+      "description": "Ameublement, décoration, quincaillerie et équipement de la maison",
+      "icon": "home",
+      "color": "#7A9E3F",
+      "position": 11
+    },
+    {
+      "name": "Enfants & Éducation",
+      "description": "Puériculture, jouets, écoles, formations et soutien scolaire",
+      "icon": "school",
+      "color": "#F2994A",
+      "position": 12
+    },
+    {
+      "name": "Autres",
+      "description": "Autres commerces et services",
+      "icon": "ellipsis-horizontal",
+      "color": "#8A94A6",
+      "position": 13
+    }
+  ],
+  "renames": {
+    "Restaurants & Maquis": "Restaurants, Maquis & bars",
+    "Cafés & Pâtisseries": "Cafés, Glaciers & Pâtisseries",
+    "Mode & Boutiques": "Mode & Habillement",
+    "Alimentation": "Supérettes & Alimentation",
+    "Électronique": "Électronique & Téléphonie",
+    "Auto & Services": "Services Auto",
+    "Hôtel/Hébergement": "Hôtel & Hébergement",
+    "Éducation": "Enfants & Éducation"
+  }
+}

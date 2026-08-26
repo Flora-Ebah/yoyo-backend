@@ -33,11 +33,18 @@ Options:
   --clean, -clean    Nettoyer toutes les données seedées
   --help, -h         Afficher cette aide
 
+Options propres aux catégories (à combiner avec --categories):
+  --report           Inventaire, sans aucune modification
+  --prune            Archiver les catégories hors référentiel sans boutique rattachée
+  --hard             Avec --prune: supprimer définitivement au lieu d'archiver
+
 Exemples:
-  node seed.js                    # Exécuter tous les seeders
-  node seed.js --categories       # Seeder des catégories seulement
-  node seed.js --plans            # Seeder des plans seulement
-  node seed.js --clean            # Nettoyer les données
+  node seed.js                            # Exécuter tous les seeders
+  node seed.js --categories               # Aligner la base sur le référentiel
+  node seed.js --categories --report      # Voir l'état sans rien changer
+  node seed.js --categories --prune       # Retirer les catégories obsolètes inutilisées
+  node seed.js --plans                    # Seeder des plans seulement
+  node seed.js --clean                    # Nettoyer les données
     `);
     return;
   }
@@ -54,7 +61,15 @@ Exemples:
 
     // Exécution des seeders
     if (args.includes('--categories') || args.includes('-c')) {
-      await seederRunner.runCategories();
+      // `--report` inspecte sans rien modifier ; `--prune` retire les catégories hors
+      // référentiel qu'aucune boutique n'utilise (archivage, ou suppression avec `--hard`).
+      if (args.includes('--report')) {
+        await seederRunner.reportCategories();
+      } else if (args.includes('--prune')) {
+        await seederRunner.pruneCategories({ hard: args.includes('--hard') });
+      } else {
+        await seederRunner.runCategories();
+      }
     } else if (args.includes('--plans') || args.includes('-p')) {
       await seederRunner.runPlans();
     } else if (args.includes('--admin')) {
