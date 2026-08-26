@@ -622,7 +622,27 @@ export class TransactionService {
       
       // Étape 5: Créer l'objet transaction
       const transaction = this.createTransactionObject(transactionId, userId, plan, isScheduledRenewal, currentSubscriptionId);
-      
+
+      // Étape 5bis: Plan gratuit (prix <= 0) — aucun paiement à initier.
+      // On marque la transaction comme réglée et on crée directement l'abonnement.
+      if (!plan.price || Number(plan.price) <= 0) {
+        transaction.paymentMethod = 'free';
+        transaction.paymentStatus = 'success';
+        transaction.status = 'active';
+        transaction.paymentUrl = 'free'; // champ requis, ne peut pas être vide
+        await this.create(transaction);
+
+        if (!isScheduledRenewal) {
+          await this.subscriptionService.createSubscription(userId, plan._id ?? planId);
+        }
+
+        const savedFree = await this.dao.selectOne({ _id: transactionId });
+        return {
+          success: true,
+          data: { ...savedFree, isFree: true, isExistingTransaction: false }
+        };
+      }
+
       // Étape 6: Traiter l'initiation du paiement
       const paymentResult = await this.processPaymentInitiation(transaction, plan);
       if (!paymentResult.success) {

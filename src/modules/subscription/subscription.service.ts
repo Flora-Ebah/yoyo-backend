@@ -225,16 +225,26 @@ export class SubscriptionService {
           };
         }
         
-        // Durée de l'abonnement (par défaut: 1 mois)
-        const durationMonths = options?.durationMonths ?? 1;
-        
+        // Durée de l'abonnement : priorité à durationMonths (renouvellement multi-mois),
+        // sinon durationDays du plan (7, 30, 90, 365…), sinon 1 mois par défaut.
+        const durationMonths = options?.durationMonths;
+
         // Date de début = date actuelle
         const startDate = new Date();
-        
-        // Date de fin = date de début + durée en mois
         const endDate = new Date(startDate);
-        endDate.setMonth(endDate.getMonth() + durationMonths);
-        
+        let subscriptionPrice = plan.price;
+
+        if (durationMonths && durationMonths > 0) {
+          endDate.setMonth(endDate.getMonth() + durationMonths);
+          subscriptionPrice = plan.price * durationMonths;
+        } else if (plan.durationDays && plan.durationDays > 0) {
+          endDate.setDate(endDate.getDate() + plan.durationDays);
+          subscriptionPrice = plan.price;
+        } else {
+          endDate.setMonth(endDate.getMonth() + 1);
+          subscriptionPrice = plan.price;
+        }
+
         // Créer l'objet abonnement
         const subscriptionData: ISubscription = {
           _id: coddyger.string.generateObjectId(),
@@ -247,7 +257,7 @@ export class SubscriptionService {
           paymentMethod: options?.paymentMethod,
           transactionId: options?.transactionId,
           autoRenew: options?.autoRenew || false,
-          price: plan.price * durationMonths,
+          price: subscriptionPrice,
           currency: plan.currency,
           metadata: options?.metadata
         };
