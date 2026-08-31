@@ -15,6 +15,7 @@
     "seed:categories": "node seed.js --categories",
     "seed:plans": "node seed.js --plans",
     "seed:admin": "node seed.js --admin",
+    "seed:roles": "node seed.js --roles",
     "seed:clean": "node seed.js --clean",
     "cron:test": "node src/scripts/test-subscription-cron.js",
     "cron:run": "node src/scripts/run-subscription-cron.js",

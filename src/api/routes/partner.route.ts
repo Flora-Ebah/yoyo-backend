@@ -486,6 +486,61 @@ const defaultRoute: any = (fastify: any, options, done) => {
     }
   });
 
+  // Répartition géographique par ville (admin) — alimente la carte du dashboard
+  fastify.route({
+    schema: {
+      tags,
+      summary: 'Répartition géographique des partenaires par ville',
+      description: 'Nombre de partenaires par ville avec coordonnées moyennes (admin uniquement)',
+      query: {
+        type: 'object',
+        properties: {
+          certified: { type: 'string', enum: ['certified', 'uncertified'] }
+        },
+        required: [],
+        additionalProperties: false
+      }
+    },
+    method: 'GET',
+    url: `${routePath}/geo-distribution`,
+    preHandler: TokenMiddleware.verifyAdmin,
+    handler: (request, reply) => {
+      const certified: any = request.query.certified;
+
+      let Q = Controller.getGeoDistribution({ certified });
+      return coddyger.api(reply, Q);
+    }
+  });
+
+  // Statistiques des partenaires (admin) — total + nouveaux sur période avec tendance
+  fastify.route({
+    schema: {
+      tags,
+      summary: 'Statistiques des partenaires',
+      query: {
+        type: 'object',
+        properties: {
+          from: { type: 'string' },
+          to: { type: 'string' },
+          certified: { type: 'string', enum: ['certified', 'uncertified'] }
+        },
+        required: [],
+        additionalProperties: false
+      }
+    },
+    method: 'GET',
+    url: `${routePath}/stats`,
+    preHandler: TokenMiddleware.verifyAdmin,
+    handler: (request, reply) => {
+      const from: any = request.query.from;
+      const to: any = request.query.to;
+      const certified: any = request.query.certified;
+
+      let Q = Controller.getStats({ from, to, certified });
+      return coddyger.api(reply, Q);
+    }
+  });
+
   done();
 };
 

@@ -227,6 +227,8 @@ export class CertificationController {
 		sortBy?: string;
 		orderBy?: string;
 		status?: string;
+		from?: string;
+		to?: string;
 	}) {
 		return new Promise(async (resolve, reject) => {
 			const page: number = payloads.page || 1;
@@ -235,26 +237,37 @@ export class CertificationController {
 			const status: any = payloads.status!;
 			const sortBy: string = payloads.sortBy ?? '';
 			const orderBy: string = payloads.orderBy ?? '';
+			const from: string = payloads.from ?? '';
+			const to: string = payloads.to ?? '';
 
 			let data: any | IErrorObject = {};
 
-			if (coddyger.string.isEmpty(query) && coddyger.string.isEmpty(status)) {
-				data = await this.dao.select({ params: {}, page, pageSize });
-			} else if (!coddyger.string.isEmpty(sortBy) || !coddyger.string.isEmpty(orderBy)) {
-				data = await this.dao.select({ params: {}, page, pageSize, sort: sortBy, orderBy });
-			} else if (!coddyger.string.isEmpty(status)) {
-				data = await this.dao.select({ params: { status }, page, pageSize, sort: sortBy, orderBy });
-			} else {
-				data = await this.dao.select({
-					params: {
-						$or: [{ slug: { $regex: query || '', $options: 'i' } }, { title: { $regex: query || '', $options: 'i' } }]
-					},
-					page,
-					pageSize,
-					sort: sortBy,
-					orderBy
-				});
+			// Filtres combinés (statut, plage de dates sur createdAt, recherche type).
+			const params: any = {};
+
+			if (!coddyger.string.isEmpty(status)) {
+				params.status = status;
 			}
+
+			if (!coddyger.string.isEmpty(from) || !coddyger.string.isEmpty(to)) {
+				params.createdAt = {};
+
+				if (!coddyger.string.isEmpty(from)) {
+					params.createdAt.$gte = new Date(from);
+				}
+
+				if (!coddyger.string.isEmpty(to)) {
+					const end = new Date(to);
+					end.setHours(23, 59, 59, 999);
+					params.createdAt.$lte = end;
+				}
+			}
+
+			if (!coddyger.string.isEmpty(query)) {
+				params.$or = [{ documentType: { $regex: query, $options: 'i' } }];
+			}
+
+			data = await this.dao.select({ params, page, pageSize, sort: sortBy || 'createdAt', orderBy: orderBy || 'desc' });
 
 			if (data.error) {
 				reject(data);

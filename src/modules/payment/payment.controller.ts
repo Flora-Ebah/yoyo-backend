@@ -16,7 +16,7 @@ export class PaymentController {
    * Récupère tous les éléments
    * @returns Liste des éléments
    */
-  getAll(payloads: { page?: number; pageSize?: number; query?: string; status?: string }) {
+  getAll(payloads: { page?: number; pageSize?: number; query?: string; status?: string; from?: string; to?: string }) {
     return new Promise(async (resolve, reject) => {
       try {
         const items = await this.service.getAll(payloads);
@@ -32,6 +32,44 @@ export class PaymentController {
     }).catch((e: IErrorObject) => {
       console.error(e);
       return coddyger.catchReturn(e, controllerLabel, 'getAll');
+    });
+  }
+
+  getOverviewStats(filters?: { status?: string; from?: string; to?: string; query?: string }) {
+    return new Promise(async (resolve, reject) => {
+      try {
+        const stats = await this.service.getOverviewStats(filters);
+
+        resolve({
+          status: defines.status.requestOK,
+          message: "Statistiques des paiements récupérées avec succès",
+          data: stats
+        });
+      } catch (error) {
+        reject(error);
+      }
+    }).catch((e: IErrorObject) => {
+      console.error(e);
+      return coddyger.catchReturn(e, controllerLabel, 'getOverviewStats');
+    });
+  }
+
+  getTopPartners(filters?: { from?: string; to?: string; status?: string; limit?: number; certified?: string }) {
+    return new Promise(async (resolve, reject) => {
+      try {
+        const data = await this.service.getTopPartners(filters);
+
+        resolve({
+          status: defines.status.requestOK,
+          message: 'Top partenaires récupéré avec succès',
+          data
+        });
+      } catch (error) {
+        reject(error);
+      }
+    }).catch((e: IErrorObject) => {
+      console.error(e);
+      return coddyger.catchReturn(e, controllerLabel, 'getTopPartners');
     });
   }
 

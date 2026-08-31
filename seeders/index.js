@@ -5,12 +5,16 @@
 const { CategorySeeder } = require('./category.seeder');
 const { PlanSeeder } = require('./plan.seeder');
 const { AdminSeeder } = require('./admin.seeder');
+const { RolesSeeder } = require('./roles.seeder');
+const { CommercialSeeder } = require('./commercial.seeder');
 
 class SeederRunner {
   constructor() {
     this.categorySeeder = new CategorySeeder();
     this.planSeeder = new PlanSeeder();
     this.adminSeeder = new AdminSeeder();
+    this.rolesSeeder = new RolesSeeder();
+    this.commercialSeeder = new CommercialSeeder();
   }
 
   /**
@@ -34,6 +38,11 @@ class SeederRunner {
       console.log('👤 Seeding du compte admin...');
       await this.adminSeeder.seed();
       console.log('✅ Compte admin seedé avec succès\n');
+
+      // 4. Seed des rôles métier (Commercial, ...)
+      console.log('🛡️  Seeding des rôles...');
+      await this.rolesSeeder.seed();
+      console.log('✅ Rôles seedés avec succès\n');
 
       console.log('🎉 Tous les seeders ont été exécutés avec succès!');
     } catch (error) {
@@ -86,6 +95,24 @@ class SeederRunner {
   }
 
   /**
+   * Exécute seulement le seeder des rôles métier
+   */
+  async runRoles() {
+    console.log('🛡️  Seeding des rôles...');
+    await this.rolesSeeder.seed();
+    console.log('✅ Rôles seedés avec succès!');
+  }
+
+  /**
+   * Exécute seulement le seeder du compte commercial de test
+   */
+  async runCommercial() {
+    console.log('🧑‍💼 Seeding du compte commercial...');
+    await this.commercialSeeder.seed();
+    console.log('✅ Compte commercial seedé avec succès!');
+  }
+
+  /**
    * Nettoie toutes les données seedées
    */
   async cleanAll() {
@@ -110,5 +137,7 @@ module.exports = {
   SeederRunner,
   CategorySeeder,
   PlanSeeder,
-  AdminSeeder
+  AdminSeeder,
+  RolesSeeder,
+  CommercialSeeder
 };

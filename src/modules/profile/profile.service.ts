@@ -116,7 +116,19 @@ export class ProfileService {
       if (!item.status) {
         item.status = 'active';
       }
-      
+
+      // Génération d'un slug à partir du nom si non fourni (le modèle l'exige).
+      if (!item.slug && item.name) {
+        item.slug =
+          item.name
+            .toString()
+            .toLowerCase()
+            .normalize('NFD')
+            .replace(/[̀-ͯ]/g, '')
+            .replace(/[^a-z0-9]+/g, '-')
+            .replace(/^-+|-+$/g, '') + '-' + Date.now().toString(36);
+      }
+
       return await this.dao.save(item);
     } catch (error) {
       LoggerService.log({ 

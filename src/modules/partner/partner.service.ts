@@ -2,6 +2,7 @@ import { IPartner, IOpeningHours } from './partner.interface';
 import { PartnerSet } from './partner.model';
 import coddyger, { IData, IErrorObject, LoggerService, LogLevel } from 'coddyger';
 import { CategoryService } from '../category/category.service';
+import { ClientSet } from '../client';
 
 export class PartnerService {
   private readonly dao: IData<IPartner>;
@@ -480,6 +481,127 @@ export class PartnerService {
         rows
       };
     } catch (error) {
+      return { error: true, data: error };
+    }
+  }
+
+  /**
+   * Résout les identifiants des partenaires selon le statut de certification (KYC) de leur
+   * propriétaire (Client.isDocumentVerified). Sert au filtre « Pro : certifiés / non certifiés ».
+   * @returns liste d'ObjectId de partenaires, ou null si aucun filtre de certification n'est demandé
+   */
+  private async getPartnerIdsByCertification(certified?: string): Promise<any[] | null> {
+    const value = (certified ?? '').toLowerCase();
+
+    if (value !== 'certified' && value !== 'uncertified') {
+      return null;
+    }
+
+    const clientDao: any = new ClientSet();
+    const clientFilter =
+      value === 'certified'
+        ? { isDocumentVerified: true }
+        : { $or: [{ isDocumentVerified: { $ne: true } }, { isDocumentVerified: { $exists: false } }] };
+
+    const clients: any = await clientDao.selectHug(clientFilter);
+    const clientIds = Array.isArray(clients) ? clients.map((c: any) => c._id) : [];
+
+    const model: any = (this.dao as any).defaultModel;
+    const partners = await model
+      .find({ status: { $nin: ['removed', 'archived'] }, user: { $in: clientIds } }, '_id')
+      .lean();
+
+    return Array.isArray(partners) ? partners.map((p: any) => p._id) : [];
+  }
+
+  /**
+   * Répartition géographique des partenaires par ville (widget carte du dashboard admin).
+   * @returns [{ ville, pros, lat, lng }] — lat/lng = moyenne des coordonnées connues, sinon null
+   */
+  async getGeoDistribution(filters?: { certified?: string }): Promise<any> {
+    try {
+      const model: any = (this.dao as any).defaultModel;
+
+      const match: any = { status: { $nin: ['removed', 'archived'] }, ville: { $type: 'string', $ne: '' } };
+
+      const certifiedIds = await this.getPartnerIdsByCertification(filters?.certified);
+
+      if (certifiedIds !== null) {
+        match._id = { $in: certifiedIds };
+      }
+
+      const rows = await model.aggregate([
+        { $match: match },
+        { $group: { _id: '$ville', pros: { $sum: 1 }, lat: { $avg: '$latitude' }, lng: { $avg: '$longitude' } } },
+        { $sort: { pros: -1 } }
+      ]);
+
+      return (Array.isArray(rows) ? rows : []).map((r: any) => ({
+        ville: r._id,
+        pros: r.pros,
+        lat: typeof r.lat === 'number' && !isNaN(r.lat) ? r.lat : null,
+        lng: typeof r.lng === 'number' && !isNaN(r.lng) ? r.lng : null
+      }));
+    } catch (error) {
+      LoggerService.log({
+        type: LogLevel.Error,
+        content: error || 'Erreur inconnue',
+        location: this.serviceLabel,
+        method: 'getGeoDistribution'
+      });
+
+      return { error: true, data: error };
+    }
+  }
+
+  /**
+   * Statistiques des partenaires : total actif et nouveaux sur la période avec tendance
+   * (widget KPI « Nouveaux pros » du dashboard admin).
+   * @returns { total, newInPeriod, trend }
+   */
+  async getStats(filters?: { from?: string; to?: string; certified?: string }): Promise<any> {
+    try {
+      const model: any = (this.dao as any).defaultModel;
+      const base: any = { status: { $nin: ['removed', 'archived'] } };
+
+      const certifiedIds = await this.getPartnerIdsByCertification(filters?.certified);
+
+      if (certifiedIds !== null) {
+        base._id = { $in: certifiedIds };
+      }
+
+      const total = await model.countDocuments(base);
+
+      const from = filters?.from ?? '';
+      const to = filters?.to ?? '';
+      let newInPeriod: number | null = null;
+      let trend: number | null = null;
+
+      if (!coddyger.string.isEmpty(from) && !coddyger.string.isEmpty(to)) {
+        const startDate = new Date(from);
+        const endDate = new Date(to);
+        endDate.setHours(23, 59, 59, 999);
+
+        const rangeMs = endDate.getTime() - startDate.getTime();
+        const prevEnd = new Date(startDate.getTime() - 1);
+        const prevStart = new Date(prevEnd.getTime() - rangeMs);
+
+        const created: number = await model.countDocuments({ ...base, createdAt: { $gte: startDate, $lte: endDate } });
+        const previous: number = await model.countDocuments({ ...base, createdAt: { $gte: prevStart, $lte: prevEnd } });
+
+        newInPeriod = created;
+        trend = previous === 0 ? (created === 0 ? 0 : null) : Math.round(((created - previous) / previous) * 1000) / 10;
+      }
+
+      return { total, newInPeriod, trend };
+    } catch (error) {
+      LoggerService.log({
+        type: LogLevel.Error,
+        content: error || 'Erreur inconnue',
+        location: this.serviceLabel,
+        method: 'getStats'
+      });
+
       return { error: true, data: error };
     }
   }

@@ -31,8 +31,12 @@ export default class Router {
 	}
 
 	private config() {
-		// Security: Helmet helps with setting various HTTP headers to secure your app
-		this.router.register(helmet);
+		// Security: Helmet helps with setting various HTTP headers to secure your app.
+		// crossOriginResourcePolicy = cross-origin : autorise l'admin (autre origine/port)
+		// à afficher les fichiers statiques (images des documents KYC, etc.).
+		this.router.register(helmet, {
+			crossOriginResourcePolicy: { policy: 'cross-origin' }
+		});
 
 		// CORS: Enable CORS with specific origins and methods
 		this.router.register(cors, {

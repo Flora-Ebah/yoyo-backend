@@ -74,6 +74,10 @@ Exemples:
       await seederRunner.runPlans();
     } else if (args.includes('--admin')) {
       await seederRunner.runAdmin();
+    } else if (args.includes('--roles')) {
+      await seederRunner.runRoles();
+    } else if (args.includes('--commercial')) {
+      await seederRunner.runCommercial();
     } else {
       // Par défaut, exécuter tous les seeders
       await seederRunner.runAll();

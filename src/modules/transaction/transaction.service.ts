@@ -1,6 +1,7 @@
 import { ITransaction } from './transaction.interface';
 import { TransactionSet } from './transaction.model';
 import { PlanSet } from '../plan';
+import { ClientSet } from '../client';
 import coddyger, { IData, IErrorObject, LoggerService, LogLevel } from 'coddyger';
 import { SubscriptionService } from '../subscription';
 import { locale } from '../../public/locale/locale';
@@ -40,31 +41,81 @@ export class TransactionService {
    * Récupère tous les éléments
    * @returns Liste des éléments
    */
-  async getAll(payloads: { page?: number; pageSize?: number; query?: string; status?: string }): Promise<any> {
+  async getAll(payloads: {
+		page?: number;
+		pageSize?: number;
+		query?: string;
+		status?: string;
+		paymentStatus?: string;
+		from?: string;
+		to?: string;
+	}): Promise<any> {
     try {
       let page: number = payloads.page ?? 1;
 			let pageSize: number = payloads.pageSize ?? 10;
 			let query: string = payloads.query ?? '';
 			let status: any = payloads.status ?? '';
+			let paymentStatus: any = payloads.paymentStatus ?? '';
+			let from: string = payloads.from ?? '';
+			let to: string = payloads.to ?? '';
 
       let data: any | IErrorObject = {};
 
-      if (coddyger.string.isEmpty(query) && coddyger.string.isEmpty(status)) {
-				data = await this.dao.select({ params: {}, page, pageSize });
-			} else if (!coddyger.string.isEmpty(status)) {
-				data = await this.dao.select({ params: { status }, page, pageSize });
-			} else {
-				data = await this.dao.select({
-					params: {
-						$or: [
-							{ slug: { $regex: query || '', $options: 'i' } },
-							{ title: { $regex: query || '', $options: 'i' } },
-						]
-					},
-					page,
-					pageSize
-				});
+			// Construction des filtres combinés (statut métier, statut de paiement,
+			// plage de dates sur createdAt, recherche sur les identifiants de paiement).
+			const params: any = {};
+
+			if (!coddyger.string.isEmpty(status)) {
+				params.status = status;
 			}
+
+			if (!coddyger.string.isEmpty(paymentStatus)) {
+				params.paymentStatus = paymentStatus;
+			}
+
+			if (!coddyger.string.isEmpty(from) || !coddyger.string.isEmpty(to)) {
+				params.createdAt = {};
+
+				if (!coddyger.string.isEmpty(from)) {
+					params.createdAt.$gte = new Date(from);
+				}
+
+				if (!coddyger.string.isEmpty(to)) {
+					const end = new Date(to);
+					end.setHours(23, 59, 59, 999);
+					params.createdAt.$lte = end;
+				}
+			}
+
+			if (!coddyger.string.isEmpty(query)) {
+				const rx = { $regex: query, $options: 'i' };
+
+				// Recherche élargie : on retrouve d'abord les clients dont le nom / email /
+				// contact correspond, puis on filtre les transactions sur ces clients,
+				// en plus des identifiants de paiement.
+				let clientIds: any[] = [];
+
+				try {
+					const clientDao: any = new ClientSet();
+					const clients: any = await clientDao.selectHug({
+						$or: [{ firstname: rx }, { lastname: rx }, { email: rx }, { contact: rx }]
+					});
+
+					if (Array.isArray(clients)) {
+						clientIds = clients.map((c: any) => c._id);
+					}
+				} catch (searchError) {
+					clientIds = [];
+				}
+
+				params.$or = [
+					{ user: { $in: clientIds } },
+					{ paymentId: rx },
+					{ txnId: rx }
+				];
+			}
+
+			data = await this.dao.select({ params, page, pageSize });
 
 			if (data.error) {
 				throw data;
@@ -72,6 +123,25 @@ export class TransactionService {
 
       const rows: ITransaction[] = data.rows;
 			delete data.rows;
+
+			// Peuple le client (collection Client) et le plan afin de renvoyer des noms
+			// plutôt que des ObjectId bruts. Best-effort : on ne bloque pas la liste si
+			// une référence est manquante.
+			try {
+				const model: any = (this.dao as any).defaultModel;
+
+				await model.populate(rows, [
+					{ path: 'user', model: 'Client', select: 'firstname lastname email contact' },
+					{ path: 'plan', model: 'Plan', select: 'name label' }
+				]);
+			} catch (populateError) {
+				LoggerService.log({
+					type: LogLevel.Warn,
+					content: populateError,
+					location: this.serviceLabel,
+					method: 'getAll:populate'
+				});
+			}
 
       return {
         data,
@@ -813,55 +883,263 @@ export class TransactionService {
   }
 
   /**
-   * Récupère les statistiques des transactions
+   * Normalise un statut de paiement brut (valeurs prestataire hétérogènes) vers une valeur canonique.
+   */
+  private normalizePaymentStatus(value?: string): 'success' | 'pending' | 'failed' | 'refunded' | 'expired' | 'cancelled' | 'initiated' {
+    const normalized = String(value || '').trim().toLowerCase();
+
+    if (['success', 'succeeded', 'completed', 'paid', 'accepted'].includes(normalized)) return 'success';
+    if (['failed', 'fail', 'refused', 'rejected', 'error'].includes(normalized)) return 'failed';
+    if (['refunded', 'refund'].includes(normalized)) return 'refunded';
+    if (['expired', 'timeout'].includes(normalized)) return 'expired';
+    if (['cancelled', 'canceled'].includes(normalized)) return 'cancelled';
+    if (['initiated', 'initialised', 'initialized'].includes(normalized)) return 'initiated';
+
+    return 'pending';
+  }
+
+  /**
+   * Construit le filtre Mongo commun aux widgets (statut de paiement, plage de dates sur
+   * createdAt, recherche sur le client / les identifiants de paiement).
+   */
+  private async buildTransactionMatch(filters?: { paymentStatus?: string; from?: string; to?: string; query?: string }): Promise<any> {
+    const params: any = { status: { $nin: ['removed', 'archived'] } };
+
+    const paymentStatus = filters?.paymentStatus ?? '';
+    const from = filters?.from ?? '';
+    const to = filters?.to ?? '';
+    const query = filters?.query ?? '';
+
+    if (!coddyger.string.isEmpty(paymentStatus)) {
+      params.paymentStatus = paymentStatus;
+    }
+
+    if (!coddyger.string.isEmpty(from) || !coddyger.string.isEmpty(to)) {
+      params.createdAt = {};
+
+      if (!coddyger.string.isEmpty(from)) {
+        params.createdAt.$gte = new Date(from);
+      }
+
+      if (!coddyger.string.isEmpty(to)) {
+        const end = new Date(to);
+        end.setHours(23, 59, 59, 999);
+        params.createdAt.$lte = end;
+      }
+    }
+
+    if (!coddyger.string.isEmpty(query)) {
+      const rx = { $regex: query, $options: 'i' };
+      let clientIds: any[] = [];
+
+      try {
+        const clients: any = await new ClientSet().selectHug({
+          $or: [{ firstname: rx }, { lastname: rx }, { email: rx }, { contact: rx }]
+        });
+
+        if (Array.isArray(clients)) {
+          clientIds = clients.map((c: any) => c._id);
+        }
+      } catch (searchError) {
+        clientIds = [];
+      }
+
+      params.$or = [{ user: { $in: clientIds } }, { paymentId: rx }, { txnId: rx }];
+    }
+
+    return params;
+  }
+
+  /**
+   * Calcule les compteurs à partir d'un lot de transactions déjà chargées.
+   */
+  private summarizeTransactions(transactions: ITransaction[]): {
+    totalTransactions: number;
+    successfulTransactions: number;
+    pendingTransactions: number;
+    failedTransactions: number;
+    totalAmount: number;
+  } {
+    const normalizedStatuses = transactions.map(t => this.normalizePaymentStatus(t.paymentStatus));
+    const successfulTransactions = normalizedStatuses.filter(status => status === 'success').length;
+    const pendingTransactions = normalizedStatuses.filter(status => status === 'pending' || status === 'initiated').length;
+    const failedTransactions = normalizedStatuses.filter(status => status === 'failed').length;
+
+    const totalAmount = transactions
+      .filter(t => this.normalizePaymentStatus(t.paymentStatus) === 'success')
+      .reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
+
+    return {
+      totalTransactions: transactions.length,
+      successfulTransactions,
+      pendingTransactions,
+      failedTransactions,
+      totalAmount
+    };
+  }
+
+  /**
+   * Variation en pourcentage entre une valeur courante et une valeur précédente.
+   * Renvoie null quand il n'existe pas de base de comparaison (période précédente vide).
+   */
+  private percentChange(current: number, previous: number): number | null {
+    if (previous === 0) {
+      return current === 0 ? 0 : null;
+    }
+
+    return Math.round(((current - previous) / previous) * 1000) / 10;
+  }
+
+  /**
+   * Récupère les statistiques des transactions, avec tendances période-sur-période
+   * lorsqu'une plage de dates explicite est fournie.
    * @returns Statistiques des transactions
    */
-  async getTransactionStats(): Promise<any> {
+  async getTransactionStats(filters?: { paymentStatus?: string; from?: string; to?: string; query?: string }): Promise<any> {
     try {
       // La methode count n'est pas disponible sur toutes les versions du DAO coddyger.
       // On calcule les compteurs a partir des lignes brutes pour eviter les 500.
-      const rows = await this.dao.selectHug({
-        status: { $nin: ['removed', 'archived'] }
-      });
-
+      const params = await this.buildTransactionMatch(filters);
+      const rows = await this.dao.selectHug(params);
       const transactions: ITransaction[] = Array.isArray(rows) ? rows : [];
-      const totalTransactions = transactions.length;
 
-      const normalizePaymentStatus = (value?: string): 'success' | 'pending' | 'failed' | 'refunded' | 'expired' | 'cancelled' | 'initiated' => {
-        const normalized = String(value || '').trim().toLowerCase();
+      const current = this.summarizeTransactions(transactions);
 
-        if (['success', 'succeeded', 'completed', 'paid', 'accepted'].includes(normalized)) return 'success';
-        if (['failed', 'fail', 'refused', 'rejected', 'error'].includes(normalized)) return 'failed';
-        if (['refunded', 'refund'].includes(normalized)) return 'refunded';
-        if (['expired', 'timeout'].includes(normalized)) return 'expired';
-        if (['cancelled', 'canceled'].includes(normalized)) return 'cancelled';
-        if (['initiated', 'initialised', 'initialized'].includes(normalized)) return 'initiated';
+      // Tendances période-sur-période : compare la plage courante à la plage équivalente
+      // qui la précède immédiatement. Calculé uniquement si `from` et `to` sont fournis.
+      let trends: any = null;
+      const from = filters?.from ?? '';
+      const to = filters?.to ?? '';
 
-        return 'pending';
-      };
+      if (!coddyger.string.isEmpty(from) && !coddyger.string.isEmpty(to)) {
+        const startDate = new Date(from);
+        const endDate = new Date(to);
+        endDate.setHours(23, 59, 59, 999);
 
-      const normalizedStatuses = transactions.map(t => normalizePaymentStatus(t.paymentStatus));
-      const successfulTransactions = normalizedStatuses.filter(status => status === 'success').length;
-      const pendingTransactions = normalizedStatuses.filter(status => status === 'pending' || status === 'initiated').length;
-      const failedTransactions = normalizedStatuses.filter(status => status === 'failed').length;
+        const rangeMs = endDate.getTime() - startDate.getTime();
+        const prevEnd = new Date(startDate.getTime() - 1);
+        const prevStart = new Date(prevEnd.getTime() - rangeMs);
 
-      const totalAmount = transactions
-        .filter(t => normalizePaymentStatus(t.paymentStatus) === 'success')
-        .reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
+        const prevParams = await this.buildTransactionMatch({
+          paymentStatus: filters?.paymentStatus,
+          query: filters?.query,
+          from: prevStart.toISOString(),
+          to: prevEnd.toISOString()
+        });
 
-      return {
-        totalTransactions,
-        successfulTransactions,
-        pendingTransactions,
-        failedTransactions,
-        totalAmount
-      };
+        const prevRows = await this.dao.selectHug(prevParams);
+        const previous = this.summarizeTransactions(Array.isArray(prevRows) ? prevRows : []);
+
+        const successRate = current.totalTransactions > 0 ? (current.successfulTransactions / current.totalTransactions) * 100 : 0;
+        const prevSuccessRate = previous.totalTransactions > 0 ? (previous.successfulTransactions / previous.totalTransactions) * 100 : 0;
+
+        trends = {
+          totalTransactions: this.percentChange(current.totalTransactions, previous.totalTransactions),
+          totalAmount: this.percentChange(current.totalAmount, previous.totalAmount),
+          successRate: Math.round((successRate - prevSuccessRate) * 10) / 10
+        };
+      }
+
+      return { ...current, trends };
     } catch (error) {
       LoggerService.log({
         type: LogLevel.Error,
         content: error || 'Erreur inconnue',
         location: this.serviceLabel,
         method: 'getTransactionStats'
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * Série temporelle des transactions pour le graphe d'évolution du dashboard admin.
+   * Regroupe par jour ou par mois selon l'étendue de la plage (auto au-delà de 92 jours).
+   * @returns { interval, series: [{ period, total, successful, failed, pending, amount }] }
+   */
+  async getTransactionTimeseries(filters?: {
+    paymentStatus?: string;
+    from?: string;
+    to?: string;
+    query?: string;
+    interval?: 'day' | 'month';
+  }): Promise<any> {
+    try {
+      const params = await this.buildTransactionMatch(filters);
+      const rows = await this.dao.selectHug(params);
+      const transactions: ITransaction[] = Array.isArray(rows) ? rows : [];
+
+      const from = filters?.from ? new Date(filters.from) : null;
+      const to = filters?.to ? new Date(filters.to) : null;
+      let interval: 'day' | 'month' = filters?.interval ?? 'day';
+
+      if (!filters?.interval && from && to) {
+        const days = Math.round((to.getTime() - from.getTime()) / 86400000) + 1;
+        interval = days > 92 ? 'month' : 'day';
+      }
+
+      const keyOf = (d: Date): string => {
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+
+        return interval === 'month' ? `${y}-${m}` : `${y}-${m}-${day}`;
+      };
+
+      const buckets = new Map<string, { period: string; total: number; successful: number; failed: number; pending: number; amount: number }>();
+
+      // Pré-remplit les buckets vides sur la plage pour un axe continu côté graphe.
+      if (from && to) {
+        const cursor = new Date(from);
+        cursor.setHours(0, 0, 0, 0);
+
+        while (cursor.getTime() <= to.getTime()) {
+          const k = keyOf(cursor);
+
+          if (!buckets.has(k)) {
+            buckets.set(k, { period: k, total: 0, successful: 0, failed: 0, pending: 0, amount: 0 });
+          }
+
+          if (interval === 'month') {
+            cursor.setMonth(cursor.getMonth() + 1);
+          } else {
+            cursor.setDate(cursor.getDate() + 1);
+          }
+        }
+      }
+
+      for (const t of transactions) {
+        const raw = (t as any).createdAt ?? t.paymentDate;
+
+        if (!raw) continue;
+
+        const k = keyOf(new Date(raw));
+        const bucket = buckets.get(k) ?? { period: k, total: 0, successful: 0, failed: 0, pending: 0, amount: 0 };
+        const status = this.normalizePaymentStatus(t.paymentStatus);
+
+        bucket.total += 1;
+
+        if (status === 'success') {
+          bucket.successful += 1;
+          bucket.amount += Number(t.amount) || 0;
+        } else if (status === 'failed') {
+          bucket.failed += 1;
+        } else if (status === 'pending' || status === 'initiated') {
+          bucket.pending += 1;
+        }
+
+        buckets.set(k, bucket);
+      }
+
+      const series = Array.from(buckets.values()).sort((a, b) => a.period.localeCompare(b.period));
+
+      return { interval, series };
+    } catch (error) {
+      LoggerService.log({
+        type: LogLevel.Error,
+        content: error || 'Erreur inconnue',
+        location: this.serviceLabel,
+        method: 'getTransactionTimeseries'
       });
       throw error;
     }

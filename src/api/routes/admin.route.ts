@@ -60,7 +60,7 @@ const defaultRoute: any = (fastify: any, options, done) => {
 		},
 		method: 'POST',
 		url: `${routePath}`,
-		preHandler: TokenMiddleware.verifyAdmin,
+		preHandler: TokenMiddleware.can('create', 'admins'),
 		handler: (request, reply) => {
 			const body: any = request.body;
 			const user: any = request.user;
@@ -100,7 +100,7 @@ const defaultRoute: any = (fastify: any, options, done) => {
 		},
 		method: 'PUT',
 		url: `${routePath}`,
-		preHandler: TokenMiddleware.verifyAdmin,
+		preHandler: TokenMiddleware.can('update', 'admins'),
 		handler: (request, reply) => {
 			const body: any = request.body;
 			const user: any = request.user;
@@ -132,7 +132,7 @@ const defaultRoute: any = (fastify: any, options, done) => {
 		},
 		method: 'GET',
 		url: `${routePath}`,
-		preHandler: TokenMiddleware.verifyAdmin,
+		preHandler: TokenMiddleware.can('read', 'admins'),
 		handler: (request, reply) => {
 			const page: any = request.query.page || 1;
 			const pageSize: any = request.query.pageSize;
@@ -168,7 +168,7 @@ const defaultRoute: any = (fastify: any, options, done) => {
 		},
 		method: 'GET',
 		url: `${routePath}/findByStatus`,
-		preHandler: TokenMiddleware.verifyAdmin,
+		preHandler: TokenMiddleware.can('read', 'admins'),
 		handler: (request, reply) => {
 			const page: any = request.query.page || 1;
 			const pageSize: any = request.query.pageSize;
@@ -211,7 +211,7 @@ const defaultRoute: any = (fastify: any, options, done) => {
 		},
 		method: 'GET',
 		url: `${routePath}/details/:id`,
-		preHandler: TokenMiddleware.verifyAdmin,
+		preHandler: TokenMiddleware.can('read', 'admins'),
 		handler: (request, reply) => {
 			const _id: any = request.params.id;
 			const Q = Controller.selectOne(_id);
@@ -235,7 +235,7 @@ const defaultRoute: any = (fastify: any, options, done) => {
 		},
 		method: 'DELETE',
 		url: `${routePath}/remove/:id`,
-		preHandler: TokenMiddleware.verifyAdmin,
+		preHandler: TokenMiddleware.can('delete', 'admins'),
 		handler: (request, reply) => {
 			const _id: any = request.params.id;
 			const Q = Controller.remove(_id);
@@ -260,7 +260,7 @@ const defaultRoute: any = (fastify: any, options, done) => {
 		},
 		method: 'DELETE',
 		url: `${routePath}/erase/:id`,
-		preHandler: TokenMiddleware.verifyAdmin,
+		preHandler: TokenMiddleware.can('delete', 'admins'),
 		handler: (request, reply) => {
 			const _id: any = request.params.id;
 			const Q = Controller.remove(_id, true);
@@ -285,7 +285,7 @@ const defaultRoute: any = (fastify: any, options, done) => {
 		},
 		method: 'PUT',
 		url: `${routePath}/restore/:id`,
-		preHandler: TokenMiddleware.verifyAdmin,
+		preHandler: TokenMiddleware.can('update', 'admins'),
 		handler: (request, reply) => {
 			const _id: any = request.params.id;
 			const Q = Controller.restore(_id);
@@ -314,7 +314,7 @@ const defaultRoute: any = (fastify: any, options, done) => {
 		},
 		method: 'GET',
 		url: `${routePath}/date-range`,
-		preHandler: TokenMiddleware.verifyAdmin,
+		preHandler: TokenMiddleware.can('read', 'admins'),
 		handler: (request, reply) => {
 			const startDate: string = request.query.startDate;
 			const endDate: string = request.query.endDate;
@@ -356,7 +356,7 @@ const defaultRoute: any = (fastify: any, options, done) => {
 		},
 		method: 'GET',
 		url: `${routePath}/last-login-range`,
-		preHandler: TokenMiddleware.verifyAdmin,
+		preHandler: TokenMiddleware.can('read', 'admins'),
 		handler: (request, reply) => {
 			const startDate: string = request.query.startDate;
 			const endDate: string = request.query.endDate;

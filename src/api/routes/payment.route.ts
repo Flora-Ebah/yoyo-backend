@@ -86,6 +86,8 @@ const defaultRoute: any = (fastify: any, options, done) => {
           page: { type: 'number' },
           pageSize: { type: 'number' },
           status: { type: 'string' },
+          from: { type: 'string' },
+          to: { type: 'string' },
           q: { type: 'string' }
         },
         required: [],
@@ -99,9 +101,75 @@ const defaultRoute: any = (fastify: any, options, done) => {
       let page: any = request.query.page || 1;
       let pageSize: any = request.query.pageSize;
       let status: any = request.query.status;
+      let from: any = request.query.from;
+      let to: any = request.query.to;
       let query: any = request.query.q;
 
-      let Q = Controller.getAll({ page, pageSize, status, query });
+      let Q = Controller.getAll({ page, pageSize, status, from, to, query });
+      return coddyger.api(reply, Q);
+    }
+  });
+
+  // Statistiques agrégées des paiements (admin) avec filtres
+  fastify.route({
+    schema: {
+      tags,
+      summary: 'Statistiques des paiements partenaires',
+      query: {
+        type: 'object',
+        properties: {
+          status: { type: 'string' },
+          from: { type: 'string' },
+          to: { type: 'string' },
+          q: { type: 'string' }
+        },
+        required: [],
+        additionalProperties: false
+      }
+    },
+    method: 'GET',
+    url: `${routePath}/overview`,
+    preHandler: TokenMiddleware.verify,
+    handler: (request, reply) => {
+      const status: any = request.query.status;
+      const from: any = request.query.from;
+      const to: any = request.query.to;
+      const query: any = request.query.q;
+
+      let Q = Controller.getOverviewStats({ status, from, to, query });
+      return coddyger.api(reply, Q);
+    }
+  });
+
+  // Top partenaires par volume (admin) — alimente le widget « Top professionnels » du dashboard
+  fastify.route({
+    schema: {
+      tags,
+      summary: 'Top partenaires par volume de paiements',
+      query: {
+        type: 'object',
+        properties: {
+          from: { type: 'string' },
+          to: { type: 'string' },
+          status: { type: 'string' },
+          limit: { type: 'number' },
+          certified: { type: 'string', enum: ['certified', 'uncertified'] }
+        },
+        required: [],
+        additionalProperties: false
+      }
+    },
+    method: 'GET',
+    url: `${routePath}/top-partners`,
+    preHandler: TokenMiddleware.verify,
+    handler: (request, reply) => {
+      const from: any = request.query.from;
+      const to: any = request.query.to;
+      const status: any = request.query.status;
+      const limit: any = request.query.limit;
+      const certified: any = request.query.certified;
+
+      let Q = Controller.getTopPartners({ from, to, status, limit, certified });
       return coddyger.api(reply, Q);
     }
   });

@@ -16,7 +16,7 @@ export class TransactionController {
    * Récupère tous les éléments
    * @returns Liste des éléments
    */
-  getAll(payloads: { page?: number; pageSize?: number; query?: string; status?: string }) {
+  getAll(payloads: { page?: number; pageSize?: number; query?: string; status?: string; paymentStatus?: string; from?: string; to?: string }) {
     return new Promise(async (resolve, reject) => {
       try {
         const items = await this.service.getAll(payloads);
@@ -305,11 +305,11 @@ export class TransactionController {
    * Récupère les statistiques des transactions
    * @returns Statistiques des transactions
    */
-  getTransactionStats() {
+  getTransactionStats(filters?: { paymentStatus?: string; from?: string; to?: string; query?: string }) {
     return new Promise(async (resolve, reject) => {
       try {
         // Récupération des statistiques
-        const stats = await this.service.getTransactionStats();
+        const stats = await this.service.getTransactionStats(filters);
         
         resolve({
           status: defines.status.requestOK,
@@ -322,6 +322,29 @@ export class TransactionController {
     }).catch((e: IErrorObject) => {
       console.error(e);
       return coddyger.catchReturn(e, controllerLabel, 'getTransactionStats');
+    });
+  }
+
+  /**
+   * Récupère la série temporelle des transactions (graphe d'évolution du dashboard admin)
+   * @returns Série temporelle des transactions
+   */
+  getTransactionTimeseries(filters?: { paymentStatus?: string; from?: string; to?: string; query?: string; interval?: 'day' | 'month' }) {
+    return new Promise(async (resolve, reject) => {
+      try {
+        const series = await this.service.getTransactionTimeseries(filters);
+
+        resolve({
+          status: defines.status.requestOK,
+          message: 'Série temporelle des transactions récupérée avec succès',
+          data: series
+        });
+      } catch (error) {
+        reject(error);
+      }
+    }).catch((e: IErrorObject) => {
+      console.error(e);
+      return coddyger.catchReturn(e, controllerLabel, 'getTransactionTimeseries');
     });
   }
 

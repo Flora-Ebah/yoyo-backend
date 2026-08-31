@@ -18,6 +18,9 @@ const defaultRoute: any = (fastify: any, options, done) => {
           page: { type: 'number' },
           pageSize: { type: 'number' },
           status: { type: 'string' },
+          paymentStatus: { type: 'string' },
+          from: { type: 'string' },
+          to: { type: 'string' },
           q: { type: 'string' },
         },
         required: [],
@@ -31,9 +34,12 @@ const defaultRoute: any = (fastify: any, options, done) => {
       let page: any = request.query.page || 1;
       let pageSize: any = request.query.pageSize;
       let status: any = request.query.status;
+      let paymentStatus: any = request.query.paymentStatus;
+      let from: any = request.query.from;
+      let to: any = request.query.to;
       let query: any = request.query.q;
 
-      let Q = Controller.getAll({ page, pageSize, status, query });
+      let Q = Controller.getAll({ page, pageSize, status, paymentStatus, from, to, query });
       return coddyger.api(reply, Q);
     }
   });
@@ -253,13 +259,63 @@ const defaultRoute: any = (fastify: any, options, done) => {
     schema: {
       tags,
       summary: "Statistiques des transactions",
-      description: "Récupère les statistiques des transactions (admin uniquement)"
+      description: "Récupère les statistiques des transactions (admin uniquement)",
+      query: {
+        type: 'object',
+        properties: {
+          paymentStatus: { type: 'string' },
+          from: { type: 'string' },
+          to: { type: 'string' },
+          q: { type: 'string' }
+        },
+        required: [],
+        additionalProperties: false
+      }
     },
     method: 'GET',
     url: `${routePath}/stats`,
     preHandler: TokenMiddleware.verifyAdmin,
     handler: (request, reply) => {
-      let Q = Controller.getTransactionStats();
+      const paymentStatus: any = request.query.paymentStatus;
+      const from: any = request.query.from;
+      const to: any = request.query.to;
+      const query: any = request.query.q;
+
+      let Q = Controller.getTransactionStats({ paymentStatus, from, to, query });
+      return coddyger.api(reply, Q);
+    }
+  });
+
+  // Série temporelle des transactions (admin) — alimente le graphe d'évolution du dashboard
+  fastify.route({
+    schema: {
+      tags,
+      summary: 'Série temporelle des transactions',
+      description: "Regroupe les transactions par jour ou par mois sur une plage de dates (admin uniquement)",
+      query: {
+        type: 'object',
+        properties: {
+          paymentStatus: { type: 'string' },
+          from: { type: 'string' },
+          to: { type: 'string' },
+          q: { type: 'string' },
+          interval: { type: 'string', enum: ['day', 'month'] }
+        },
+        required: [],
+        additionalProperties: false
+      }
+    },
+    method: 'GET',
+    url: `${routePath}/timeseries`,
+    preHandler: TokenMiddleware.verifyAdmin,
+    handler: (request, reply) => {
+      const paymentStatus: any = request.query.paymentStatus;
+      const from: any = request.query.from;
+      const to: any = request.query.to;
+      const query: any = request.query.q;
+      const interval: any = request.query.interval;
+
+      let Q = Controller.getTransactionTimeseries({ paymentStatus, from, to, query, interval });
       return coddyger.api(reply, Q);
     }
   });

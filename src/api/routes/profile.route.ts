@@ -19,24 +19,34 @@ const defaultRoute: any = (fastify: any, options, done) => {
   fastify.route({
     schema: {
       tags,
-      summary: 'Créer un profile',
+      summary: 'Créer un profile (rôle)',
       body: {
         type: 'object',
         properties: {
-          email: { type: 'string' },
-          firstname: { type: 'string' },
-          lastname: { type: 'string' },
-          password: { type: 'string' },
-          contact: { type: 'string' },
-          onlineId: { type: 'string' }
+          name: { type: 'string' },
+          description: { type: 'string' },
+          status: { type: 'string', enum: ['active', 'inactive', 'suspended', 'removed'] },
+          ability: {
+            type: 'array',
+            items: {
+              type: 'object',
+              properties: {
+                name: { type: 'string' },
+                subject: { type: 'string' },
+                action: { type: 'string' }
+              },
+              required: ['subject', 'action'],
+              additionalProperties: true
+            }
+          }
         },
-        required: ['email', 'firstname', 'lastname', 'password'],
-        additionalProperties: true
+        required: ['name'],
+        additionalProperties: false
       }
     },
     method: 'POST',
     url: `${routePath}`,
-    preHandler: TokenMiddleware.verifyAdmin,
+    preHandler: TokenMiddleware.can('create', 'roles'),
     handler: (request, reply) => {
       let body: any = request.body;
 
@@ -52,24 +62,35 @@ const defaultRoute: any = (fastify: any, options, done) => {
   fastify.route({
     schema: {
       tags,
-      summary: 'Modifier un profile existant',
+      summary: 'Modifier un profile (rôle)',
       body: {
         type: 'object',
         properties: {
           _id: { type: 'string' },
-          email: { type: 'string' },
-          firstname: { type: 'string' },
-          lastname: { type: 'string' },
-          contact: { type: 'string' },
-          status: { type: 'string' }
+          name: { type: 'string' },
+          description: { type: 'string' },
+          status: { type: 'string', enum: ['active', 'inactive', 'suspended', 'removed'] },
+          ability: {
+            type: 'array',
+            items: {
+              type: 'object',
+              properties: {
+                name: { type: 'string' },
+                subject: { type: 'string' },
+                action: { type: 'string' }
+              },
+              required: ['subject', 'action'],
+              additionalProperties: true
+            }
+          }
         },
         required: ['_id'],
-        additionalProperties: true
+        additionalProperties: false
       }
     },
     method: 'PUT',
     url: `${routePath}`,
-    preHandler: TokenMiddleware.verifyAdmin,
+    preHandler: TokenMiddleware.can('update', 'roles'),
     handler: (request, reply) => {
       let body: any = request.body;
       const _id = body._id;
@@ -102,7 +123,7 @@ const defaultRoute: any = (fastify: any, options, done) => {
     },
     method: 'GET',
     url: `${routePath}`,
-    preHandler: TokenMiddleware.verifyAdmin,
+    preHandler: TokenMiddleware.can('read', 'roles'),
     handler: (request, reply) => {
       let page: any = request.query.page || 1;
       let pageSize: any = request.query.pageSize;
@@ -136,7 +157,7 @@ const defaultRoute: any = (fastify: any, options, done) => {
     },
     method: 'GET',
     url: `${routePath}/findByStatus`,
-    preHandler: TokenMiddleware.verifyAdmin,
+    preHandler: TokenMiddleware.can('read', 'roles'),
     handler: (request, reply) => {
       const page: any = request.query.page || 1;
       const pageSize: any = request.query.pageSize;
@@ -163,7 +184,7 @@ const defaultRoute: any = (fastify: any, options, done) => {
     },
     method: 'GET',
     url: `${routePath}/details/:id`,
-    preHandler: TokenMiddleware.verifyAdmin,
+    preHandler: TokenMiddleware.can('read', 'roles'),
     handler: (request, reply) => {
       const _id: any = request.params.id;
 
@@ -188,7 +209,7 @@ const defaultRoute: any = (fastify: any, options, done) => {
     },
     method: 'DELETE',
     url: `${routePath}/remove/:id`,
-    preHandler: TokenMiddleware.verifyAdmin,
+    preHandler: TokenMiddleware.can('delete', 'roles'),
     handler: (request, reply) => {
       let _id: any = request.params.id;
 

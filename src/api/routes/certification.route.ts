@@ -140,6 +140,8 @@ const defaultRoute: any = (fastify: any, options, done) => {
 					pageSize: { type: 'number' },
 					status: { type: 'string' },
 					q: { type: 'string' },
+					from: { type: 'string' },
+					to: { type: 'string' },
 					sortBy: { type: 'string' },
 					orderBy: { type: 'string' }
 				},
@@ -155,10 +157,12 @@ const defaultRoute: any = (fastify: any, options, done) => {
 			let pageSize: any = request.query.pageSize;
 			let status: any = request.query.status;
 			let query: any = request.query.q;
+			const from: string = request.query.from;
+			const to: string = request.query.to;
 			const sortBy: string = request.query.sortBy;
 			const orderBy: string = request.query.orderBy;
 
-			let Q = Controller.select({ page, pageSize, status, query, sortBy, orderBy });
+			let Q = Controller.select({ page, pageSize, status, query, from, to, sortBy, orderBy });
 			return coddyger.api(reply, Q);
 		}
 	});

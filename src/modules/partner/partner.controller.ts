@@ -276,4 +276,50 @@ export class PartnerController {
       return coddyger.catchReturn(e, controllerLabel, 'getSponsoredPartners');
     });
   }
+
+  /**
+   * Répartition géographique des partenaires par ville (widget carte du dashboard)
+   * @returns Liste [{ ville, pros, lat, lng }]
+   */
+  getGeoDistribution(filters?: { certified?: string }) {
+    return new Promise(async (resolve, reject) => {
+      try {
+        const data = await this.service.getGeoDistribution(filters);
+
+        resolve({
+          status: defines.status.requestOK,
+          message: 'Répartition géographique récupérée avec succès',
+          data
+        });
+      } catch (error) {
+        reject(error);
+      }
+    }).catch((e: IErrorObject) => {
+      console.error(e);
+      return coddyger.catchReturn(e, controllerLabel, 'getGeoDistribution');
+    });
+  }
+
+  /**
+   * Statistiques des partenaires (total + nouveaux sur période avec tendance)
+   * @returns { total, newInPeriod, trend }
+   */
+  getStats(filters?: { from?: string; to?: string; certified?: string }) {
+    return new Promise(async (resolve, reject) => {
+      try {
+        const data = await this.service.getStats(filters);
+
+        resolve({
+          status: defines.status.requestOK,
+          message: 'Statistiques des partenaires récupérées avec succès',
+          data
+        });
+      } catch (error) {
+        reject(error);
+      }
+    }).catch((e: IErrorObject) => {
+      console.error(e);
+      return coddyger.catchReturn(e, controllerLabel, 'getStats');
+    });
+  }
 }

@@ -6,6 +6,8 @@ import coddyger, { IData, IErrorObject, LoggerService, LogLevel } from 'coddyger
 import { SubscriptionService } from '../subscription/subscription.service';
 import { PartnerService } from '../partner/partner.service';
 import { ClientService } from '../client/client.service';
+import { ClientSet } from '../client';
+import { PartnerSet } from '../partner';
 
 export class PaymentService {
   private readonly dao: IData<IPayment>;
@@ -27,28 +29,73 @@ export class PaymentService {
    * Récupère tous les éléments
    * @returns Liste des éléments
    */
-	async getAll(payloads: { page?: number; pageSize?: number; query?: string; status?: string }): Promise<any> {
+	async getAll(payloads: { page?: number; pageSize?: number; query?: string; status?: string; from?: string; to?: string }): Promise<any> {
 		try {
 			let page: number = payloads.page ?? 1;
 			let pageSize: number = payloads.pageSize ?? 10;
 			let query: string = payloads.query ?? '';
 			let status: any = payloads.status ?? '';
+			let from: string = payloads.from ?? '';
+			let to: string = payloads.to ?? '';
 
 			let data: any | IErrorObject = {};
 
-			if (coddyger.string.isEmpty(query) && coddyger.string.isEmpty(status)) {
-				data = await this.dao.select({ params: {}, page, pageSize });
-			} else if (!coddyger.string.isEmpty(status)) {
-				data = await this.dao.select({ params: { status }, page, pageSize });
-			} else {
-				data = await this.dao.select({
-					params: {
-						$or: [{ slug: { $regex: query || '', $options: 'i' } }, { title: { $regex: query || '', $options: 'i' } }]
-					},
-					page,
-					pageSize
-				});
+			// Filtres combinés : statut de paiement + plage de dates (createdAt).
+			const params: any = {};
+
+			if (!coddyger.string.isEmpty(status)) {
+				params.status = status;
 			}
+
+			if (!coddyger.string.isEmpty(from) || !coddyger.string.isEmpty(to)) {
+				params.createdAt = {};
+
+				if (!coddyger.string.isEmpty(from)) {
+					params.createdAt.$gte = new Date(from);
+				}
+
+				if (!coddyger.string.isEmpty(to)) {
+					const end = new Date(to);
+					end.setHours(23, 59, 59, 999);
+					params.createdAt.$lte = end;
+				}
+			}
+
+			if (!coddyger.string.isEmpty(query)) {
+				const rx = { $regex: query, $options: 'i' };
+
+				// Recherche élargie : par nom/email/contact du client (from) et par nom du
+				// partenaire (to), en plus du motif de refus.
+				let clientIds: any[] = [];
+				let partnerIds: any[] = [];
+
+				try {
+					const clients: any = await new ClientSet().selectHug({
+						$or: [{ firstname: rx }, { lastname: rx }, { email: rx }, { contact: rx }]
+					});
+
+					if (Array.isArray(clients)) {
+						clientIds = clients.map((c: any) => c._id);
+					}
+
+					const partners: any = await new PartnerSet().selectHug({ name: rx });
+
+					if (Array.isArray(partners)) {
+						partnerIds = partners.map((p: any) => p._id);
+					}
+				} catch (searchError) {
+					clientIds = [];
+					partnerIds = [];
+				}
+
+				params.$or = [
+					{ from: { $in: clientIds } },
+					{ to: { $in: partnerIds } },
+					{ deniedReason: rx }
+				];
+			}
+
+			data = await this.dao.select({ params, page, pageSize });
 
 			if (data.error) {
 				throw data;
@@ -61,6 +108,165 @@ export class PaymentService {
 				data,
 				rows
 			};
+		} catch (error) {
+			return { error: true, data: error };
+		}
+	}
+
+	/**
+	 * Statistiques agrégées des paiements partenaires (admin), avec les mêmes filtres
+	 * que la liste (statut, plage de dates, recherche client/partenaire).
+	 */
+	async getOverviewStats(filters?: { status?: string; from?: string; to?: string; query?: string }): Promise<any> {
+		try {
+			const status = filters?.status ?? '';
+			const from = filters?.from ?? '';
+			const to = filters?.to ?? '';
+			const query = filters?.query ?? '';
+
+			const params: any = { status: { $nin: ['removed', 'archived'] } };
+
+			if (!coddyger.string.isEmpty(status)) {
+				params.status = status;
+			}
+
+			if (!coddyger.string.isEmpty(from) || !coddyger.string.isEmpty(to)) {
+				params.createdAt = {};
+
+				if (!coddyger.string.isEmpty(from)) {
+					params.createdAt.$gte = new Date(from);
+				}
+
+				if (!coddyger.string.isEmpty(to)) {
+					const end = new Date(to);
+					end.setHours(23, 59, 59, 999);
+					params.createdAt.$lte = end;
+				}
+			}
+
+			if (!coddyger.string.isEmpty(query)) {
+				const rx = { $regex: query, $options: 'i' };
+				let clientIds: any[] = [];
+				let partnerIds: any[] = [];
+
+				try {
+					const clients: any = await new ClientSet().selectHug({
+						$or: [{ firstname: rx }, { lastname: rx }, { email: rx }, { contact: rx }]
+					});
+
+					if (Array.isArray(clients)) {
+						clientIds = clients.map((c: any) => c._id);
+					}
+
+					const partners: any = await new PartnerSet().selectHug({ name: rx });
+
+					if (Array.isArray(partners)) {
+						partnerIds = partners.map((p: any) => p._id);
+					}
+				} catch (searchError) {
+					clientIds = [];
+					partnerIds = [];
+				}
+
+				params.$or = [{ from: { $in: clientIds } }, { to: { $in: partnerIds } }, { deniedReason: rx }];
+			}
+
+			const rows: any = await this.dao.selectHug(params);
+			const payments: any[] = Array.isArray(rows) ? rows : [];
+
+			const successCount = payments.filter(p => p.status === 'success').length;
+			const pendingCount = payments.filter(p => p.status === 'pending').length;
+			const failedCount = payments.filter(p => p.status === 'failed' || p.status === 'rejected').length;
+			const refundedCount = payments.filter(p => p.status === 'refunded').length;
+
+			const totalAmount = payments
+				.filter(p => p.status === 'success')
+				.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+
+			return {
+				totalPayments: payments.length,
+				successCount,
+				pendingCount,
+				failedCount,
+				refundedCount,
+				totalAmount
+			};
+		} catch (error) {
+			return { error: true, data: error };
+		}
+	}
+
+	/**
+	 * Top partenaires par volume de paiements réussis (widget « Top professionnels » du dashboard).
+	 * @returns Liste triée [{ partnerId, name, volume, amount }]
+	 */
+	async getTopPartners(filters?: { from?: string; to?: string; status?: string; limit?: number; certified?: string }): Promise<any> {
+		try {
+			const from = filters?.from ?? '';
+			const to = filters?.to ?? '';
+			const status = filters?.status ?? 'success';
+			const limit = Number(filters?.limit) > 0 ? Number(filters?.limit) : 5;
+			const certified = (filters?.certified ?? '').toLowerCase();
+
+			const params: any = { status: { $nin: ['removed', 'archived'] } };
+
+			// Par défaut on ne compte que les paiements réellement encaissés (success).
+			if (!coddyger.string.isEmpty(status)) {
+				params.status = status;
+			}
+
+			if (!coddyger.string.isEmpty(from) || !coddyger.string.isEmpty(to)) {
+				params.createdAt = {};
+
+				if (!coddyger.string.isEmpty(from)) {
+					params.createdAt.$gte = new Date(from);
+				}
+
+				if (!coddyger.string.isEmpty(to)) {
+					const end = new Date(to);
+					end.setHours(23, 59, 59, 999);
+					params.createdAt.$lte = end;
+				}
+			}
+
+			// Filtre « Pro : certifiés / non certifiés » basé sur le KYC du propriétaire.
+			if (certified === 'certified' || certified === 'uncertified') {
+				const clientFilter =
+					certified === 'certified'
+						? { isDocumentVerified: true }
+						: { $or: [{ isDocumentVerified: { $ne: true } }, { isDocumentVerified: { $exists: false } }] };
+
+				const clients: any = await new ClientSet().selectHug(clientFilter);
+				const clientIds = Array.isArray(clients) ? clients.map((c: any) => c._id) : [];
+				const partners: any = await new PartnerSet().selectHug({ user: { $in: clientIds } });
+				const partnerIds = Array.isArray(partners) ? partners.map((p: any) => p._id) : [];
+
+				params.to = { $in: partnerIds };
+			}
+
+			const rows: any = await this.dao.selectHug(params);
+			const payments: any[] = Array.isArray(rows) ? rows : [];
+
+			// `to` est populé par PaymentSet.selectHug ({ _id, name }).
+			const grouped = new Map<string, { partnerId: string; name: string; volume: number; amount: number }>();
+
+			for (const p of payments) {
+				const partner: any = p.to;
+
+				if (!partner) continue;
+
+				const partnerId = String(partner._id ?? partner);
+				const name = partner.name ?? 'Partenaire';
+				const entry = grouped.get(partnerId) ?? { partnerId, name, volume: 0, amount: 0 };
+
+				entry.volume += 1;
+				entry.amount += Number(p.amount) || 0;
+				grouped.set(partnerId, entry);
+			}
+
+			return Array.from(grouped.values())
+				.sort((a, b) => b.volume - a.volume || b.amount - a.amount)
+				.slice(0, limit);
 		} catch (error) {
 			return { error: true, data: error };
 		}
