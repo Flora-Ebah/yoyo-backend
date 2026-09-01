@@ -2,21 +2,96 @@ import coddyger, { IErrorObject, defines } from 'coddyger';
 import { locale } from '../../public';
 import { PartnerService } from './partner.service';
 import { IPartner } from './partner.interface';
+import { ICommercial, IOnboardPayload, PartnerOnboardingService } from './partner-onboarding.service';
 
 const controllerLabel: string = 'PartnerController';
 
 export class PartnerController {
   private readonly service: PartnerService;
+  private readonly onboardingService: PartnerOnboardingService;
 
   constructor() {
     this.service = new PartnerService();
+    this.onboardingService = new PartnerOnboardingService();
+  }
+
+  /**
+   * Enrôle un marchand à distance : crée son compte, sa boutique, et lui envoie le lien d'activation
+   * @param payload Données du marchand et de sa boutique
+   * @param commercial Admin authentifié — source unique de l'attribution (`createdBy`)
+   */
+  onboard(payload: IOnboardPayload, commercial: ICommercial) {
+    return new Promise(async (resolve, reject) => {
+      try {
+        const result = await this.onboardingService.onboard(payload, commercial);
+
+        resolve({
+          status: result.status,
+          message: result.message,
+          data: result.ok ? result.data : (result.data ?? null)
+        });
+      } catch (error) {
+        reject(error);
+      }
+    }).catch((e: IErrorObject) => {
+      console.error(e);
+      return coddyger.catchReturn(e, controllerLabel, 'onboard');
+    });
+  }
+
+  /**
+   * Active un compte marchand : le porteur du lien définit son mot de passe
+   * @param token Jeton d'activation à usage unique
+   * @param password Mot de passe choisi
+   */
+  activate(token: string, password: string) {
+    return new Promise(async (resolve, reject) => {
+      try {
+        const result = await this.onboardingService.activate(token, password);
+
+        resolve({
+          status: result.status,
+          message: result.message,
+          data: result.ok ? result.data : null
+        });
+      } catch (error) {
+        reject(error);
+      }
+    }).catch((e: IErrorObject) => {
+      console.error(e);
+      return coddyger.catchReturn(e, controllerLabel, 'activate');
+    });
+  }
+
+  /**
+   * Réémet un lien d'activation pour un enrôlement encore en attente
+   * @param enrolmentId Enrôlement concerné
+   * @param commercial Admin appelant
+   */
+  resendActivation(enrolmentId: string, commercial: ICommercial) {
+    return new Promise(async (resolve, reject) => {
+      try {
+        const result = await this.onboardingService.resendActivation(enrolmentId, commercial);
+
+        resolve({
+          status: result.status,
+          message: result.message,
+          data: result.ok ? result.data : null
+        });
+      } catch (error) {
+        reject(error);
+      }
+    }).catch((e: IErrorObject) => {
+      console.error(e);
+      return coddyger.catchReturn(e, controllerLabel, 'resendActivation');
+    });
   }
 
   /**
    * Récupère tous les éléments
    * @returns Liste des éléments
    */
-  getAll(payloads: { page?: number; pageSize?: number; query?: string; status?: string; category?: string }) {
+  getAll(payloads: { page?: number; pageSize?: number; query?: string; status?: string; category?: string; createdBy?: string }) {
     return new Promise(async (resolve, reject) => {
       try {
         const items = await this.service.getAll(payloads);

@@ -1,56 +1,56 @@
 import mongoose, { Schema, Document } from 'mongoose';
 import coddyger, { IData, MongoDbDao } from 'coddyger';
-import { INotification } from './notification.interface';
-import { NotificationType, NotificationCategory } from '../../services/notification/notification.interface';
-import { IClient } from '../client/client.interface';
+import { IEnrolment } from './enrolment.interface';
 
-const schema = new mongoose.Schema<INotification>({
+const schema = new mongoose.Schema<IEnrolment>({
   _id: Schema.Types.ObjectId,
-  type: { 
-    type: String, 
-    enum: Object.values(NotificationType),
-    required: true 
+
+  client: { type: mongoose.Schema.Types.ObjectId, ref: 'Client', required: true },
+  partner: { type: mongoose.Schema.Types.ObjectId, ref: 'Partner', required: true },
+  commercial: { type: mongoose.Schema.Types.ObjectId, ref: 'Admin', required: true },
+
+  // Instantané figé : voir la justification dans enrolment.interface.ts
+  merchantName: { type: String, required: true },
+  merchantEmail: { type: String, required: true },
+  merchantPhone: { type: String, required: true },
+  shopName: { type: String, required: true },
+  ville: { type: String },
+  category: { type: String },
+  commercialName: { type: String, required: true },
+
+  enrolmentStatus: {
+    type: String,
+    enum: ['pending', 'activated'],
+    default: 'pending'
   },
-  category: { 
-    type: String, 
-    enum: Object.values(NotificationCategory),
-    required: true 
-  },
-  to: { 
-    type: Schema.Types.Mixed, 
-    required: true 
-  },
-  data: {
-    title: String,
-    message: { type: String, required: true },
-    url: String,
-    imageUrl: String,
-    data: Schema.Types.Mixed
-  },
-  template: String,
-  templateData: Schema.Types.Mixed,
-  attachments: [{
-    filename: String,
-    path: String,
-    contentType: String
-  }],
-  status: { 
-    type: String, 
-    enum: ['active', 'inactive', 'suspended', 'removed', 'sent', 'failed'],
+
+  activationTokenHash: { type: String, default: null },
+  activationTokenExpiresAt: { type: Date, default: null },
+  activationTokenUsedAt: { type: Date, default: null },
+
+  activationChannels: [{ type: String }],
+  activationSentAt: { type: Date },
+  activationAttempts: { type: Number, default: 0 },
+  activatedAt: { type: Date },
+
+  status: {
+    type: String,
+    enum: ['active', 'inactive', 'suspended', 'removed'],
     default: 'active'
-  },
-  // `status` décrit l'acheminement (envoyé / échoué), pas la lecture. Les deux étaient confondus :
-  // marquer une notification comme lue la passait en 'sent', et une notification réellement envoyée
-  // naissait donc « déjà lue ». La lecture a désormais son propre champ.
-  isRead: { type: Boolean, default: false },
-  readAt: { type: Date },
-  error: String,
-  sentAt: Date,
-}, { timestamps: true });
+  }
+},
+{ timestamps: true });
 
-const model = mongoose.model<INotification>('Notification', schema);
+// Les trois filtres de la vue admin : par commercial, par statut métier, et par date.
+schema.index({ commercial: 1, createdAt: -1 });
+schema.index({ enrolmentStatus: 1, createdAt: -1 });
+schema.index({ client: 1 });
+// Recherche du jeton à l'activation (`consumeActivationToken`).
+schema.index({ activationTokenHash: 1 });
 
-export class NotificationSet extends MongoDbDao<IClient & Document> implements IData<IClient & Document>  {
+const model = mongoose.model<IEnrolment>('Enrolment', schema);
+
+export class EnrolmentSet extends MongoDbDao<IEnrolment & Document> implements IData<IEnrolment & Document> {
   defaultModel = model;
 
   constructor() {
@@ -80,20 +80,19 @@ export class NotificationSet extends MongoDbDao<IClient & Document> implements I
 			let sortBy: string = payloads.sort ?? 'createdAt';
 			let orderBy: string = payloads.orderBy ?? 'desc';
 
-			// Create sort object
 			let sortObject: any = {};
 			if (sortBy) {
 				sortObject = {
 					[sortBy]: orderBy === 'desc' ? -1 : 1
 				};
 			} else {
-				// Default sort by createdAt in descending order if no sortBy is provided
 				sortObject = { createdAt: -1 };
 			}
 
 			const [rows, totalRows] = await Promise.all([
 				model
-					.find(payloads.params, '-password -__v')
+					// L'empreinte du jeton n'a aucune raison de sortir du serveur.
+					.find(payloads.params, '-activationTokenHash -__v')
 					.sort(sortObject)
 					.skip(startIndex)
 					.limit(pageSize)
@@ -123,7 +122,7 @@ export class NotificationSet extends MongoDbDao<IClient & Document> implements I
 
 	selectHug(params?: any): Promise<Array<Document> | any> {
 		return new Promise(async (resolve, reject) => {
-			let doc = await this.defaultModel.find(params).lean();
+			let doc = await this.defaultModel.find(params, '-activationTokenHash -__v').lean();
 
 			if (!doc) {
 				reject(doc);

@@ -4,6 +4,8 @@ import { IAdmin, AdminSet } from './';
 import { IProfile, ProfileSet } from '../profile';
 import { TokenMiddleware } from '../../api/middleware';
 import { AdminService } from './admin.service';
+import { NotificationHelper } from '../../helpers/notification.helper';
+import { NotificationCategory } from '../../services/notification/notification.interface';
 
 const controllerLabel: string = 'AdminController';
 
@@ -163,6 +165,16 @@ export class AdminController {
 					reject(save);
 				} else {
 					const updatedItem: any = await this.dao.selectOne({ _id: item._id });
+
+					// Message d'accueil déposé dans la cloche : le titulaire le découvrira à sa
+					// première connexion. Ne peut pas faire échouer la création du compte.
+					await NotificationHelper.notifyAdminInApp({
+						to: item._id,
+						title: 'Bienvenue sur YoYo',
+						message: 'Votre compte a été créé. Vous pouvez commencer à utiliser la plateforme.',
+						category: NotificationCategory.INFO,
+						metadata: { type: 'admin', adminId: String(item._id) }
+					});
 
 					resolve({
 						status: defines.status.requestOK,
@@ -432,8 +444,14 @@ export class AdminController {
 					});
 				}
 
+				// Le compte doit encore être en vigueur : un admin archivé ou supprimé dont le jeton
+				// n'a pas expiré ne doit plus pouvoir recharger son profil (donc ses permissions).
 				const query: any = adminId ? { _id: adminId } : { email: adminEmail };
-				const local: any | IErrorObject = await this.dao.selectOne(query, '-__v');
+				query.status = { $nin: ['removed', 'archived'] };
+
+				// `-password` : l'empreinte du mot de passe n'a rien à faire dans une réponse HTTP,
+				// même adressée au titulaire du compte. Le front ne consomme que `profile.ability`.
+				const local: any | IErrorObject = await this.dao.selectOne(query, '-password -__v');
 
 				if (local) {
 					return resolve({

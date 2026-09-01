@@ -127,25 +127,34 @@ export class PartnerService {
    * Récupère tous les éléments
    * @returns Liste des éléments
    */
-  async getAll(payloads: { page?: number; pageSize?: number; query?: string; status?: string; category?: string }): Promise<any> {
+  async getAll(payloads: { page?: number; pageSize?: number; query?: string; status?: string; category?: string; createdBy?: string }): Promise<any> {
     try {
       let page: number = payloads.page ?? 1;
 			let pageSize: number = payloads.pageSize ?? 10;
 			let query: string = payloads.query ?? '';
 			let status: any = payloads.status ?? '';
 			let category: any = payloads.category ?? '';
+			let createdBy: any = payloads.createdBy ?? '';
 
       let data: any | IErrorObject = {};
 
+			// Filtre d'attribution (vue commerciale) : il se cumule avec les critères ci-dessous
+			// plutôt que de constituer une branche de plus.
+			const base: any = {};
+			if (!coddyger.string.isEmpty(createdBy) && coddyger.string.isValidObjectId(createdBy)) {
+				base.createdBy = createdBy;
+			}
+
       if (!coddyger.string.isEmpty(category) && coddyger.string.isValidObjectId(category)) {
-				data = await this.dao.select({ params: { categories:category }, page, pageSize });
+				data = await this.dao.select({ params: { ...base, categories:category }, page, pageSize });
 			} else if (coddyger.string.isEmpty(query) && coddyger.string.isEmpty(status)) {
-				data = await this.dao.select({ params: {}, page, pageSize });
+				data = await this.dao.select({ params: { ...base }, page, pageSize });
 			} else if (!coddyger.string.isEmpty(status)) {
-				data = await this.dao.select({ params: { status }, page, pageSize });
+				data = await this.dao.select({ params: { ...base, status }, page, pageSize });
 			} else {
 				data = await this.dao.select({
 					params: {
+						...base,
 						$or: [
 							{ slug: { $regex: query || '', $options: 'i' } },
 							{ name: { $regex: query || '', $options: 'i' } },

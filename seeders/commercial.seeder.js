@@ -14,6 +14,7 @@ class CommercialSeeder {
     this.seederLabel = 'CommercialSeeder';
     this.Admin = null;
     this.Profile = null;
+    this.Notification = null;
   }
 
   async init() {
@@ -56,8 +57,25 @@ class CommercialSeeder {
       { timestamps: true }
     );
 
+    // Notification « cloche » : schéma volontairement souple (strict: false), le seeder n'a besoin
+    // que d'écrire un document lisible par GET /notifications/me.
+    const notificationSchema = new mongoose.Schema(
+      {
+        _id: mongoose.Schema.Types.ObjectId,
+        type: String,
+        category: String,
+        to: mongoose.Schema.Types.Mixed,
+        data: mongoose.Schema.Types.Mixed,
+        status: String,
+        isRead: { type: Boolean, default: false },
+        readAt: Date
+      },
+      { timestamps: true, strict: false }
+    );
+
     this.Profile = mongoose.models.Profile || mongoose.model('Profile', profileSchema);
     this.Admin = mongoose.models.Admin || mongoose.model('Admin', adminSchema);
+    this.Notification = mongoose.models.Notification || mongoose.model('Notification', notificationSchema);
   }
 
   async ensureCommercialProfile() {
@@ -111,6 +129,21 @@ class CommercialSeeder {
       profile: profile._id
     });
 
+    // Notification #1 du contrat : le commercial la découvre à sa première connexion.
+    await this.Notification.create({
+      _id: coddyger.string.generateObjectId(),
+      type: 'PUSH',
+      category: 'INFO',
+      to: String(admin._id),
+      data: {
+        title: 'Bienvenue sur YoYo',
+        message: 'Votre compte commercial a été créé. Vous pouvez commencer à enrôler des marchands.',
+        data: { type: 'admin', adminId: String(admin._id) }
+      },
+      status: 'active',
+      isRead: false
+    });
+
     console.log(`✅ Admin commercial créé: ${email}`);
 
     if (!process.env.COMMERCIAL_SEED_PASSWORD) {
@@ -123,6 +156,12 @@ class CommercialSeeder {
   async clean() {
     await this.init();
     const email = process.env.COMMERCIAL_SEED_EMAIL || 'commercial@yoyo.ci';
+
+    const existing = await this.Admin.findOne({ email });
+
+    if (existing) {
+      await this.Notification.deleteMany({ to: String(existing._id) });
+    }
 
     await this.Admin.deleteOne({ email });
     console.log(`🧹 Admin commercial ${email} supprimé`);

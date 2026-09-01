@@ -31,12 +31,8 @@ export default class Router {
 	}
 
 	private config() {
-		// Security: Helmet helps with setting various HTTP headers to secure your app.
-		// crossOriginResourcePolicy = cross-origin : autorise l'admin (autre origine/port)
-		// à afficher les fichiers statiques (images des documents KYC, etc.).
-		this.router.register(helmet, {
-			crossOriginResourcePolicy: { policy: 'cross-origin' }
-		});
+		// Security: Helmet helps with setting various HTTP headers to secure your app
+		this.router.register(helmet);
 
 		// CORS: Enable CORS with specific origins and methods
 		this.router.register(cors, {
@@ -80,6 +76,16 @@ export default class Router {
 		this.router.addHook('onResponse', (request, reply, done) => {
 			console.log(`${request.method} ${request.url} :: ${reply.statusCode}`);
 			done();
+		});
+
+		// Sonde de disponibilité du conteneur (healthcheck Docker). Volontairement hors du préfixe
+		// versionné : elle doit rester joignable à la même adresse quelles que soient les valeurs
+		// de API_VERSION et SERVER_PATH.
+		this.router.get('/health', async (request, reply) => {
+			return reply.status(defines.status.requestOK).send({
+				status: 'ok',
+				uptime: process.uptime()
+			});
 		});
 
 		this.router.get(`${prefix}/container`, async (request, reply) => {

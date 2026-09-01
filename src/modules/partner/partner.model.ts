@@ -47,6 +47,9 @@ const schema = new mongoose.Schema<IPartner>({
     default: 'active' 
   },
   user: { type: mongoose.Schema.Types.ObjectId, ref: 'Client' },
+  // Admin (commercial) qui a enrôlé cette boutique à distance. Posé depuis le jeton, jamais du
+  // corps de la requête. Absent sur les boutiques créées par le marchand lui-même.
+  createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'Admin' },
 },
 { timestamps: true });
 

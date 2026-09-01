@@ -88,7 +88,7 @@ Suivre un module existant de petite taille (`src/modules/category/` est la réf�
 - PM2 est le runtime : `ecosystem.config.js` (application `yoyo`, `build/main.js`, port 30141 en dev / 3014 en prod) ainsi que des cibles `pm2 deploy` pointant vers `ultrondev.com`, branches `main` (prod) et `dev`.
 - `deploy.bat <production|development>` est le chemin de déploiement SSH sous Windows. Il contient des **identifiants git en clair** — ne pas les recopier ailleurs et traiter le fichier comme sensible.
 - `push.bat <msg>` commite sur `dev`, puis met `main` à jour depuis `dev`.
-- Le `Dockerfile` (multi-étapes, node 20 alpine, utilisateur non root) est fonctionnel ; `docker-compose.yaml` est obsolète — il référence des variables Kafka sans service Kafka et effectue un healthcheck sur `/health`, qui n'est pas une route. L'endpoint de disponibilité réel est `GET {prefix}/container`.
+- Le `Dockerfile` (multi-étapes, node 20 alpine, utilisateur non root) est fonctionnel. `docker compose up -d` construit depuis ce `Dockerfile` et démarre l'app plus un service `redis` ; la configuration vient de `env_file: .env`, le conteneur écoute sur 3000 et `${SERVER_PORT}` ne choisit que le port publié. Deux endpoints de disponibilité : `GET /health` (hors préfixe, utilisé par le healthcheck) et `GET {prefix}/container`.
 
 ## Style
 

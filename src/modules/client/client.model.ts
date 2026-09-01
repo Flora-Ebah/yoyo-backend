@@ -55,6 +55,11 @@ const schema = new mongoose.Schema<IClient>({
     default: 'pending' 
   },
   isPartner: { type: Boolean, default: false },
+  // Onboarding à distance : le compte est créé par un commercial avec un mot de passe aléatoire
+  // jamais communiqué. Le marchand définit le sien via le lien d'activation.
+  mustChangePassword: { type: Boolean, default: false },
+  createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'Admin' },
+  activatedAt: { type: Date },
 	removedReason: { type: String },
 	removedAt: { type: Date },
 	removedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'Admin' },

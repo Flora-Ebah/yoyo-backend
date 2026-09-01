@@ -135,9 +135,9 @@ export class EmailService extends NotificationService {
         to: recipients,
         subject,
         html,
-        attachments: attachments || []
+        attachments
       };
-      
+
       const info = await this.transporter.sendMail(mailOptions);
       
       LoggerService.log({

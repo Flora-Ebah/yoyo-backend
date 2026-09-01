@@ -140,8 +140,13 @@ const defaultRoute: any = (fastify: any, options, done) => {
         type: 'object',
         properties: {
           resetToken: { type: 'string' },
-          newPassword: { type: 'string', minLength: 8 },
-          confirmPassword: { type: 'string', minLength: 8 }
+          // Le secret d'un compte est un code à 6 chiffres, saisi au clavier numérique dans les
+          // applications Client et Partenaire. Le seuil de 8 posé par F-03 visait le mot de passe
+          // vide ; fixé à 8 il rendait la réinitialisation impossible pour tous les comptes, que
+          // `POST /clients/register` crée sans contrainte de longueur. Le balayage du code reste
+          // fermé par le plafond de tentatives sur l'OTP et par le débit limité de cette route.
+          newPassword: { type: 'string', minLength: 6 },
+          confirmPassword: { type: 'string', minLength: 6 }
         },
         required: ['resetToken', 'newPassword', 'confirmPassword'],
         additionalProperties: false
@@ -202,7 +207,8 @@ const defaultRoute: any = (fastify: any, options, done) => {
         type: 'object',
         properties: {
           password: { type: 'string' },
-          newPassword: { type: 'string', minLength: 8 },
+          // Même seuil que `/clients/updatePassword` : voir la note qui l'accompagne.
+          newPassword: { type: 'string', minLength: 6 },
         },
         required: ['password', 'newPassword'],
         additionalProperties: false

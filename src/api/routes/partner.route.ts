@@ -7,6 +7,20 @@ const Controller: PartnerController = new PartnerController();
 const tags: string[] = ['Partenaires YoYo'];
 
 const defaultRoute: any = (fastify: any, options, done) => {
+  
+  fastify.addContentTypeParser('application/json', { parseAs: 'string' }, (request, body: string, done) => {
+    if (body === undefined || body === null || body === '') {
+      return done(null, {});
+    }
+
+    try {
+      done(null, JSON.parse(body));
+    } catch (error: any) {
+      error.statusCode = 400;
+      done(error, undefined);
+    }
+  });
+
   // Create document
   fastify.route({
     schema: {
@@ -220,7 +234,11 @@ const defaultRoute: any = (fastify: any, options, done) => {
           pageSize: { type: 'number' },
           status: { type: 'string' },
           q: { type: 'string' },
-          category: { type: 'string' }
+          category: { type: 'string' },
+          createdBy: {
+            type: 'string',
+            description: "Filtre d'attribution. `me` restreint aux boutiques enrôlées par l'appelant."
+          }
         },
         required: [],
         additionalProperties: false
@@ -235,8 +253,16 @@ const defaultRoute: any = (fastify: any, options, done) => {
       let status: any = request.query.status;
       let query: any = request.query.q;
       let category: any = request.query.category;
+      let createdBy: any = request.query.createdBy;
+      const user: any = request.user;
 
-      let Q = Controller.getAll({ page, pageSize, status, query, category });
+      // `createdBy=me` est résolu ici, à partir du jeton : le client ne choisit pas l'identité
+      // dont il consulte le portefeuille.
+      if (createdBy === 'me') {
+        createdBy = user?._id;
+      }
+
+      let Q = Controller.getAll({ page, pageSize, status, query, category, createdBy });
       return coddyger.api(reply, Q);
     }
   });
@@ -537,6 +563,141 @@ const defaultRoute: any = (fastify: any, options, done) => {
       const certified: any = request.query.certified;
 
       let Q = Controller.getStats({ from, to, certified });
+      return coddyger.api(reply, Q);
+    }
+  });
+
+  // ---------------------------------------------------------------------------------------------
+  // Onboarding marchand à distance (commerciaux)
+  // ---------------------------------------------------------------------------------------------
+
+  // Créer un marchand + sa boutique et lui envoyer le lien d'activation
+  fastify.route({
+    schema: {
+      tags,
+      summary: 'Enrôler un marchand à distance (compte + boutique)',
+      description:
+        "Réservé aux comptes disposant de la permission `pros:create` (rôle Commercial). Crée le compte marchand sans OTP, sa boutique, puis envoie un lien d'activation par e-mail et SMS. L'attribution (`createdBy`) est déduite du jeton.",
+      body: {
+        type: 'object',
+        properties: {
+          merchant: {
+            type: 'object',
+            properties: {
+              firstname: { type: 'string', minLength: 2, maxLength: 100 },
+              lastname: { type: 'string', minLength: 2, maxLength: 100 },
+              email: { type: 'string', format: 'email' },
+              contact: { type: 'string', minLength: 8, maxLength: 20 },
+              ville: { type: 'string', maxLength: 100 }
+            },
+            required: ['firstname', 'lastname', 'email', 'contact'],
+            // Verrouillé : sans cela, un corps de requête pourrait tenter d'injecter
+            // `createdBy`, `status` ou `isPartner`.
+            additionalProperties: false
+          },
+          shop: {
+            type: 'object',
+            properties: {
+              name: { type: 'string', minLength: 2, maxLength: 100 },
+              categoryId: { type: 'string' },
+              ville: { type: 'string', maxLength: 100 },
+              address: { type: 'string', maxLength: 200 },
+              phone: { type: 'string', maxLength: 20 },
+              description: { type: 'string', maxLength: 1000 }
+            },
+            required: ['name', 'categoryId'],
+            additionalProperties: false
+          },
+          channels: {
+            type: 'object',
+            properties: {
+              email: { type: 'boolean' },
+              sms: { type: 'boolean' }
+            },
+            additionalProperties: false
+          }
+        },
+        required: ['merchant', 'shop'],
+        additionalProperties: false
+      }
+    },
+    method: 'POST',
+    url: `${routePath}/onboard`,
+    preHandler: TokenMiddleware.can('create', 'pros'),
+    // Un enrôlement déclenche un e-mail et un SMS : plafonner évite d'en faire un relais de spam.
+    config: { rateLimit: { max: 10, timeWindow: '1 minute' } },
+    handler: (request, reply) => {
+      const user: any = request.user;
+
+      let Q = Controller.onboard(request.body, {
+        _id: user._id,
+        firstname: user.firstname,
+        lastname: user.lastname,
+        email: user.email
+      });
+      return coddyger.api(reply, Q);
+    }
+  });
+
+  // Activation du compte marchand par le porteur du lien
+  fastify.route({
+    schema: {
+      tags,
+      summary: "Activer un compte marchand via le lien d'invitation",
+      description:
+        "Route publique : le marchand n'a pas encore de session. L'autorisation vient du jeton d'activation, à usage unique et expirant.",
+      body: {
+        type: 'object',
+        properties: {
+          token: { type: 'string', minLength: 16, maxLength: 128 },
+          password: { type: 'string', minLength: 8, maxLength: 128 }
+        },
+        required: ['token', 'password'],
+        additionalProperties: false
+      }
+    },
+    method: 'POST',
+    url: `${routePath}/activate`,
+    // Aucun preHandler : le jeton d'activation fait office d'autorisation. Le rate-limit couvre
+    // le risque d'énumération de jetons.
+    config: { rateLimit: { max: 5, timeWindow: '10 minutes' } },
+    handler: (request, reply) => {
+      const body: any = request.body;
+
+      let Q = Controller.activate(body.token, body.password);
+      return coddyger.api(reply, Q);
+    }
+  });
+
+  // Renvoyer le lien d'activation (rattrapage d'un envoi échoué)
+  fastify.route({
+    schema: {
+      tags,
+      summary: "Renvoyer le lien d'activation d'un enrôlement en attente",
+      params: {
+        type: 'object',
+        properties: {
+          id: { type: 'string' }
+        },
+        required: ['id'],
+        additionalProperties: false
+      }
+    },
+    method: 'POST',
+    url: `${routePath}/resend-activation/:id`,
+    preHandler: TokenMiddleware.can('create', 'pros'),
+    config: { rateLimit: { max: 3, timeWindow: '1 hour' } },
+    // Handler synchrone : `coddyger.api` écrit lui-même dans `reply`, un handler `async` ferait
+    // envoyer à Fastify une seconde réponse (vide) en plus de celle-ci.
+    handler: (request, reply) => {
+      const user: any = request.user;
+
+      let Q = Controller.resendActivation(request.params.id, {
+        _id: user._id,
+        firstname: user.firstname,
+        lastname: user.lastname,
+        email: user.email
+      });
       return coddyger.api(reply, Q);
     }
   });

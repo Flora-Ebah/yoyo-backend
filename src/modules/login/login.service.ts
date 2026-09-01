@@ -541,6 +541,9 @@ export class LoginService {
 			avatar: client.avatar,
 			isCertified,
 			isPartner: client.isPartner ?? false,
+			// Compte créé à distance par un commercial : l'app Pro doit imposer l'écran
+			// « définir mon mot de passe » tant que ce drapeau est vrai.
+			mustChangePassword: client.mustChangePassword ?? false,
 			accountVerificationCompletion,
       isPhoneConfirmed: client.isPhoneConfirmed,
       isEmailConfirmed: client.isEmailConfirmed,

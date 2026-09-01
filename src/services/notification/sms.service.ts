@@ -5,15 +5,29 @@ import axios from 'axios';
 import { MessageTypes } from './constants/message-types';
 
 /**
- * Service d'envoi de SMS
- * Cette implémentation utilise un service SMS générique via API REST
- * Vous devrez adapter cette classe à votre fournisseur de SMS spécifique
+ * Service d'envoi de SMS — fournisseur **Orange SMS Côte d'Ivoire** (api.orange.com).
+ *
+ * Le flux est identique à celui d'Orange Money déjà en place dans `PaymentHelper` : un jeton
+ * OAuth2 `client_credentials` obtenu sur `/oauth/v3/token`, mis en cache jusqu'à son expiration,
+ * puis présenté en `Bearer` sur l'API métier.
+ *
+ * Le service se déclare **indisponible** tant que la configuration Orange est absente. C'est
+ * volontaire : `NotificationManager` l'écarte alors proprement, et les appelants (l'onboarding
+ * marchand notamment) n'annoncent pas un SMS parti alors que rien n'a quitté le serveur.
  */
 export class SmsService extends NotificationService {
   private readonly serviceLabel = 'SmsService';
-  private apiKey: string = '';
-  private apiUrl: string = '';
+
+  private host: string = '';
+  /** En-tête `Authorization` complet de l'appel OAuth, ex. `Basic <base64(id:secret)>`. */
+  private authHeader: string = '';
+  /** Numéro émetteur enregistré auprès d'Orange, au format `tel:+225XXXXXXXXXX`. */
+  private senderAddress: string = '';
+  private senderName: string = '';
   private initialized: boolean = false;
+
+  private accessToken: string | null = null;
+  private tokenExpiry: number = 0;
 
   /**
    * Initialise le service SMS
@@ -22,23 +36,23 @@ export class SmsService extends NotificationService {
     if (this.initialized) return;
 
     try {
-      // Récupérer les informations de configuration
-      this.apiKey = process.env.SMS_API_KEY || '';
-      this.apiUrl = process.env.SMS_API_URL || '';
+      this.host = process.env.ORANGE_SMS_HOST || 'https://api.orange.com';
+      this.authHeader = process.env.ORANGE_SMS_AUTH_HEADER || '';
+      this.senderAddress = process.env.ORANGE_SMS_SENDER_ADDRESS || '';
+      this.senderName = process.env.ORANGE_SMS_SENDER_NAME || 'YoYo';
 
-      if (!this.apiKey || !this.apiUrl) {
-        throw new Error('Configuration SMS manquante');
+      if (!this.authHeader || !this.senderAddress) {
+        throw new Error('Configuration Orange SMS manquante (ORANGE_SMS_AUTH_HEADER, ORANGE_SMS_SENDER_ADDRESS)');
       }
 
       this.initialized = true;
       LoggerService.log({
         type: LogLevel.Info,
-        content: 'Service SMS initialisé avec succès',
+        content: 'Service SMS Orange initialisé avec succès',
         location: this.serviceLabel,
         method: 'init'
       });
     } catch (error) {
-      console.error('Erreur lors de l\'initialisation du service SMS:', error);
       LoggerService.log({
         type: LogLevel.Error,
         content: error,
@@ -51,6 +65,8 @@ export class SmsService extends NotificationService {
 
   /**
    * Vérifie si le service est disponible
+   *
+   * Appelé avant tout envoi par les chemins qui rendent compte des canaux réellement utilisés.
    */
   public async isAvailable(): Promise<boolean> {
     if (!this.initialized) {
@@ -61,7 +77,70 @@ export class SmsService extends NotificationService {
       }
     }
 
-    return !!(this.apiKey && this.apiUrl);
+    return !!(this.authHeader && this.senderAddress);
+  }
+
+  /**
+   * Obtient un jeton OAuth2, en réutilisant celui en cache tant qu'il est valide.
+   *
+   * Même mécanique que `PaymentHelper.ensureValidToken` : Orange facture ces appels et limite leur
+   * fréquence, on ne redemande donc un jeton qu'à son expiration.
+   */
+  private async ensureValidToken(): Promise<string> {
+    if (this.accessToken && Date.now() < this.tokenExpiry) {
+      return this.accessToken;
+    }
+
+    const response = await axios.post(
+      `${this.host}/oauth/v3/token`,
+      'grant_type=client_credentials',
+      {
+        headers: {
+          Authorization: this.authHeader,
+          'Content-Type': 'application/x-www-form-urlencoded'
+        },
+        timeout: 10000
+      }
+    );
+
+    this.accessToken = response.data.access_token;
+    // Marge de 60 s pour ne pas présenter un jeton qui expire pendant le vol.
+    this.tokenExpiry = Date.now() + Math.max(0, (response.data.expires_in ?? 3600) - 60) * 1000;
+
+    return this.accessToken!;
+  }
+
+  /**
+   * Remet un SMS à la passerelle Orange
+   * @param to Numéro destinataire au format E.164 (`+225…`)
+   * @param message Contenu du message
+   */
+  private async dispatch(to: string, message: string): Promise<any> {
+    const token = await this.ensureValidToken();
+
+    // Le numéro émetteur fait partie du chemin et doit être encodé (`tel:+225…` contient `:` et `+`).
+    const url = `${this.host}/smsmessaging/v1/outbound/${encodeURIComponent(this.senderAddress)}/requests`;
+
+    const response = await axios.post(
+      url,
+      {
+        outboundSMSMessageRequest: {
+          address: `tel:${to}`,
+          senderAddress: this.senderAddress,
+          senderName: this.senderName,
+          outboundSMSTextMessage: { message }
+        }
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        timeout: 15000
+      }
+    );
+
+    return response.data;
   }
 
   /**
@@ -75,23 +154,23 @@ export class SmsService extends NotificationService {
 
     try {
       const { to, data } = options;
-      
+
       // Préparer les destinataires
       const recipients = Array.isArray(to) ? to : [to];
-      
+
       // Préparer le contenu du SMS
       const message = typeof data === 'string' ? data : data.message;
-      
+
       // Formater le message SMS
-      const formattedMessage = this.formatSmsMessage(message ??'', options.category.toString());
-      
+      const formattedMessage = this.formatSmsMessage(message ?? '', options.category.toString());
+
       // Envoyer le SMS à chaque destinataire
       const results = await Promise.all(
         recipients.map(async (recipient) => {
           try {
             // Formater le numéro de téléphone si nécessaire
             const formattedPhone = this.formatPhoneNumber(recipient);
-            
+
             if (!this.validatePhoneNumber(formattedPhone)) {
               return {
                 recipient,
@@ -99,67 +178,49 @@ export class SmsService extends NotificationService {
                 error: new Error('Numéro de téléphone invalide')
               };
             }
-            
-            // Pour l'instant, on simule l'envoi comme dans le module OTP
-            console.log(`SMS envoyé à ${formattedPhone}: ${formattedMessage}`);
-            
-            // Journaliser l'envoi
+
+            const data = await this.dispatch(formattedPhone, formattedMessage);
+
             LoggerService.log({
               type: LogLevel.Info,
               content: `SMS envoyé à ${formattedPhone}`,
               location: this.serviceLabel,
               method: 'send'
             });
-            
-            // Décommenter ce code pour l'envoi réel via API
-            /*
-            // Envoyer le SMS via l'API
-            const response = await axios.post(
-              this.apiUrl,
-              {
-                to: formattedPhone,
-                message: formattedMessage,
-                // Ajouter d'autres paramètres selon votre fournisseur de SMS
-              },
-              {
-                headers: {
-                  'Authorization': `Bearer ${this.apiKey}`,
-                  'Content-Type': 'application/json'
-                }
-              }
-            );
-            */
-            
+
             return {
               recipient: formattedPhone,
               success: true,
-              // data: response.data
-              data: { message: 'SMS envoyé avec succès (simulation)' }
+              data
             };
-          } catch (error) {
-            console.error(`Erreur lors de l'envoi du SMS à ${recipient}:`, error);
+          } catch (error: any) {
+            // La réponse d'erreur d'Orange porte le motif utile ; le message d'axios seul ne dit
+            // que « Request failed with status code 4xx ».
+            const detail = error?.response?.data ?? error?.message ?? error;
+
+            console.error(`Erreur lors de l'envoi du SMS à ${recipient}:`, detail);
             LoggerService.log({
               type: LogLevel.Error,
-              content: `Erreur lors de l'envoi du SMS à ${recipient}: ${error}`,
+              content: `Erreur lors de l'envoi du SMS à ${recipient}: ${JSON.stringify(detail)}`,
               location: this.serviceLabel,
               method: 'send'
             });
             return {
               recipient,
               success: false,
-              error
+              error: detail
             };
           }
         })
       );
-      
+
       // Vérifier si tous les SMS ont été envoyés avec succès
       const allSuccessful = results.every(result => result.success);
-      
+
       return {
         success: allSuccessful,
-        message: allSuccessful 
-          ? 'Tous les SMS ont été envoyés avec succès' 
+        message: allSuccessful
+          ? 'Tous les SMS ont été envoyés avec succès'
           : 'Certains SMS n\'ont pas pu être envoyés',
         data: results
       };
@@ -192,25 +253,22 @@ export class SmsService extends NotificationService {
     purpose: string
   ): Promise<{ success: boolean; message: string }> {
     try {
+      if (!(await this.isAvailable())) {
+        return {
+          success: false,
+          message: 'Service SMS non configuré'
+        };
+      }
+
       // Récupérer le template SMS en fonction du purpose
       const smsMessage = MessageTypes.getSmsTemplate(purpose, code);
-      
-      // TODO: Implémenter l'envoi de SMS avec le code OTP
-      // Exemple avec Twilio:
-      // const result = await this.twilioClient.messages.create({
-      //   body: smsMessage,
-      //   from: process.env.TWILIO_PHONE_NUMBER,
-      //   to: phoneNumber
-      // });
-      
-      // Pour l'instant, on simule l'envoi
-      console.log(`SMS OTP envoyé à ${phoneNumber} avec le code ${code} pour ${purpose}`);
-      console.log(`Message: ${smsMessage}`);
-      
-      // Journaliser l'envoi
+
+      await this.dispatch(this.formatPhoneNumber(phoneNumber), smsMessage);
+
+      // Le code n'est jamais journalisé : c'est un secret à usage unique.
       LoggerService.log({
         type: LogLevel.Info,
-        content: `SMS OTP envoyé à ${phoneNumber} avec le code ${code} pour ${purpose}`,
+        content: `SMS OTP envoyé à ${phoneNumber} pour ${purpose}`,
         location: this.serviceLabel,
         method: 'sendOtpSms'
       });
@@ -219,10 +277,10 @@ export class SmsService extends NotificationService {
         success: true,
         message: 'SMS envoyé avec succès'
       };
-    } catch (error) {
+    } catch (error: any) {
       LoggerService.log({
         type: LogLevel.Error,
-        content: error,
+        content: error?.response?.data ?? error,
         location: this.serviceLabel,
         method: 'sendOtpSms'
       });
@@ -242,12 +300,12 @@ export class SmsService extends NotificationService {
    */
   private formatSmsMessage(message: string, category: string): string {
     const appName = 'YoYo';
-    
+
     // Si le message est déjà formaté, le retourner tel quel
     if (message.startsWith(`[${appName}]`)) {
       return message;
     }
-    
+
     // Sinon, formater le message selon la catégorie
     switch (category) {
       case 'INFO':
@@ -272,7 +330,7 @@ export class SmsService extends NotificationService {
     // Validation de base pour les numéros internationaux
     // Format E.164 recommandé pour les services SMS
     const phoneRegex = /^\+[1-9]\d{1,14}$/;
-    
+
     // Si le numéro ne commence pas par +, on vérifie s'il s'agit d'un numéro local
     if (!phoneNumber.startsWith('+')) {
       // Pour les numéros locaux (par exemple, numéros ivoiriens)
@@ -282,7 +340,7 @@ export class SmsService extends NotificationService {
       }
       return false;
     }
-    
+
     return phoneRegex.test(phoneNumber);
   }
 
@@ -293,12 +351,12 @@ export class SmsService extends NotificationService {
   private formatPhoneNumber(phoneNumber: string): string {
     // Supprimer les espaces, tirets et parenthèses
     let formatted = phoneNumber.replace(/[\s\-()]/g, '');
-    
+
     // Ajouter le préfixe international si nécessaire
     if (formatted.startsWith('0')) {
       formatted = '+225' + formatted.substring(1);
     }
-    
+
     return formatted;
   }
-} 
+}

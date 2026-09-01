@@ -167,14 +167,18 @@ describe('[Sécurité] Gardes des routes', () => {
 		/**
 		 * Le contrôleur ne comparait que `newPassword` et `confirmPassword` : deux chaînes vides
 		 * étant égales, le parcours acceptait de poser un mot de passe vide.
+		 *
+		 * Le seuil retenu est 6, la longueur du code que les applications Client et Partenaire
+		 * font saisir au clavier numérique. Porté à 8, il fermait la réinitialisation à tous les
+		 * comptes, puisque `POST /clients/register` les crée sans contrainte de longueur.
 		 */
 		it('impose une longueur minimale de mot de passe', () => {
 			const body = find(routes, 'PUT', '/clients/updatePassword')!.schema.body;
-			expect(body.properties.newPassword.minLength).to.be.at.least(8);
-			expect(body.properties.confirmPassword.minLength).to.be.at.least(8);
+			expect(body.properties.newPassword.minLength).to.equal(6);
+			expect(body.properties.confirmPassword.minLength).to.equal(6);
 
 			const selfBody = find(routes, 'PUT', '/clients/resetPassword/me')!.schema.body;
-			expect(selfBody.properties.newPassword.minLength).to.be.at.least(8);
+			expect(selfBody.properties.newPassword.minLength).to.equal(6);
 		});
 
 		/**

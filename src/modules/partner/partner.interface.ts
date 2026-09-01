@@ -37,4 +37,6 @@ export interface IPartner {
   
   status?: string;
   user?: any;
+  /** Admin (commercial) auteur de l'enrôlement à distance. */
+  createdBy?: any;
 }

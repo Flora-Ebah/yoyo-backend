@@ -1,7 +1,14 @@
+import { BRAND, codeBox, emailButton, wrapEmail } from './email-theme';
+
 /**
  * Types de messages pour les communications avec les utilisateurs
  * Cette classe centralise tous les types de messages qui peuvent être envoyés
  * via email ou SMS, avec leurs templates et configurations
+ *
+ * Les templates ci-dessous ne décrivent que le **contenu** d'un message : l'habillage de marque
+ * (logo, en-tête, pied de page, typographie) est appliqué une seule fois par `getEmailTemplate`,
+ * via `wrapEmail`. Les couleurs viennent de `email-theme.ts` — ne jamais coder une couleur en dur
+ * ici, sous peine de rejouer l'écart au thème qui a fait dériver ces templates.
  */
 export class MessageTypes {
   // Types de messages (utilisés comme identifiants)
@@ -50,17 +57,27 @@ export class MessageTypes {
     SYSTEM_UPDATE: 'system_update',
     LOGIN_NOTIFICATION: 'login_notification',
     CERTIFICATION_NOTIFICATION: 'certification_notification',
+    MERCHANT_ACTIVATION: 'merchant_activation',
   };
 
-  // Templates d'emails
+  /**
+   * Templates d'e-mails.
+   *
+   * ⚠️ La signature est **imposée** : `(code, name, details)`, dans cet ordre, y compris pour les
+   * messages qui n'utilisent pas de code — `getEmailTemplate` appelle toujours
+   * `template(code, name, details)`. Quinze templates déclaraient `(name, details)` : `name` y
+   * recevait donc le code (une chaîne vide hors OTP, d'où un « cher utilisateur » systématique) et
+   * `details` recevait le nom, ce qui faisait disparaître montants, dates et appareils au profit
+   * de « undefined ». Les templates sans code nomment leur premier paramètre `_code`.
+   */
   static readonly EMAIL_TEMPLATES = {
     [MessageTypes.TYPES.ACCOUNT_VERIFICATION]: {
       subject: 'Vérification de votre compte YoYo',
       template: (code: string, name?: string) => `
-        <h2>Vérification de votre compte</h2>
+        <h2 style="text-align: center;">Vérification de votre compte</h2>
         <p>Bonjour ${name || 'cher utilisateur'},</p>
         <p>Merci d'avoir créé un compte sur notre plateforme. Pour finaliser votre inscription, veuillez utiliser le code de vérification suivant :</p>
-        <div style="text-align: center; margin: 20px 0; padding: 15px; background-color: #f5f5f5; font-size: 24px; font-weight: bold; letter-spacing: 5px;">${code}</div>
+        ${codeBox(code)}
         <p>Ce code est valable pendant 10 minutes.</p>
         <p>Si vous n'avez pas demandé ce code, veuillez ignorer cet email.</p>
         <p>Cordialement,<br>L'équipe YoYo</p>
@@ -69,10 +86,10 @@ export class MessageTypes {
     [MessageTypes.TYPES.PASSWORD_RESET]: {
       subject: 'Réinitialisation de votre mot de passe YoYo',
       template: (code: string, name?: string) => `
-        <h2>Réinitialisation de mot de passe</h2>
+        <h2 style="text-align: center;">Réinitialisation de mot de passe</h2>
         <p>Bonjour ${name || 'cher utilisateur'},</p>
         <p>Vous avez demandé la réinitialisation de votre mot de passe. Veuillez utiliser le code suivant pour confirmer cette action :</p>
-        <div style="text-align: center; margin: 20px 0; padding: 15px; background-color: #f5f5f5; font-size: 24px; font-weight: bold; letter-spacing: 5px;">${code}</div>
+        ${codeBox(code)}
         <p>Ce code est valable pendant 10 minutes.</p>
         <p>Si vous n'avez pas demandé cette réinitialisation, veuillez sécuriser votre compte immédiatement.</p>
         <p>Cordialement,<br>L'équipe YoYo</p>
@@ -81,10 +98,10 @@ export class MessageTypes {
     [MessageTypes.TYPES.LOGIN_VERIFICATION]: {
       subject: 'Code de vérification pour votre connexion YoYo',
       template: (code: string, name?: string) => `
-        <h2>Vérification de connexion</h2>
+        <h2 style="text-align: center;">Vérification de connexion</h2>
         <p>Bonjour ${name || 'cher utilisateur'},</p>
         <p>Nous avons détecté une tentative de connexion à votre compte. Veuillez utiliser le code suivant pour confirmer qu'il s'agit bien de vous :</p>
-        <div style="text-align: center; margin: 20px 0; padding: 15px; background-color: #f5f5f5; font-size: 24px; font-weight: bold; letter-spacing: 5px;">${code}</div>
+        ${codeBox(code)}
         <p>Ce code est valable pendant 10 minutes.</p>
         <p>Si vous n'avez pas tenté de vous connecter, veuillez sécuriser votre compte immédiatement.</p>
         <p>Cordialement,<br>L'équipe YoYo</p>
@@ -93,10 +110,10 @@ export class MessageTypes {
     [MessageTypes.TYPES.TWO_FACTOR_AUTH]: {
       subject: 'Code d\'authentification à deux facteurs YoYo',
       template: (code: string, name?: string) => `
-        <h2>Authentification à deux facteurs</h2>
+        <h2 style="text-align: center;">Authentification à deux facteurs</h2>
         <p>Bonjour ${name || 'cher utilisateur'},</p>
         <p>Pour compléter votre processus d'authentification à deux facteurs, veuillez utiliser le code suivant :</p>
-        <div style="text-align: center; margin: 20px 0; padding: 15px; background-color: #f5f5f5; font-size: 24px; font-weight: bold; letter-spacing: 5px;">${code}</div>
+        ${codeBox(code)}
         <p>Ce code est valable pendant 5 minutes.</p>
         <p>Si vous n'avez pas initié cette connexion, veuillez sécuriser votre compte immédiatement.</p>
         <p>Cordialement,<br>L'équipe YoYo</p>
@@ -105,10 +122,10 @@ export class MessageTypes {
     [MessageTypes.TYPES.TRANSACTION_CONFIRMATION]: {
       subject: 'Confirmation de transaction YoYo',
       template: (code: string, name?: string, details?: any) => `
-        <h2>Confirmation de transaction</h2>
+        <h2 style="text-align: center;">Confirmation de transaction</h2>
         <p>Bonjour ${name || 'cher utilisateur'},</p>
         <p>Nous avons besoin de confirmer une transaction sur votre compte${details ? ' (' + details.amount + ' ' + details.currency + ')' : ''}. Veuillez utiliser le code suivant pour autoriser cette opération :</p>
-        <div style="text-align: center; margin: 20px 0; padding: 15px; background-color: #f5f5f5; font-size: 24px; font-weight: bold; letter-spacing: 5px;">${code}</div>
+        ${codeBox(code)}
         <p>Ce code est valable pendant 10 minutes.</p>
         <p>Si vous n'avez pas initié cette transaction, veuillez contacter notre service client immédiatement.</p>
         <p>Cordialement,<br>L'équipe YoYo</p>
@@ -117,10 +134,10 @@ export class MessageTypes {
     [MessageTypes.TYPES.PAYMENT_CONFIRMATION]: {
       subject: 'Confirmation de paiement YoYo',
       template: (code: string, name?: string, details?: any) => `
-        <h2>Confirmation de paiement</h2>
+        <h2 style="text-align: center;">Confirmation de paiement</h2>
         <p>Bonjour ${name || 'cher utilisateur'},</p>
         <p>Nous avons besoin de confirmer un paiement${details ? ' de ' + details.amount + ' ' + details.currency : ''} sur votre compte. Veuillez utiliser le code suivant pour autoriser cette opération :</p>
-        <div style="text-align: center; margin: 20px 0; padding: 15px; background-color: #f5f5f5; font-size: 24px; font-weight: bold; letter-spacing: 5px;">${code}</div>
+        ${codeBox(code)}
         <p>Ce code est valable pendant 5 minutes.</p>
         <p>Si vous n'avez pas initié ce paiement, veuillez contacter notre service client immédiatement.</p>
         <p>Cordialement,<br>L'équipe YoYo</p>
@@ -129,10 +146,10 @@ export class MessageTypes {
     [MessageTypes.TYPES.TRANSFER_NOTIFICATION]: {
       subject: 'Notification de transfert YoYo',
       template: (code: string, name?: string, details?: any) => `
-        <h2>Notification de transfert</h2>
+        <h2 style="text-align: center;">Notification de transfert</h2>
         <p>Bonjour ${name || 'cher utilisateur'},</p>
         <p>Un transfert${details ? ' de ' + details.amount + ' ' + details.currency : ''} a été initié sur votre compte. Si vous souhaitez autoriser cette opération, veuillez utiliser le code suivant :</p>
-        <div style="text-align: center; margin: 20px 0; padding: 15px; background-color: #f5f5f5; font-size: 24px; font-weight: bold; letter-spacing: 5px;">${code}</div>
+        ${codeBox(code)}
         <p>Ce code est valable pendant 5 minutes.</p>
         <p>Si vous n'avez pas initié ce transfert, veuillez contacter notre service client immédiatement.</p>
         <p>Cordialement,<br>L'équipe YoYo</p>
@@ -141,10 +158,10 @@ export class MessageTypes {
     [MessageTypes.TYPES.ACCOUNT_UPDATED]: {
       subject: 'Mise à jour de votre compte YoYo',
       template: (code: string, name?: string, details?: any) => `
-        <h2>Mise à jour de compte</h2>
+        <h2 style="text-align: center;">Mise à jour de compte</h2>
         <p>Bonjour ${name || 'cher utilisateur'},</p>
         <p>Des modifications ont été apportées à votre compte${details?.changes ? ' (' + details.changes + ')' : ''}. Pour confirmer ces changements, veuillez utiliser le code suivant :</p>
-        <div style="text-align: center; margin: 20px 0; padding: 15px; background-color: #f5f5f5; font-size: 24px; font-weight: bold; letter-spacing: 5px;">${code}</div>
+        ${codeBox(code)}
         <p>Ce code est valable pendant 15 minutes.</p>
         <p>Si vous n'avez pas demandé ces modifications, veuillez contacter notre service client immédiatement.</p>
         <p>Cordialement,<br>L'équipe YoYo</p>
@@ -153,10 +170,10 @@ export class MessageTypes {
     [MessageTypes.TYPES.SECURITY_ALERT]: {
       subject: 'Alerte de sécurité YoYo',
       template: (code: string, name?: string, details?: any) => `
-        <h2>Alerte de sécurité</h2>
+        <h2 style="text-align: center;">Alerte de sécurité</h2>
         <p>Bonjour ${name || 'cher utilisateur'},</p>
         <p>Nous avons détecté une activité inhabituelle sur votre compte${details?.activity ? ' : ' + details.activity : ''}. Pour vérifier votre identité, veuillez utiliser le code suivant :</p>
-        <div style="text-align: center; margin: 20px 0; padding: 15px; background-color: #f5f5f5; font-size: 24px; font-weight: bold; letter-spacing: 5px;">${code}</div>
+        ${codeBox(code)}
         <p>Ce code est valable pendant 10 minutes.</p>
         <p>Si vous n'êtes pas à l'origine de cette activité, veuillez sécuriser votre compte immédiatement en modifiant votre mot de passe.</p>
         <p>Cordialement,<br>L'équipe YoYo</p>
@@ -165,10 +182,10 @@ export class MessageTypes {
     [MessageTypes.TYPES.PROFILE_CHANGES]: {
       subject: 'Confirmation des modifications de profil YoYo',
       template: (code: string, name?: string, details?: any) => `
-        <h2>Modifications de profil</h2>
+        <h2 style="text-align: center;">Modifications de profil</h2>
         <p>Bonjour ${name || 'cher utilisateur'},</p>
         <p>Des modifications ont été apportées à votre profil${details?.changes ? ' (' + details.changes + ')' : ''}. Pour confirmer ces changements, veuillez utiliser le code suivant :</p>
-        <div style="text-align: center; margin: 20px 0; padding: 15px; background-color: #f5f5f5; font-size: 24px; font-weight: bold; letter-spacing: 5px;">${code}</div>
+        ${codeBox(code)}
         <p>Ce code est valable pendant 15 minutes.</p>
         <p>Si vous n'avez pas demandé ces modifications, veuillez contacter notre service client immédiatement.</p>
         <p>Cordialement,<br>L'équipe YoYo</p>
@@ -177,10 +194,10 @@ export class MessageTypes {
     [MessageTypes.TYPES.WELCOME_MESSAGE]: {
       subject: 'Bienvenue sur YoYo !',
       template: (code: string, name?: string) => `
-        <h2>Bienvenue sur YoYo !</h2>
+        <h2 style="text-align: center;">Bienvenue sur YoYo !</h2>
         <p>Bonjour ${name || 'cher utilisateur'},</p>
         <p>Nous sommes ravis de vous accueillir sur notre plateforme. Pour activer votre compte et commencer à utiliser nos services, veuillez utiliser le code suivant :</p>
-        <div style="text-align: center; margin: 20px 0; padding: 15px; background-color: #f5f5f5; font-size: 24px; font-weight: bold; letter-spacing: 5px;">${code}</div>
+        ${codeBox(code)}
         <p>Ce code est valable pendant 24 heures.</p>
         <p>Nous vous souhaitons une excellente expérience avec YoYo !</p>
         <p>Cordialement,<br>L'équipe YoYo</p>
@@ -189,10 +206,10 @@ export class MessageTypes {
     [MessageTypes.TYPES.ACCOUNT_REMINDER]: {
       subject: 'Rappel concernant votre compte YoYo',
       template: (code: string, name?: string) => `
-        <h2>Rappel concernant votre compte</h2>
+        <h2 style="text-align: center;">Rappel concernant votre compte</h2>
         <p>Bonjour ${name || 'cher utilisateur'},</p>
         <p>Ce message est un rappel concernant votre compte YoYo. Pour accéder à votre compte et vérifier les informations importantes, veuillez utiliser le code suivant :</p>
-        <div style="text-align: center; margin: 20px 0; padding: 15px; background-color: #f5f5f5; font-size: 24px; font-weight: bold; letter-spacing: 5px;">${code}</div>
+        ${codeBox(code)}
         <p>Ce code est valable pendant 24 heures.</p>
         <p>Cordialement,<br>L'équipe YoYo</p>
       `
@@ -200,10 +217,10 @@ export class MessageTypes {
     [MessageTypes.TYPES.INACTIVITY_ALERT]: {
       subject: 'Alerte d\'inactivité de votre compte YoYo',
       template: (code: string, name?: string) => `
-        <h2>Alerte d'inactivité</h2>
+        <h2 style="text-align: center;">Alerte d'inactivité</h2>
         <p>Bonjour ${name || 'cher utilisateur'},</p>
         <p>Nous avons remarqué que votre compte YoYo est inactif depuis un certain temps. Pour le maintenir actif et éviter sa désactivation, veuillez utiliser le code suivant pour vous connecter :</p>
-        <div style="text-align: center; margin: 20px 0; padding: 15px; background-color: #f5f5f5; font-size: 24px; font-weight: bold; letter-spacing: 5px;">${code}</div>
+        ${codeBox(code)}
         <p>Ce code est valable pendant 48 heures.</p>
         <p>Si vous n'utilisez plus votre compte et souhaitez le fermer, vous pouvez ignorer ce message.</p>
         <p>Cordialement,<br>L'équipe YoYo</p>
@@ -212,10 +229,10 @@ export class MessageTypes {
     [MessageTypes.TYPES.PROMOTIONAL_OFFER]: {
       subject: 'Offre spéciale YoYo - Code promo exclusif',
       template: (code: string, name?: string, details?: any) => `
-        <h2>Offre spéciale pour vous !</h2>
+        <h2 style="text-align: center;">Offre spéciale pour vous !</h2>
         <p>Bonjour ${name || 'cher utilisateur'},</p>
         <p>Nous avons le plaisir de vous offrir une promotion exclusive${details?.offer ? ' : ' + details.offer : ''}. Pour en bénéficier, utilisez le code suivant :</p>
-        <div style="text-align: center; margin: 20px 0; padding: 15px; background-color: #f5f5f5; font-size: 24px; font-weight: bold; letter-spacing: 5px;">${code}</div>
+        ${codeBox(code)}
         <p>Cette offre est valable ${details?.validity || 'pendant une durée limitée'}.</p>
         <p>Ne manquez pas cette opportunité !</p>
         <p>Cordialement,<br>L'équipe YoYo</p>
@@ -224,10 +241,10 @@ export class MessageTypes {
     [MessageTypes.TYPES.NEW_FEATURE_ANNOUNCEMENT]: {
       subject: 'Découvrez les nouvelles fonctionnalités de YoYo',
       template: (code: string, name?: string, details?: any) => `
-        <h2>Nouvelles fonctionnalités disponibles</h2>
+        <h2 style="text-align: center;">Nouvelles fonctionnalités disponibles</h2>
         <p>Bonjour ${name || 'cher utilisateur'},</p>
         <p>Nous sommes heureux de vous annoncer le lancement de nouvelles fonctionnalités sur YoYo${details?.features ? ' : ' + details.features : ''}. Pour les découvrir, utilisez le code suivant :</p>
-        <div style="text-align: center; margin: 20px 0; padding: 15px; background-color: #f5f5f5; font-size: 24px; font-weight: bold; letter-spacing: 5px;">${code}</div>
+        ${codeBox(code)}
         <p>Nous espérons que ces nouveautés amélioreront votre expérience sur notre plateforme.</p>
         <p>Cordialement,<br>L'équipe YoYo</p>
       `
@@ -235,10 +252,10 @@ export class MessageTypes {
     [MessageTypes.TYPES.SURVEY_INVITATION]: {
       subject: 'Invitation à participer à notre enquête YoYo',
       template: (code: string, name?: string) => `
-        <h2>Votre avis nous intéresse</h2>
+        <h2 style="text-align: center;">Votre avis nous intéresse</h2>
         <p>Bonjour ${name || 'cher utilisateur'},</p>
         <p>Nous vous invitons à participer à notre enquête pour nous aider à améliorer nos services. Pour accéder à l'enquête, veuillez utiliser le code suivant :</p>
-        <div style="text-align: center; margin: 20px 0; padding: 15px; background-color: #f5f5f5; font-size: 24px; font-weight: bold; letter-spacing: 5px;">${code}</div>
+        ${codeBox(code)}
         <p>Votre participation est grandement appréciée. En guise de remerciement, vous pourriez recevoir un avantage exclusif.</p>
         <p>Cordialement,<br>L'équipe YoYo</p>
       `
@@ -246,8 +263,8 @@ export class MessageTypes {
     // Templates sans OTP
     [MessageTypes.TYPES.PAYMENT_SUCCESS]: {
       subject: 'Paiement réussi - YoYo',
-      template: (name?: string, details?: any) => `
-        <h2>Paiement réussi</h2>
+      template: (_code: string, name?: string, details?: any) => `
+        <h2 style="text-align: center;">Paiement réussi</h2>
         <p>Bonjour ${name || 'cher utilisateur'},</p>
         <p>Votre paiement${details ? ' de ' + details.amount + ' ' + details.currency : ''} a été traité avec succès.</p>
         <p>Date de la transaction : ${new Date().toLocaleString()}</p>
@@ -257,8 +274,8 @@ export class MessageTypes {
     },
     [MessageTypes.TYPES.PAYMENT_FAILED]: {
       subject: 'Échec du paiement - YoYo',
-      template: (name?: string, details?: any) => `
-        <h2>Échec du paiement</h2>
+      template: (_code: string, name?: string, details?: any) => `
+        <h2 style="text-align: center;">Échec du paiement</h2>
         <p>Bonjour ${name || 'cher utilisateur'},</p>
         <p>Nous regrettons de vous informer que votre paiement${details ? ' de ' + details.amount + ' ' + details.currency : ''} n'a pas pu être traité.</p>
         <p>Raison : ${details?.reason || 'Non spécifiée'}</p>
@@ -268,8 +285,8 @@ export class MessageTypes {
     },
     [MessageTypes.TYPES.TRANSFER_SUCCESS]: {
       subject: 'Transfert réussi - YoYo',
-      template: (name?: string, details?: any) => `
-        <h2>Transfert réussi</h2>
+      template: (_code: string, name?: string, details?: any) => `
+        <h2 style="text-align: center;">Transfert réussi</h2>
         <p>Bonjour ${name || 'cher utilisateur'},</p>
         <p>Votre transfert${details ? ' de ' + details.amount + ' ' + details.currency : ''} a été effectué avec succès.</p>
         <p>Date de la transaction : ${new Date().toLocaleString()}</p>
@@ -279,8 +296,8 @@ export class MessageTypes {
     },
     [MessageTypes.TYPES.TRANSFER_FAILED]: {
       subject: 'Échec du transfert - YoYo',
-      template: (name?: string, details?: any) => `
-        <h2>Échec du transfert</h2>
+      template: (_code: string, name?: string, details?: any) => `
+        <h2 style="text-align: center;">Échec du transfert</h2>
         <p>Bonjour ${name || 'cher utilisateur'},</p>
         <p>Nous regrettons de vous informer que votre transfert${details ? ' de ' + details.amount + ' ' + details.currency : ''} n'a pas pu être effectué.</p>
         <p>Raison : ${details?.reason || 'Non spécifiée'}</p>
@@ -290,8 +307,8 @@ export class MessageTypes {
     },
     [MessageTypes.TYPES.ACCOUNT_CREATED]: {
       subject: 'Compte créé avec succès - YoYo',
-      template: (name?: string) => `
-        <h2>Bienvenue sur YoYo !</h2>
+      template: (_code: string, name?: string) => `
+        <h2 style="text-align: center;">Bienvenue sur YoYo !</h2>
         <p>Bonjour ${name || 'cher utilisateur'},</p>
         <p>Votre compte a été créé avec succès. Vous pouvez maintenant commencer à utiliser nos services.</p>
         <p>Pour des raisons de sécurité, nous vous recommandons de :</p>
@@ -304,10 +321,29 @@ export class MessageTypes {
         <p>Cordialement,<br>L'équipe YoYo</p>
       `
     },
+    [MessageTypes.TYPES.MERCHANT_ACTIVATION]: {
+      subject: 'Activez votre boutique YoYo',
+      // Contrairement aux autres templates, le premier paramètre n'est pas exploité : `EmailService.send`
+      // appelle `getEmailTemplate(template, '', ...)` avec un code vide. Le lien transite donc par
+      // `details.activationUrl`, alimenté depuis `templateData`.
+      template: (_code: string, name?: string, details?: any) => `
+        <h2 style="text-align: center;">Bienvenue sur YoYo !</h2>
+        <p>Bonjour ${name || 'cher partenaire'},</p>
+        <p>Votre compte marchand${details?.shopName ? ' et votre boutique <strong>' + details.shopName + '</strong>' : ''} viennent d'être créés sur YoYo${details?.commercialName ? ' par ' + details.commercialName : ''}.</p>
+        <p>Il ne vous reste qu'une étape : <strong>définir votre mot de passe</strong> pour accéder à votre espace.</p>
+        ${emailButton(details?.activationUrl || '#', 'Activer mon compte')}
+        <p>Ce lien est valable <strong>${details?.expiresInHours || 72} heures</strong> et ne peut être utilisé qu'une seule fois.</p>
+        <p style="font-size: 13px; line-height: 20px; color: ${BRAND.textMuted};">Si le bouton ne fonctionne pas, copiez ce lien dans votre navigateur :<br>
+          <span style="word-break: break-all; color: ${BRAND.primary};">${details?.activationUrl || ''}</span>
+        </p>
+        <p>Si vous n'êtes pas à l'origine de cette demande, ignorez simplement cet e-mail : sans activation, aucun accès n'est possible.</p>
+        <p>Cordialement,<br>L'équipe YoYo</p>
+      `
+    },
     [MessageTypes.TYPES.ACCOUNT_DELETED]: {
       subject: 'Compte supprimé - YoYo',
-      template: (name?: string) => `
-        <h2>Compte supprimé</h2>
+      template: (_code: string, name?: string) => `
+        <h2 style="text-align: center;">Compte supprimé</h2>
         <p>Bonjour ${name || 'cher utilisateur'},</p>
         <p>Votre compte YoYo a été supprimé avec succès.</p>
         <p>Nous espérons vous revoir bientôt !</p>
@@ -316,8 +352,8 @@ export class MessageTypes {
     },
     [MessageTypes.TYPES.PROFILE_UPDATED]: {
       subject: 'Profil mis à jour - YoYo',
-      template: (name?: string, details?: any) => `
-        <h2>Profil mis à jour</h2>
+      template: (_code: string, name?: string, details?: any) => `
+        <h2 style="text-align: center;">Profil mis à jour</h2>
         <p>Bonjour ${name || 'cher utilisateur'},</p>
         <p>Votre profil a été mis à jour avec succès.</p>
         <p>Modifications apportées : ${details?.changes || 'Non spécifiées'}</p>
@@ -327,8 +363,8 @@ export class MessageTypes {
     },
     [MessageTypes.TYPES.PASSWORD_CHANGED]: {
       subject: 'Mot de passe modifié - YoYo',
-      template: (name?: string) => `
-        <h2>Mot de passe modifié</h2>
+      template: (_code: string, name?: string) => `
+        <h2 style="text-align: center;">Mot de passe modifié</h2>
         <p>Bonjour ${name || 'cher utilisateur'},</p>
         <p>Votre mot de passe a été modifié avec succès.</p>
         <p>Si vous n'avez pas effectué cette modification, veuillez sécuriser votre compte immédiatement.</p>
@@ -337,8 +373,8 @@ export class MessageTypes {
     },
     [MessageTypes.TYPES.EMAIL_CHANGED]: {
       subject: 'Email modifié - YoYo',
-      template: (name?: string, details?: any) => `
-        <h2>Email modifié</h2>
+      template: (_code: string, name?: string, details?: any) => `
+        <h2 style="text-align: center;">Email modifié</h2>
         <p>Bonjour ${name || 'cher utilisateur'},</p>
         <p>Votre adresse email a été modifiée avec succès.</p>
         <p>Nouvelle adresse : ${details?.newEmail || 'Non spécifiée'}</p>
@@ -348,8 +384,8 @@ export class MessageTypes {
     },
     [MessageTypes.TYPES.PHONE_CHANGED]: {
       subject: 'Numéro de téléphone modifié - YoYo',
-      template: (name?: string, details?: any) => `
-        <h2>Numéro de téléphone modifié</h2>
+      template: (_code: string, name?: string, details?: any) => `
+        <h2 style="text-align: center;">Numéro de téléphone modifié</h2>
         <p>Bonjour ${name || 'cher utilisateur'},</p>
         <p>Votre numéro de téléphone a été modifié avec succès.</p>
         <p>Nouveau numéro : ${details?.newPhone || 'Non spécifié'}</p>
@@ -359,8 +395,8 @@ export class MessageTypes {
     },
     [MessageTypes.TYPES.BALANCE_LOW]: {
       subject: 'Solde faible - YoYo',
-      template: (name?: string, details?: any) => `
-        <h2>Solde faible</h2>
+      template: (_code: string, name?: string, details?: any) => `
+        <h2 style="text-align: center;">Solde faible</h2>
         <p>Bonjour ${name || 'cher utilisateur'},</p>
         <p>Votre solde actuel est faible : ${details?.balance || 'Non spécifié'}</p>
         <p>Nous vous recommandons de recharger votre compte pour éviter toute interruption de service.</p>
@@ -369,8 +405,8 @@ export class MessageTypes {
     },
     [MessageTypes.TYPES.BALANCE_HIGH]: {
       subject: 'Solde élevé - YoYo',
-      template: (name?: string, details?: any) => `
-        <h2>Solde élevé</h2>
+      template: (_code: string, name?: string, details?: any) => `
+        <h2 style="text-align: center;">Solde élevé</h2>
         <p>Bonjour ${name || 'cher utilisateur'},</p>
         <p>Votre solde actuel est élevé : ${details?.balance || 'Non spécifié'}</p>
         <p>Nous vous recommandons de vérifier vos transactions récentes.</p>
@@ -379,8 +415,8 @@ export class MessageTypes {
     },
     [MessageTypes.TYPES.SUSPICIOUS_ACTIVITY]: {
       subject: 'Activité suspecte détectée - YoYo',
-      template: (name?: string, details?: any) => `
-        <h2>Activité suspecte détectée</h2>
+      template: (_code: string, name?: string, details?: any) => `
+        <h2 style="text-align: center;">Activité suspecte détectée</h2>
         <p>Bonjour ${name || 'cher utilisateur'},</p>
         <p>Nous avons détecté une activité suspecte sur votre compte : ${details?.activity || 'Non spécifiée'}</p>
         <p>Si vous n'êtes pas à l'origine de cette activité, veuillez sécuriser votre compte immédiatement.</p>
@@ -389,8 +425,8 @@ export class MessageTypes {
     },
     [MessageTypes.TYPES.MAINTENANCE_NOTICE]: {
       subject: 'Maintenance planifiée - YoYo',
-      template: (name?: string, details?: any) => `
-        <h2>Maintenance planifiée</h2>
+      template: (_code: string, name?: string, details?: any) => `
+        <h2 style="text-align: center;">Maintenance planifiée</h2>
         <p>Bonjour ${name || 'cher utilisateur'},</p>
         <p>Une maintenance est planifiée pour améliorer nos services.</p>
         <p>Date : ${details?.date || 'Non spécifiée'}</p>
@@ -401,8 +437,8 @@ export class MessageTypes {
     },
     [MessageTypes.TYPES.SYSTEM_UPDATE]: {
       subject: 'Mise à jour du système - YoYo',
-      template: (name?: string, details?: any) => `
-        <h2>Mise à jour du système</h2>
+      template: (_code: string, name?: string, details?: any) => `
+        <h2 style="text-align: center;">Mise à jour du système</h2>
         <p>Bonjour ${name || 'cher utilisateur'},</p>
         <p>Une mise à jour du système a été effectuée pour améliorer nos services.</p>
         <p>Nouvelles fonctionnalités : ${details?.features || 'Non spécifiées'}</p>
@@ -413,7 +449,7 @@ export class MessageTypes {
     [MessageTypes.TYPES.LOGIN_NOTIFICATION]: {
       subject: 'Notification de connexion - YoYo',
       template: (code?: string, name?: string, details?: any) => `
-        <h2>Notification de connexion</h2>
+        <h2 style="text-align: center;">Notification de connexion</h2>
         <p>Bonjour ${name ?? 'cher utilisateur'},</p>
         <p>Vous avez été connecté à votre compte YoYo.</p>
         <p>Date et heure de connexion : ${details?.date || 'Non spécifiée'}</p>
@@ -426,7 +462,7 @@ export class MessageTypes {
     [MessageTypes.TYPES.CERTIFICATION_NOTIFICATION]: {
       subject: 'Notification de certification - YoYo',
       template: (code?: string, name?: string, details?: any) => `
-        <h2>Notification de certification</h2>
+        <h2 style="text-align: center;">Notification de certification</h2>
         <p>Bonjour ${name ?? 'cher utilisateur'},</p>
         <p>Vos documents ont été vérifiés avec succès.</p>
         <p>Date et heure de vérification : ${details?.date || 'Non spécifiée'}</p>
@@ -538,6 +574,13 @@ export class MessageTypes {
 
     [MessageTypes.TYPES.CERTIFICATION_NOTIFICATION]: (details?: any) => 
       `[YoYo] Vos documents ont été vérifiés avec succès. ${details?.date || 'Non spécifiée'}.`,
+
+    // `getSmsTemplate(type, code)` ne transmet qu'un argument : on y passe l'URL d'activation.
+    // Formulation volontairement brève : avec un jeton de 32 caractères, le message reste bien en
+    // deçà des 160 caractères d'un segment unique, même si PRO_APP_URL porte un domaine plus long.
+    // Sans accents, que les passerelles SMS encodent en UCS-2 (limite qui tombe alors à 70).
+    [MessageTypes.TYPES.MERCHANT_ACTIVATION]: (activationUrl: string) => 
+      `[YoYo] Activez votre compte marchand : ${activationUrl} (valable 72h)`,
   };
 
   // Configuration des messages
@@ -653,6 +696,13 @@ export class MessageTypes {
       maxAttempts: 1,
       cooldownMinutes: 0
     },
+    [MessageTypes.TYPES.MERCHANT_ACTIVATION]: {
+      // 72 h : l'expiration réelle est portée par l'enrôlement (activationTokenExpiresAt),
+      // cette entrée n'est là que pour la cohérence de getMessageConfig().
+      expiryMinutes: 72 * 60,
+      maxAttempts: 1,
+      cooldownMinutes: 0
+    },
     [MessageTypes.TYPES.PROFILE_UPDATED]: {
       expiryMinutes: 0,
       maxAttempts: 1,
@@ -710,16 +760,21 @@ export class MessageTypes {
    */
   static getEmailTemplate(type: string, code: string, name?: string, details?: any): { subject: string; body: string } {
     const template = this.EMAIL_TEMPLATES[type];
+
+    // Le repli passe lui aussi par l'habillage de marque : un message inattendu ne doit pas
+    // arriver chez l'utilisateur sous la forme d'une ligne de texte brut.
     if (!template) {
       return {
         subject: 'Message de YoYo',
-        body: `Votre code est: ${code}`
+        body: wrapEmail(`<p>Votre code est : <strong>${code}</strong></p>`, { preheader: 'Message de YoYo' })
       };
     }
 
+    const content = template.template(code, name, details);
+
     return {
       subject: template.subject,
-      body: template.template(code, name, details)
+      body: wrapEmail(content, { preheader: template.subject })
     };
   }
 

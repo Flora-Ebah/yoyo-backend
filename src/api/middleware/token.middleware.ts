@@ -204,6 +204,77 @@ export class TokenMiddleware {
 		};
 	}
 
+	/**
+	 * Variante stricte de `can` : une `ability` vide ou un profil absent **refusent** l'accès.
+	 *
+	 * `can` accorde tout dans ce cas, par compatibilité avec les profils créés avant l'arrivée du
+	 * RBAC. Ce repli est acceptable sur des routes déjà en production, mais pas sur celles qui
+	 * doivent cloisonner (activité commerciale, base des commissions) : un profil resté à
+	 * `ability: []` y obtiendrait une vue globale. À réserver aux routes nouvelles, où aucun compte
+	 * ne peut régresser.
+	 */
+	static canStrict(action: string, subject: string) {
+		return async (request: any, reply: any) => {
+			await TokenMiddleware.verifyAdmin(request, reply, () => {});
+
+			if (reply.sent) {
+				return;
+			}
+
+			try {
+				// eslint-disable-next-line @typescript-eslint/no-var-requires
+				const { AdminSet } = require('../../modules/admin');
+				const adminDao: any = new AdminSet();
+				const admin: any = await adminDao.selectOne({ _id: request.user?._id });
+				const ability: any[] = admin?.profile?.ability || [];
+
+				if (Array.isArray(ability) && ability.length > 0 && TokenMiddleware.abilityAllows(ability, action, subject)) {
+					return;
+				}
+
+				return coddyger.api(
+					reply,
+					Promise.resolve({
+						status: 403,
+						message: "Accès refusé : permission insuffisante.",
+						data: null
+					})
+				);
+			} catch (error: any) {
+				return coddyger.api(
+					reply,
+					Promise.resolve({
+						status: defines.status.authError,
+						message: error?.message || 'Erreur de vérification des permissions',
+						data: null
+					})
+				);
+			}
+		};
+	}
+
+	/**
+	 * Indique si un admin détient une permission, sans court-circuiter la requête.
+	 *
+	 * Utile lorsqu'un droit ne conditionne pas l'accès mais l'étendue de ce qui est permis (par
+	 * exemple : relancer l'activation d'un enrôlement qui n'est pas le sien). Prend un identifiant
+	 * plutôt qu'une requête, pour rester appelable depuis un service — un handler de route doit
+	 * rester synchrone, `coddyger.api` écrivant lui-même dans la réponse.
+	 */
+	static async hasAbility(adminId: string, action: string, subject: string): Promise<boolean> {
+		try {
+			// eslint-disable-next-line @typescript-eslint/no-var-requires
+			const { AdminSet } = require('../../modules/admin');
+			const adminDao: any = new AdminSet();
+			const admin: any = await adminDao.selectOne({ _id: adminId });
+			const ability: any[] = admin?.profile?.ability || [];
+
+			return Array.isArray(ability) && ability.length > 0 && TokenMiddleware.abilityAllows(ability, action, subject);
+		} catch (error) {
+			return false;
+		}
+	}
+
 	static generate(data: any, type: string, expiresIn?: string) {
 		if (type === 'accessToken') {
 			// [SÉCURITÉ B-05] `expiresIn: undefined` signe un jeton **sans expiration**. La valeur

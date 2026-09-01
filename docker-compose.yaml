@@ -1,58 +1,78 @@
-version: '3.8'
+name: yoyo-backend
 
 services:
   app:
-    image: ${DOCKER_IMAGE}
+    # L'image n'est plus tirée d'un registre (`${DOCKER_IMAGE}` n'était défini nulle part) :
+    # elle est construite depuis le Dockerfile du dépôt.
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: yoyo-backend:local
     restart: unless-stopped
-    ports:
-      - "${SERVER_PORT}:3000"
+
+    # Toute la configuration vient du .env local plutôt que d'une liste recopiée à la main,
+    # qui laissait de côté la moitié des variables réellement lues par le code
+    # (MAILER_*, OM_*, REDIS_*, SIGOBE_*, BROADCAST_SECRET…).
+    env_file:
+      - .env
+
     environment:
-      # Environment & App Config
-      - ENV=${ENV}
-      - APP_NAME=${APP_NAME}
-      - SERVER_PORT=3001
-      - SERVER_PATH=${SERVER_PATH}
-      - API_VERSION=${API_VERSION}
-      - ORIGINS=${ORIGINS}
-      
-      # Database
-      - USE_DB=${USE_DB}
-      - DB_URI=${DB_URI}
-      - DB_NAME=${DB_NAME}
-      
-      # JWT & Auth
-      - JWT_SECRET=${JWT_SECRET}
-      - JWT_PUBLIC=${JWT_PUBLIC}
-      - JWT_AUTH_SECRET=${JWT_AUTH_SECRET}
-      # L'image ne porte plus de fichier de configuration (B-05) : cette variable doit venir d'ici,
-      # sans quoi les jetons d'accès seraient signés sans date d'expiration.
-      - JWT_TOKEN_EXPIRE=${JWT_TOKEN_EXPIRE}
-      - DEFAULT_ACCOUNT=${DEFAULT_ACCOUNT}
-      
-      # Google Auth
-      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
-      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
-      - DEFAULT_PROFILE_ID=${DEFAULT_PROFILE_ID}
-      
-      # Kafka
-      - KAFKA_BROKER=${KAFKA_BROKER}
-      - KAFKA_CLIENT=${KAFKA_CLIENT}
-      - KAFKA_TOPIC=${KAFKA_TOPIC}
-      - KAFKA_GROUP=${KAFKA_GROUP}
-      - KAFKA_FOREIGNERS=${KAFKA_FOREIGNERS}
-      
+      # Le processus écoute toujours sur 3000 à l'intérieur du conteneur ; SERVER_PORT du .env
+      # ne sert qu'à choisir le port publié sur l'hôte (voir `ports`). L'ancienne valeur 3001
+      # faisait écouter Fastify sur un port ni publié ni sondé par le healthcheck.
+      SERVER_PORT: 3000
+      # Redis tourne dans le réseau Compose : `localhost` du .env désignerait le conteneur app.
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+
+    ports:
+      - "${SERVER_PORT:-3014}:3000"
+
     volumes:
-      - ./uploads:/usr/src/app/uploads
-      - ./logs:/usr/src/app/logs
-      - ./public:/usr/src/app/public
+      # Chemins réellement utilisés par l'application : `coddyger.root()` vaut le WORKDIR
+      # (/usr/src/app), et les fichiers vont dans src/public/uploads et src/logs — pas dans
+      # /usr/src/app/uploads ni /usr/src/app/logs comme le montaient les anciens volumes.
+      - ./src/public/uploads:/usr/src/app/src/public/uploads
+      - ./src/logs:/usr/src/app/src/logs
+
+    depends_on:
+      redis:
+        condition: service_healthy
+
     networks:
       - app-network
+
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/health"]
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1:3000/health"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 40s
+
+  redis:
+    # Le cache applicatif (src/helpers/cache.helper.ts) ouvre une connexion dès le démarrage.
+    image: redis:7-alpine
+    restart: unless-stopped
+    command:
+      - redis-server
+      - --appendonly
+      - "yes"
+      - --maxmemory
+      - 256mb
+      - --maxmemory-policy
+      - allkeys-lru
+    volumes:
+      - redis-data:/data
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  redis-data:
 
 networks:
   app-network:

@@ -230,12 +230,14 @@ export class NotificationService {
         throw result;
       }
 
+      // Le DAO renvoie `totalRows` / `totalPages` (cf. MongoDbDao.select) : lire `result.total`
+      // donnait `NaN`, sérialisé en `null` dans la métadonnée de pagination.
       return {
         data: {
           page,
           pageSize,
-          total: result.total,
-          totalPages: Math.ceil(result.total / pageSize)
+          total: result.totalRows,
+          totalPages: result.totalPages
         },
         rows: result.rows
       };
@@ -256,9 +258,11 @@ export class NotificationService {
    */
   async markAsRead(id: string): Promise<INotification | null> {
     try {
+      // Ne touche plus à `status` : passer une notification en 'sent' pour dire « lue » écrasait
+      // son état d'acheminement (et rendait « lue » toute notification simplement envoyée).
       return await this.update(id, {
-        status: 'sent',
-        sentAt: new Date()
+        isRead: true,
+        readAt: new Date()
       });
     } catch (error) {
       LoggerService.log({
@@ -277,9 +281,11 @@ export class NotificationService {
    */
   async markAllAsRead(userId: string): Promise<any> {
     try {
-      const result:any = await this.dao.update(
-        { to: userId, read: false },
-        { read: true, readAt: new Date() }
+      // `read` n'existe pas au schéma : le filtre ne remontait rien et la mise à jour était
+      // silencieusement ignorée. Le champ est `isRead`, et il faut un updateMany.
+      const result:any = await this.dao.updateMany(
+        { to: userId, isRead: { $ne: true } },
+        { isRead: true, readAt: new Date() }
       );
 
       if (result.error) {

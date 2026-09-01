@@ -23,6 +23,9 @@ export interface INotification {
     contentType?: string;
   }>;
   status: 'active' | 'inactive' | 'suspended' | 'removed' | 'sent' | 'failed';
+  /** Lecture par le destinataire — distincte de `status`, qui décrit l'acheminement. */
+  isRead?: boolean;
+  readAt?: Date;
   error?: string;
   sentAt?: Date;
 }

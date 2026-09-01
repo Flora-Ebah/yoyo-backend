@@ -118,6 +118,100 @@ export class MessageHelper {
 		}
 	}
 
+	/**
+	 * Envoie le lien d'activation à un marchand enrôlé à distance par un commercial.
+	 *
+	 * Les deux canaux sont indépendants : l'échec de l'un n'empêche pas l'autre, et chacun rapporte
+	 * son propre résultat pour que l'appelant sache quels canaux sont réellement partis.
+	 *
+	 * @param data.email Adresse du marchand
+	 * @param data.contact Téléphone du marchand (format local, formaté en +225 par le service SMS)
+	 * @param data.name Nom complet du marchand
+	 * @param data.shopName Nom de la boutique créée
+	 * @param data.commercialName Nom du commercial à l'origine de l'enrôlement
+	 * @param data.activationUrl Lien d'activation à usage unique
+	 * @param data.expiresInHours Durée de validité du lien
+	 * @param channels Canaux demandés
+	 * @returns Les canaux par lesquels le message est réellement parti
+	 */
+	static async merchantActivationNotify(
+		data: {
+			email: string;
+			contact?: string;
+			name: string;
+			shopName?: string;
+			commercialName?: string;
+			activationUrl: string;
+			expiresInHours?: number;
+		},
+		channels: { email?: boolean; sms?: boolean } = { email: true, sms: true }
+	): Promise<{ sent: string[]; errors: Record<string, any> }> {
+		const sent: string[] = [];
+		const errors: Record<string, any> = {};
+
+		if (channels.email !== false && data.email) {
+			try {
+				// `send()` ne lève pas sur un échec d'envoi : il renvoie `{ success: false }`. Seul
+				// `init()` peut lever (configuration SMTP absente), d'où le try/catch en plus du test.
+				const result = await emailService.send({
+					category: NotificationCategory.INFO,
+					type: NotificationType.EMAIL,
+					to: data.email,
+					// `EmailService.send` lit le nom dans `data.userName` (et non `data.name`).
+					data: {
+						userName: data.name
+					},
+					template: MessageTypes.TYPES.MERCHANT_ACTIVATION,
+					templateData: {
+						activationUrl: data.activationUrl,
+						shopName: data.shopName,
+						commercialName: data.commercialName,
+						expiresInHours: data.expiresInHours ?? 72
+					}
+				});
+
+				if (result?.success) {
+					sent.push('email');
+				} else {
+					errors.email = result?.error ?? result?.message ?? 'Envoi e-mail impossible';
+				}
+			} catch (error) {
+				errors.email = error;
+			}
+		}
+
+		if (channels.sms !== false && data.contact) {
+			try {
+				// Le canal n'est utilisé que s'il est réellement configuré : sans cela on annoncerait
+				// au commercial un SMS parti alors que rien n'a quitté le serveur.
+				const available = await smsService.isAvailable();
+
+				if (!available) {
+					errors.sms = 'Service SMS non configuré';
+				} else {
+					const result = await smsService.send({
+						category: NotificationCategory.INFO,
+						type: NotificationType.SMS,
+						to: data.contact,
+						data: {
+							message: MessageTypes.getSmsTemplate(MessageTypes.TYPES.MERCHANT_ACTIVATION, data.activationUrl)
+						}
+					});
+
+					if (result?.success) {
+						sent.push('sms');
+					} else {
+						errors.sms = result?.error ?? result?.message ?? 'Envoi SMS impossible';
+					}
+				}
+			} catch (error) {
+				errors.sms = error;
+			}
+		}
+
+		return { sent, errors };
+	}
+
 	static async deleteAccountClientNotify(data: any) {
 		try {
 			await emailService.send({
