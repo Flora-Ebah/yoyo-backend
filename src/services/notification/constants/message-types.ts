@@ -323,18 +323,25 @@ export class MessageTypes {
     },
     [MessageTypes.TYPES.MERCHANT_ACTIVATION]: {
       subject: 'Activez votre boutique YoYo',
+      // Bandeau de marque coloré en tête de carte (rendu par wrapEmail via l'option `hero`).
+      hero: 'Bienvenue dans la famille YoYo 🎉',
       // Contrairement aux autres templates, le premier paramètre n'est pas exploité : `EmailService.send`
       // appelle `getEmailTemplate(template, '', ...)` avec un code vide. Le lien transite donc par
       // `details.activationUrl`, alimenté depuis `templateData`.
       template: (_code: string, name?: string, details?: any) => `
-        <h2 style="text-align: center;">Bienvenue dans la famille YoYo 🎉</h2>
-        <p>Bonjour ${name || 'cher partenaire'},</p>
+        <p>Bonjour <strong>${name || 'cher partenaire'}</strong> 👋</p>
         <p>Bonne nouvelle : votre boutique${details?.shopName ? ' <strong>' + details.shopName + '</strong>' : ''} est prête ! Votre compte marchand vient d'être créé${details?.commercialName ? ' par ' + details.commercialName : ''} 🙌</p>
         <p>Il ne reste qu'une petite étape pour démarrer : <strong>choisissez votre code de sécurité</strong> et c'est parti 🚀</p>
         ${emailButton(details?.activationUrl || '#', 'Activer ma boutique')}
-        <p>Ce lien reste valable <strong>${details?.expiresInHours || 72} heures</strong> (usage unique).</p>
-        <p>Vous n'attendiez pas cet e-mail ? Pas d'inquiétude, ignorez-le simplement : sans activation, rien ne se passe.</p>
-        <p>À très vite,<br>L'équipe YoYo 💛</p>
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color: #F7F8FA; border: 1px solid #ECEEF2; margin-top: 4px;">
+          <tr><td style="padding: 14px 18px;">
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="font-size: 13px;">
+              ${details?.shopName ? `<tr><td style="color: ${BRAND.textMuted}; padding: 3px 0;">Boutique</td><td align="right" style="color: ${BRAND.text}; font-weight: 600; padding: 3px 0;">${details.shopName}</td></tr>` : ''}
+              <tr><td style="color: ${BRAND.textMuted}; padding: 3px 0;">Validité du lien</td><td align="right" style="color: ${BRAND.text}; font-weight: 600; padding: 3px 0;">${details?.expiresInHours || 72} h · usage unique</td></tr>
+            </table>
+          </td></tr>
+        </table>
+        <p style="margin-top: 20px;">Vous n'attendiez pas cet e-mail ? Pas d'inquiétude, ignorez-le simplement : sans activation, rien ne se passe. 💛</p>
       `
     },
     [MessageTypes.TYPES.ACCOUNT_DELETED]: {
@@ -771,7 +778,8 @@ export class MessageTypes {
 
     return {
       subject: template.subject,
-      body: wrapEmail(content, { preheader: template.subject })
+      // `hero` (optionnel) : bandeau de marque coloré en tête de carte (ex. activation marchand).
+      body: wrapEmail(content, { preheader: template.subject, hero: (template as any).hero })
     };
   }
 

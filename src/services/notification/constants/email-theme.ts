@@ -73,7 +73,7 @@ export function emailButton(url: string, label: string): string {
           <td align="center" style="mso-line-height-rule: exactly; text-align: center;">
             <table role="presentation" align="center" cellpadding="0" cellspacing="0" border="0" style="margin: 0 auto;">
               <tr>
-                <td align="center" bgcolor="${BRAND.primary}" style="mso-line-height-rule: exactly; mso-padding-alt: 16px 28px; border-radius: 6px; background-color: ${BRAND.primary}; background-image: linear-gradient(135deg, ${BRAND.primary} 0%, ${BRAND.primaryLight} 100%);">
+                <td align="center" bgcolor="${BRAND.primary}" style="mso-line-height-rule: exactly; mso-padding-alt: 16px 28px; background-color: ${BRAND.primary}; background-image: linear-gradient(135deg, ${BRAND.primary} 0%, ${BRAND.primaryLight} 100%);">
                   <a href="${url}" target="_blank" style="display: block; padding: 16px 28px; font-family: ${FONT_STACK}; font-size: 16px; font-weight: 600; line-height: 100%; color: #FFFFFF; text-decoration: none;">${label}</a>
                 </td>
               </tr>
@@ -108,7 +108,7 @@ export function codeBox(code: string): string {
  * @param options.preheader Texte d'aperçu affiché par la boîte de réception à côté de l'objet
  * @param options.title Titre affiché en surtitre, au-dessus du contenu
  */
-export function wrapEmail(content: string, options?: { preheader?: string; title?: string }): string {
+export function wrapEmail(content: string, options?: { preheader?: string; title?: string; hero?: string }): string {
 	const year = new Date().getFullYear();
 	const preheader = options?.preheader ?? '';
 	const label = options?.title ?? 'YoYo';
@@ -189,24 +189,36 @@ export function wrapEmail(content: string, options?: { preheader?: string; title
               <td align="center" class="sm-px-24" style="mso-line-height-rule: exactly;">
                 <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="width: 100%;">
                   <tr>
-                    <td class="yoyo-content sm-px-24" style="mso-line-height-rule: exactly; border-radius: 6px; background-color: ${BRAND.surface}; padding: 40px; text-align: left; font-family: ${FONT_STACK}; font-size: 16px; line-height: 26px; color: ${BRAND.textBody};">
-                      ${
-                        options?.title
-                          ? `<p style="margin: 0 0 10px; font-family: ${FONT_STACK}; font-size: 12px; font-weight: 700; letter-spacing: 1.4px; text-transform: uppercase; color: ${BRAND.primary}; text-align: center;">${options.title}</p>`
-                          : ''
-                      }
-                      ${content}
-
-                      <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="width: 100%;">
+                    <td class="sm-px-24" style="mso-line-height-rule: exactly; padding: 0;">
+                      <!-- Carte carrée (coins droits) avec ombre douce -->
+                      <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="width: 100%; box-shadow: 0 14px 34px rgba(17, 20, 24, 0.10);">
+                        ${
+                          options?.hero
+                            ? `<tr><td style="mso-line-height-rule: exactly; background-color: ${BRAND.primary}; background-image: linear-gradient(135deg, ${BRAND.primary} 0%, ${BRAND.primaryLight} 100%); padding: 30px 40px; text-align: center;"><div style="font-family: ${FONT_STACK}; font-size: 22px; line-height: 30px; font-weight: 800; color: #FFFFFF;">${options.hero}</div></td></tr>`
+                            : ''
+                        }
                         <tr>
-                          <td style="mso-line-height-rule: exactly; padding-top: 28px; padding-bottom: 28px;">
-                            <div style="height: 1px; background-color: ${BRAND.border}; line-height: 1px;">&zwnj;</div>
+                          <td class="yoyo-content sm-px-24" style="mso-line-height-rule: exactly; background-color: ${BRAND.surface}; padding: 36px 40px; text-align: left; font-family: ${FONT_STACK}; font-size: 16px; line-height: 26px; color: ${BRAND.textBody};">
+                            ${
+                              options?.title && !options?.hero
+                                ? `<p style="margin: 0 0 10px; font-family: ${FONT_STACK}; font-size: 12px; font-weight: 700; letter-spacing: 1.4px; text-transform: uppercase; color: ${BRAND.primary}; text-align: center;">${options.title}</p>`
+                                : ''
+                            }
+                            ${content}
+
+                            <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="width: 100%;">
+                              <tr>
+                                <td style="mso-line-height-rule: exactly; padding-top: 28px; padding-bottom: 28px;">
+                                  <div style="height: 1px; background-color: ${BRAND.border}; line-height: 1px;">&zwnj;</div>
+                                </td>
+                              </tr>
+                            </table>
+                            <p style="margin: 0; font-family: ${FONT_STACK}; font-size: 13px; line-height: 20px; color: ${BRAND.textMuted};">
+                              Cet e-mail vous est envoye automatiquement par YoYo. Merci de ne pas y repondre directement.
+                            </p>
                           </td>
                         </tr>
                       </table>
-                      <p style="margin: 0; font-family: ${FONT_STACK}; font-size: 13px; line-height: 20px; color: ${BRAND.textMuted};">
-                        Cet e-mail vous est envoye automatiquement par YoYo. Merci de ne pas y repondre directement.
-                      </p>
                     </td>
                   </tr>
 
