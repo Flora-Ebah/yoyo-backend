@@ -32,6 +32,9 @@
   ],
   "author": "YoYo Team",
   "license": "MIT",
+  "engines": {
+    "node": ">=22"
+  },
   "dependencies": {
     "@azure/msal-node": "^3.1.0",
     "@fastify/cors": "^9.0.1",

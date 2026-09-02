@@ -34,32 +34,23 @@ const fileUpload = new FileUpload({
 });
 
 const defaultRoute: any = (fastify: any, options, done) => {
-	// Generate access token
-	fastify.route({
-		schema: {
-			tags: [...tags, 'Tokens'],
-			summary: 'Générer un access token',
-			body: {
-				type: 'object',
-				properties: {
-					// [SÉCURITÉ B-05] La valeur réelle était placée en `default` : la documentation
-					// publiait donc la clé technique partagée par les 4 applications, en clair, à
-					// quiconque ouvrait `/documentation`.
-					apikey: { type: 'string' }
-				},
-				required: ['apikey'],
-				additionalProperties: false
-			}
-		},
-		method: 'POST',
-		url: `/get-token`,
-		handler: (request, reply) => {
-			const apikey: string = request.body.apikey;
-
-			let Q = Controller.generateToken(apikey);
-			return coddyger.api(reply, Q);
-		}
-	});
+	// [SÉCURITÉ C-01] `POST /get-token` supprimée le 02/09/2026.
+	//
+	// Elle échangeait une clé technique — la même pour les 4 applications, en dur dans chaque
+	// binaire et dans le bundle navigateur de l'administration — contre un jeton signé avec le
+	// **secret des jetons utilisateur**. Ce jeton ne désignait personne (`{ data: <clé>, reg }`)
+	// mais franchissait `TokenMiddleware.verify` sur **toutes** les routes : c'est ce qui a rendu
+	// F-03 (prise de contrôle de compte) et F-05 (secrets des prestataires de paiement)
+	// exploitables sans posséder le moindre compte.
+	//
+	// Une chaîne embarquée dans un binaire n'est pas un secret. Elle est remplacée par Firebase
+	// App Check (`AppCheckMiddleware`) sur les 8 routes d'avant-connexion : l'attestation est
+	// produite par le système d'exploitation (Play Integrity / App Attest / reCAPTCHA Enterprise),
+	// jamais par du code livré au client, et n'est donc pas extractible.
+	//
+	// `TokenMiddleware.verify` refuse par ailleurs désormais tout jeton sans `_id`, ce qui
+	// invalide immédiatement les jetons publics encore en circulation — la clé restant, elle,
+	// dans l'historique Git et dans les binaires déjà publiés.
 
 	// Verify access token
 	fastify.route({

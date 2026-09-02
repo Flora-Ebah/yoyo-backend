@@ -1,5 +1,6 @@
 # Build stage
-FROM node:20.15.1-alpine AS builder
+ARG NODE_IMAGE=node:24-alpine
+FROM ${NODE_IMAGE} AS builder
 RUN apk add --no-cache make gcc g++ python3 linux-headers musl-dev
 WORKDIR /usr/src/app
 COPY package*.json yarn.lock ./
@@ -11,7 +12,7 @@ COPY src/ ./src/
 RUN yarn build
 
 # Production stage
-FROM node:20.15.1-alpine 
+FROM ${NODE_IMAGE}
 WORKDIR /usr/src/app
 
 # Create non-root user and set up directories
@@ -39,13 +40,6 @@ COPY seeders/ ./seeders/
 
 # Fichiers de données requis par les seeders (référentiel de catégories, etc.)
 COPY src/config/category-taxonomy.json ./src/config/category-taxonomy.json
-
-# [SÉCURITÉ B-05 / F-08] L'image copiait ici `.env.sample` comme configuration réelle. Elle
-# embarquait donc les secrets d'exemple — clé de signature des jetons et compte administrateur par
-# défaut — dans chaque conteneur. La configuration doit être injectée à l'exécution
-# (variables d'environnement ou secrets de l'orchestrateur), jamais empaquetée dans l'image.
-# Le processus refuse de démarrer en production si un secret publié est encore en place
-# (`src/config/security-check.ts`).
 
 # Switch to non-root user
 USER appuser

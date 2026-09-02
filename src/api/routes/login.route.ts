@@ -27,8 +27,9 @@ const defaultRoute: any = (fastify: any, options, done) => {
 		},
 		method: 'POST',
 		url: `${routePath}/login`,
-		// [App Check] Route d'avant-connexion. Mode observation : journalise, ne rejette pas.
-		preHandler: [AppCheckMiddleware.verify, TokenMiddleware.verify],
+		// [App Check] Route d'avant-connexion : c'est elle qui **délivre** le jeton utilisateur, elle
+		// ne peut donc pas en exiger un. L'attestation dit d'où vient l'appel, jamais qui le fait.
+		preHandler: AppCheckMiddleware.verify,
 		handler: (request, reply) => {
 			let payload = {
 				login: request.body.login,

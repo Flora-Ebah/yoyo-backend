@@ -46,9 +46,9 @@ const defaultRoute: any = (fastify: any, options, done) => {
 		},
 		method: 'POST',
 		url: `${routePath}/generate`,
-		// [App Check] Route d'avant-connexion : l'attestation remplacera la clé partagée qui la
-		// « protégeait ». En mode observation elle journalise sans rien rejeter.
-		preHandler: [AppCheckMiddleware.verify, TokenMiddleware.verify],
+		// [App Check] Route d'avant-connexion : l'attestation a remplacé la clé partagée qui la
+		// « protégeait » — une chaîne extractible de n'importe quel binaire (C-01).
+		preHandler: AppCheckMiddleware.verify,
 		handler: (request, reply) => {
 			const { login, messageType } = request.body;
 			let Q = Controller.generate(login, messageType);
@@ -101,7 +101,7 @@ const defaultRoute: any = (fastify: any, options, done) => {
 		url: `${routePath}/verify`,
 		// [App Check] `verifyLimitedUse` : c'est cette route qui émet le `resetToken`. Rejouer une
 		// requête capturée en referait émettre un — d'où le jeton d'attestation à usage unique.
-		preHandler: [AppCheckMiddleware.verifyLimitedUse, TokenMiddleware.verify],
+		preHandler: AppCheckMiddleware.verifyLimitedUse,
 		config: {
 			rateLimit: {
 				max: 10,
@@ -224,7 +224,8 @@ const defaultRoute: any = (fastify: any, options, done) => {
 		},
 		method: 'POST',
 		url: `${routePath}/password-reset/request`,
-		preHandler: [AppCheckMiddleware.verify, TokenMiddleware.verify],
+		// [App Check] Entrée du parcours « mot de passe oublié », donc atteignable sans compte.
+		preHandler: AppCheckMiddleware.verify,
 		handler: (request, reply) => {
 			const { login } = request.body;
 			let Q = Controller.generate(login, 'PASSWORD_RESET');

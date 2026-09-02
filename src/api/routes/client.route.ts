@@ -34,15 +34,14 @@ const defaultRoute: any = (fastify: any, options, done) => {
     method: 'POST',
     url: `${routePath}/register`,
     // [App Check] Route d'avant-connexion : aucune identité utilisateur ne peut la protéger,
-    // c'est donc l'attestation de l'application qui prendra le relais de la clé partagée.
-    // Mode observation pour l'instant — journalise, ne rejette pas.
-    preHandler: [AppCheckMiddleware.verify, TokenMiddleware.verify],
+    // c'est donc l'attestation de l'application qui la garde — seule, depuis la suppression du
+    // jeton public (C-01). Piloté par `APP_CHECK_ENFORCE` / `APP_CHECK_ENFORCE_ROUTES`.
+    preHandler: AppCheckMiddleware.verify,
     handler: (request, reply) => {
       let body: any = request.body;
 
-      let user: any = request.user;
-      body.user = user._id;
-
+      // [C-01] `body.user` valait `request.user._id`, lu sur le jeton public — dont la charge utile
+      // n'a jamais porté de `_id`. Le champ arrivait donc toujours à `undefined` : on le retire.
       let Q = Controller.register(body);
       return coddyger.api(reply, Q);
     }
@@ -160,8 +159,9 @@ const defaultRoute: any = (fastify: any, options, done) => {
     // [App Check] Fin du parcours « mot de passe oublié », donc atteignable sans être connecté.
     // `verifyLimitedUse` plutôt que `verify` : rejouer cette requête, c'est reposer un mot de
     // passe choisi par l'attaquant. Le jeton d'attestation y est donc à usage unique.
-    // Mode observation pour l'instant — journalise, ne rejette pas.
-    preHandler: [AppCheckMiddleware.verifyLimitedUse, TokenMiddleware.verify],
+    // L'autorisation réelle reste le `resetToken` du corps de la requête ; le jeton public qui
+    // accompagnait l'appel n'attestait rien et a été supprimé (C-01).
+    preHandler: AppCheckMiddleware.verifyLimitedUse,
     config: {
       rateLimit: {
         max: 10,

@@ -1,4 +1,5 @@
-import { LoggerService, LogLevel } from 'coddyger';
+import { LogLevel } from 'coddyger';
+import { logEvent } from './logger';
 
 /**
  * [SÉCURITÉ B-05 / F-08] Contrôle de la configuration au démarrage.
@@ -69,15 +70,6 @@ export const collectConfigurationIssues = (source: NodeJS.ProcessEnv = process.e
 		}
 	});
 
-	const publicKey = source.JWT_PUBLIC;
-	if (!publicKey) {
-		issues.push("JWT_PUBLIC n'est pas défini : la délivrance des jetons publics est impossible.");
-	} else if (PUBLISHED_VALUES.has(publicKey)) {
-		issues.push(
-			'JWT_PUBLIC utilise la clé technique publiée dans la documentation et embarquée dans les applications mobiles. À révoquer et à séparer par application (F-07b).'
-		);
-	}
-
 	// Ce compte est créé au démarrage par `MainHelper.generateDefaultAdmin`.
 	const defaultAccount = source.DEFAULT_ACCOUNT;
 	if (defaultAccount) {
@@ -101,9 +93,89 @@ export const collectConfigurationIssues = (source: NodeJS.ProcessEnv = process.e
 };
 
 /**
+ * [SÉCURITÉ C-01] Posture de l'attestation d'application.
+ *
+ * Distincte de `collectConfigurationIssues` — et **jamais bloquante** — parce que la nature du
+ * problème est différente. Un secret publié est une faute : il n'existe aucune raison légitime de
+ * démarrer avec. Une attestation en mode observation est une **étape de déploiement** délibérée :
+ * on mesure le taux d'échec avant de couper, sous peine de fermer l'accès aux versions de
+ * l'application déjà installées chez les utilisateurs. Refuser de démarrer pour cela provoquerait
+ * précisément la panne qu'on cherche à éviter.
+ *
+ * Mais l'état ne doit pas s'installer en silence : depuis la suppression du jeton public, les
+ * 8 routes d'avant-connexion — inscription, connexion, OTP, mot de passe oublié, activation d'un
+ * compte marchand — n'ont plus aucun autre garde. D'où un avertissement à chaque démarrage.
+ *
+ * (Ce n'est pas une régression : la clé partagée s'extrayait de n'importe quel binaire et ne
+ * prouvait rien. C'est le même niveau de protection, sans le secret à faire fuiter.)
+ */
+export const collectAppCheckWarnings = (source: NodeJS.ProcessEnv = process.env): string[] => {
+	const warnings: string[] = [];
+
+	// `POST /get-token` supprimée : plus rien ne lit `JWT_PUBLIC`. Une variable morte finit par être
+	// recopiée dans le prochain environnement, puis par justifier qu'on « rebranche » la route.
+	if (source.JWT_PUBLIC) {
+		warnings.push(
+			'JWT_PUBLIC est encore défini alors que la clé technique partagée a été supprimée (C-01). Retirer la variable de la configuration.'
+		);
+	}
+
+	if (source.APP_CHECK_ENABLED !== 'true') {
+		warnings.push(
+			"APP_CHECK_ENABLED n'est pas à `true` : les 8 routes d'avant-connexion n'ont plus aucun contrôle d'origine depuis la suppression du jeton public (C-01)."
+		);
+		return warnings;
+	}
+
+	const credentials: Array<[string, string | undefined]> = [
+		['FIREBASE_PROJECT_ID', source.FIREBASE_PROJECT_ID],
+		['FIREBASE_CLIENT_EMAIL', source.FIREBASE_CLIENT_EMAIL],
+		['FIREBASE_PRIVATE_KEY', source.FIREBASE_PRIVATE_KEY]
+	];
+
+	const missing = credentials.filter(([, value]) => !value).map(([name]) => name);
+	if (missing.length > 0) {
+		warnings.push(
+			`App Check est activé mais ne peut vérifier aucune attestation : ${missing.join(', ')} manque${
+				missing.length > 1 ? 'nt' : ''
+			}. Toutes les requêtes seront traitées comme non attestées.`
+		);
+	}
+
+	const enforcing = source.APP_CHECK_ENFORCE === 'true';
+	const enforcedRoutes = (source.APP_CHECK_ENFORCE_ROUTES ?? '')
+		.split(',')
+		.map(route => route.trim())
+		.filter(route => route.length > 0);
+
+	if (!enforcing && enforcedRoutes.length === 0) {
+		warnings.push(
+			"App Check est en observation pure : il journalise sans rien rejeter, et aucune route n'est fermée par APP_CHECK_ENFORCE_ROUTES. Les routes d'avant-connexion restent donc ouvertes. Fermer route par route dès que les journaux d'observation le permettent."
+		);
+	}
+
+	return warnings;
+};
+
+/**
  * Arrête le démarrage en production si la configuration expose la plateforme. Ailleurs, avertit.
+ * La posture App Check est signalée dans tous les cas, sans jamais bloquer.
  */
 export const assertSecureConfiguration = (): void => {
+	const warnings = collectAppCheckWarnings();
+
+	if (warnings.length > 0) {
+		logEvent({
+			type: LogLevel.Warn,
+			content: [
+				"Attestation d'application — points de vigilance :",
+				...warnings.map(warning => `  - ${warning}`)
+			].join('\n'),
+			location: label,
+			method: 'assertSecureConfiguration'
+		});
+	}
+
 	const issues = collectConfigurationIssues();
 
 	if (issues.length === 0) {
@@ -115,7 +187,9 @@ export const assertSecureConfiguration = (): void => {
 		? 'Démarrage refusé — configuration non sécurisée :'
 		: 'Configuration non sécurisée (tolérée hors production) :';
 
-	LoggerService.log({
+	// [dette] `LoggerService` n'écrit nulle part (cf. `src/config/logger.ts`) : ce contrôle était
+	// donc muet, y compris quand il refusait le démarrage. Il passe par `logEvent`.
+	logEvent({
 		type: production ? LogLevel.Error : LogLevel.Warn,
 		content: [heading, ...issues.map(issue => `  - ${issue}`)].join('\n'),
 		location: label,

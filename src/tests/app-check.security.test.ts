@@ -123,21 +123,44 @@ describe("[Sécurité] Attestation d'application (App Check)", () => {
 	});
 
 	/**
-	 * Le point le plus important du lot : App Check ne dit pas *qui* appelle. Substituer
-	 * l'attestation à la vérification du jeton utilisateur rouvrirait exactement la faille que
-	 * cette migration ferme.
+	 * [C-01, 02/09/2026] Le jeton que ces routes exigeaient n'était pas celui d'un utilisateur.
+	 *
+	 * C'était le **jeton public** : `POST /get-token` l'échangeait contre une clé en dur dans les
+	 * binaires, et sa charge utile ne désignait personne. Sa présence en `preHandler` donnait
+	 * l'apparence d'une route authentifiée alors qu'elle était ouverte à quiconque décompilait
+	 * l'application — et le handler d'inscription lisait `request.user._id` sur un jeton qui n'en
+	 * a jamais porté, donc toujours `undefined`.
+	 *
+	 * Ces routes n'ont plus de `TokenMiddleware.verify` : elles servent à s'inscrire, se connecter
+	 * ou récupérer son accès, donc à un moment où l'appelant n'a par construction aucun compte.
+	 * L'attestation d'application les garde seule.
 	 */
-	it("n'a évincé aucune vérification de jeton utilisateur existante", () => {
-		const routesGardeesParJeton: Array<[RecordedRoute[], string, string]> = [
-			[clientRoutes, 'POST', '/clients/register'],
-			[clientRoutes, 'PUT', '/clients/updatePassword'],
-			[otpRoutes, 'POST', '/otp/generate'],
-			[otpRoutes, 'POST', '/otp/verify'],
-			[otpRoutes, 'POST', '/otp/password-reset/request'],
-			[loginRoutes, 'POST', '/client/login']
+	it("n'exige plus le jeton public sur les routes d'avant-connexion", () => {
+		preAuthRoutes.forEach(([label, routes, method, url]) => {
+			const handlers = handlersOf(find(routes, method, url));
+
+			expect(handlers, `${method} ${url} (${label}) exige encore un jeton`).to.not.include(
+				TokenMiddleware.verify
+			);
+		});
+	});
+
+	/**
+	 * Le pendant du test précédent, et le point le plus important du lot : App Check ne dit pas
+	 * *qui* appelle. Là où une identité utilisateur est nécessaire, l'attestation ne la remplace
+	 * pas — sinon on reconstruirait C-01, un laissez-passer d'application ouvrant les données de
+	 * tout le monde.
+	 */
+	it("n'a évincé la vérification du jeton d'aucune route nominative", () => {
+		const routesNominatives: Array<[RecordedRoute[], string, string]> = [
+			[clientRoutes, 'PUT', '/clients/me'],
+			[clientRoutes, 'PUT', '/clients/resetPassword/me'],
+			[clientRoutes, 'GET', '/clients/me'],
+			[loginRoutes, 'POST', '/client/logout'],
+			[loginRoutes, 'GET', '/client/logins/me']
 		];
 
-		routesGardeesParJeton.forEach(([routes, method, url]) => {
+		routesNominatives.forEach(([routes, method, url]) => {
 			const handlers = handlersOf(find(routes, method, url));
 			expect(handlers, `${method} ${url} a perdu sa vérification de jeton`).to.include(
 				TokenMiddleware.verify
@@ -146,26 +169,19 @@ describe("[Sécurité] Attestation d'application (App Check)", () => {
 	});
 
 	/**
-	 * `verify-login` est la seule route volontairement sans jeton (F-04) : l'application Partenaire
-	 * l'appelle avant toute connexion. C'est donc la seule que l'attestation garde seule.
+	 * `verify-login` (F-04) et `partners/activate` sont les deux routes qui n'ont **jamais** porté
+	 * de jeton, même public. La première est un oracle d'énumération que seule l'attestation peut
+	 * fermer ; la seconde est autorisée par le jeton d'activation de son corps de requête, à usage
+	 * unique et expirant. Elles étaient la préfiguration de ce que sont devenues les six autres.
 	 */
-	it('couvre `verify-login`, qui reste sans jeton utilisateur par conception', () => {
-		const handlers = handlersOf(find(clientRoutes, 'POST', '/clients/verify-login'));
-
-		expect(handlers).to.include(AppCheckMiddleware.verify);
-		expect(handlers).to.not.include(TokenMiddleware.verify);
-	});
-
-	/**
-	 * `partners/activate` non plus n'a pas de jeton utilisateur : le marchand n'a pas encore de
-	 * compte utilisable. Son autorisation est le jeton d'activation porté par le corps de la
-	 * requête, à usage unique et expirant — l'attestation ne fait qu'y ajouter l'origine.
-	 */
-	it("couvre l'activation marchand, autorisée par son seul jeton d'activation", () => {
-		const handlers = handlersOf(find(partnerRoutes, 'POST', '/partners/activate'));
-
-		expect(handlers).to.include(AppCheckMiddleware.verify);
-		expect(handlers).to.not.include(TokenMiddleware.verify);
+	it("garde par la seule attestation les routes qui n'ont jamais eu de jeton", () => {
+		[
+			handlersOf(find(clientRoutes, 'POST', '/clients/verify-login')),
+			handlersOf(find(partnerRoutes, 'POST', '/partners/activate'))
+		].forEach(handlers => {
+			expect(handlers).to.include(AppCheckMiddleware.verify);
+			expect(handlers).to.not.include(TokenMiddleware.verify);
+		});
 	});
 
 	/**
@@ -214,14 +230,19 @@ describe("[Sécurité] Attestation d'application (App Check)", () => {
 	});
 
 	/**
-	 * L'ordre compte : inutile d'exécuter une vérification de jeton, donc d'interroger la base,
-	 * sur une requête dont on va refuser l'origine.
+	 * Là où l'attestation cohabite avec un autre contrôle, elle passe en premier : inutile
+	 * d'interroger la base pour une requête dont on va refuser l'origine. Aucune des 8 routes
+	 * d'avant-connexion n'est dans ce cas depuis C-01, mais la propriété doit tenir pour celles
+	 * qui le deviendraient.
 	 */
-	it("place l'attestation avant la vérification du jeton", () => {
-		const handlers = handlersOf(find(clientRoutes, 'POST', '/clients/register'));
+	it("place l'attestation en tête des preHandlers", () => {
+		preAuthRoutes.forEach(([label, routes, method, url]) => {
+			const handlers = handlersOf(find(routes, method, url));
+			const attestations = [AppCheckMiddleware.verify, AppCheckMiddleware.verifyLimitedUse];
 
-		expect(handlers.indexOf(AppCheckMiddleware.verify)).to.be.lessThan(
-			handlers.indexOf(TokenMiddleware.verify)
-		);
+			expect(attestations, `${method} ${url} (${label}) n'ouvre pas par une attestation`).to.include(
+				handlers[0]
+			);
+		});
 	});
 });
