@@ -1,6 +1,6 @@
 import coddyger from 'coddyger';
 import { AdminController } from '../../modules/admin';
-import { TokenMiddleware } from '../middleware';
+import { AppCheckMiddleware, TokenMiddleware } from '../middleware';
 
 const routePath = '/admin';
 const Controller: AdminController = new AdminController();
@@ -24,7 +24,9 @@ const defaultRoute: any = (fastify: any, options, done) => {
 		},
 		method: 'POST',
 		url: `${routePath}/login`,
-		preHandler: TokenMiddleware.verify,
+		// Route d'avant-connexion : attestée par App Check (comme /client/login), pas par un jeton.
+		// Auparavant en TokenMiddleware.verify, elle ne « marchait » que grâce au jeton public (faille C-01).
+		preHandler: AppCheckMiddleware.verify,
 		handler: (request, reply) => {
 			const body: any = request.body;
 			const Q = Controller.login(body);
