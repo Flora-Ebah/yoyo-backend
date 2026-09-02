@@ -190,10 +190,10 @@ export function wrapEmail(content: string, options?: { preheader?: string; title
 
             <!-- Carte de contenu -->
             <tr>
-              <td align="center" class="sm-px-24" style="mso-line-height-rule: exactly;">
+              <td align="center" style="mso-line-height-rule: exactly;">
                 <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="width: 100%;">
                   <tr>
-                    <td class="sm-px-24" style="mso-line-height-rule: exactly; padding: 0;">
+                    <td style="mso-line-height-rule: exactly; padding: 0;">
                       <!-- Carte carrée (coins droits), sans bordure ni ombre -->
                       <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="width: 100%;">
                         ${
