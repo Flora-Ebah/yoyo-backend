@@ -29,6 +29,14 @@ export interface IOnboardPayload {
     address?: string;
     phone?: string;
     description?: string;
+    maxDiscount?: number;
+    openingHours?: Array<{
+      day: string;
+      isOpen: boolean;
+      openTime?: string;
+      closeTime?: string;
+      breaks?: Array<{ startTime: string; endTime: string }>;
+    }>;
   };
   channels?: { email?: boolean; sms?: boolean };
 }
@@ -268,6 +276,11 @@ export class PartnerOnboardingService {
         // Le contrat expose un `categoryId` unique ; le modèle stocke un tableau. Ranger la valeur
         // ici évite un changement de schéma et laisse la porte ouverte au multi-catégories.
         categories: [shop.categoryId],
+        // Réduction et horaires saisis par le commercial à l'enrôlement. Défaut
+        // réduction 15 % si non fournie ; horaires laissés vides sinon (le
+        // marchand les complète dans l'app, où un gabarit 7 jours s'affiche).
+        maxDiscount: typeof shop.maxDiscount === 'number' ? shop.maxDiscount : 15,
+        openingHours: Array.isArray(shop.openingHours) ? shop.openingHours : [],
         user: merchantId,
         createdBy: commercial._id,
         status: 'active'

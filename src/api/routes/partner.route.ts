@@ -1,4 +1,4 @@
-import coddyger from 'coddyger';
+import coddyger, { defines } from 'coddyger';
 import { PartnerController } from '../../modules/partner/partner.controller';
 import { TokenMiddleware } from '../middleware';
 
@@ -216,6 +216,30 @@ const defaultRoute: any = (fastify: any, options, done) => {
 
       let user: any = request.user;
       body.user = user._id;
+
+      // Verrou métier : un marchand ne peut ni désactiver sa boutique ni
+      // supprimer/vider sa remise depuis l'app. Seule l'équipe YoYo (admin)
+      // peut désactiver une boutique. La désactivation passe donc par le
+      // back-office, pas par le marchand.
+      const isAdmin: boolean = !!(user && user.isAdmin);
+      if (!isAdmin) {
+        if (typeof body.status !== 'undefined' && body.status !== 'active') {
+          return coddyger.api(reply, Promise.resolve({
+            status: defines.status.forbidden,
+            message: "La désactivation de votre boutique est réservée à l'équipe YoYo. Contactez le support.",
+            data: null
+          }));
+        }
+
+        const MIN_MERCHANT_DISCOUNT = 5;
+        if (typeof body.maxDiscount !== 'undefined' && Number(body.maxDiscount) < MIN_MERCHANT_DISCOUNT) {
+          return coddyger.api(reply, Promise.resolve({
+            status: defines.status.forbidden,
+            message: `La remise proposée ne peut pas être inférieure à ${MIN_MERCHANT_DISCOUNT}%.`,
+            data: null
+          }));
+        }
+      }
 
       let Q = Controller.update(_id, body);
       return coddyger.api(reply, Q);
@@ -603,7 +627,37 @@ const defaultRoute: any = (fastify: any, options, done) => {
               ville: { type: 'string', maxLength: 100 },
               address: { type: 'string', maxLength: 200 },
               phone: { type: 'string', maxLength: 20 },
-              description: { type: 'string', maxLength: 1000 }
+              description: { type: 'string', maxLength: 1000 },
+              // Réduction négociée sur le terrain par le commercial. Plancher à 5 %
+              // (cohérent avec le verrou marchand) ; le marchand pourra l'ajuster ensuite.
+              maxDiscount: { type: 'number', minimum: 5, maximum: 100 },
+              openingHours: {
+                type: 'array',
+                items: {
+                  type: 'object',
+                  properties: {
+                    day: {
+                      type: 'string',
+                      enum: ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday']
+                    },
+                    isOpen: { type: 'boolean' },
+                    openTime: { type: 'string', pattern: '^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$' },
+                    closeTime: { type: 'string', pattern: '^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$' },
+                    breaks: {
+                      type: 'array',
+                      items: {
+                        type: 'object',
+                        properties: {
+                          startTime: { type: 'string', pattern: '^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$' },
+                          endTime: { type: 'string', pattern: '^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$' }
+                        },
+                        required: ['startTime', 'endTime']
+                      }
+                    }
+                  },
+                  required: ['day', 'isOpen']
+                }
+              }
             },
             required: ['name', 'categoryId'],
             additionalProperties: false
