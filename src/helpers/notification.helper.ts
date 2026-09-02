@@ -87,4 +87,57 @@ export class NotificationHelper {
 			});
 		}
 	}
+
+	/**
+	 * Diffuse une notification à tous les super-administrateurs (profil disposant de manage/all),
+	 * en excluant éventuellement l'auteur de l'action (déjà notifié par ailleurs).
+	 * Permet à l'admin de suivre l'activité (ex. un marchand enrôlé par un commercial).
+	 */
+	static async notifySuperAdmins(payload: {
+		title: string;
+		message: string;
+		category?: NotificationCategory;
+		metadata?: any;
+		exclude?: any;
+	}): Promise<void> {
+		try {
+			// eslint-disable-next-line @typescript-eslint/no-var-requires
+			const mongoose = require('mongoose');
+			const Profile = mongoose.model('Profile');
+			const Admin = mongoose.model('Admin');
+
+			const superProfiles = await Profile.find(
+				{ 'ability.subject': 'all', 'ability.action': 'manage', status: { $ne: 'removed' } },
+				{ _id: 1 }
+			);
+			const profileIds = superProfiles.map((p: any) => p._id);
+			if (profileIds.length === 0) return;
+
+			const admins = await Admin.find(
+				{ profile: { $in: profileIds }, status: { $ne: 'removed' } },
+				{ _id: 1 }
+			);
+
+			const excludeId = payload.exclude ? String(payload.exclude) : null;
+
+			for (const admin of admins) {
+				if (excludeId && String(admin._id) === excludeId) continue;
+
+				await NotificationHelper.notifyAdminInApp({
+					to: admin._id,
+					title: payload.title,
+					message: payload.message,
+					category: payload.category,
+					metadata: payload.metadata
+				});
+			}
+		} catch (error) {
+			LoggerService.log({
+				type: LogLevel.Error,
+				content: error,
+				location: helperLabel,
+				method: 'notifySuperAdmins'
+			});
+		}
+	}
 }

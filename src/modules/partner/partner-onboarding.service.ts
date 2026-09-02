@@ -344,6 +344,20 @@ export class PartnerOnboardingService {
         }
       });
 
+      // Suivi côté administration : les super-admins voient l'activité d'enrôlement (hors auteur).
+      await NotificationHelper.notifySuperAdmins({
+        title: 'Nouveau marchand enrôlé',
+        message: `${commercialName} a enrôlé ${firstname} ${lastname} — boutique « ${shopName} ».`,
+        category: NotificationCategory.INFO,
+        exclude: commercial._id,
+        metadata: {
+          type: 'enrolment',
+          partnerId: String(savedPartner._id),
+          merchantId: String(merchantId),
+          enrolmentId: String(enrolment._id)
+        }
+      });
+
       // --- 10. Réponse -------------------------------------------------------------------
       return {
         ok: true,
