@@ -462,6 +462,19 @@ export class PartnerOnboardingService {
         }
       });
 
+      await NotificationHelper.notifySuperAdmins({
+        title: 'Boutique activée',
+        message: `${enrolment.shopName} a activé sa boutique.`,
+        category: NotificationCategory.SUCCESS,
+        exclude: enrolment.commercial,
+        metadata: {
+          type: 'partner',
+          partnerId: String(enrolment.partner),
+          merchantId: String(enrolment.client),
+          enrolmentId: String(enrolment._id)
+        }
+      });
+
       return {
         ok: true,
         status: defines.status.requestOK,

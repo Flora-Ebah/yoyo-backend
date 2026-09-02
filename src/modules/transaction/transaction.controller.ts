@@ -2,6 +2,8 @@ import coddyger, { IErrorObject, defines } from 'coddyger';
 import { locale } from '../../public';
 import { TransactionService } from './transaction.service';
 import { ITransaction } from './transaction.interface';
+import { NotificationHelper } from '../../helpers/notification.helper';
+import { NotificationCategory } from '../../services/notification';
 
 const controllerLabel: string = 'TransactionController';
 
@@ -250,7 +252,18 @@ export class TransactionController {
             data: null
           });
         }
-        
+
+        // Suivi admin : un paiement vient d'aboutir.
+        if (String(paymentStatus).toLowerCase() === 'success') {
+          const tx: any = transaction;
+          await NotificationHelper.notifySuperAdmins({
+            title: 'Paiement reçu',
+            message: `Une transaction de ${tx?.amount ?? ''} ${tx?.currency ?? ''} a été confirmée.`.replace(/\s+/g, ' ').trim(),
+            category: NotificationCategory.SUCCESS,
+            metadata: { type: 'transactions', transactionId: String(transactionId) }
+          });
+        }
+
         resolve({
           status: defines.status.requestOK,
           message: "Statut de la transaction mis à jour avec succès",

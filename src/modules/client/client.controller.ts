@@ -3,6 +3,7 @@ import { locale } from '../../public';
 import { IClient, IRegister, ClientService, IUpdatePassword } from './';
 import { LoginService } from '../login/login.service';
 import { notificationManager, NotificationCategory, NotificationType } from '../../services/notification';
+import { NotificationHelper } from '../../helpers/notification.helper';
 
 const controllerLabel: string = 'ClientController';
 
@@ -125,7 +126,15 @@ export class ClientController {
         if (save.error) {
           return reject(save);
         }
-        
+
+        // Suivi admin : un nouveau compte vient d'être créé sur les apps.
+        await NotificationHelper.notifySuperAdmins({
+          title: formattedItem.isPartner ? 'Nouveau professionnel inscrit' : 'Nouveau client inscrit',
+          message: `${`${formattedItem.firstname || ''} ${formattedItem.lastname || ''}`.trim() || formattedItem.email} vient de créer un compte.`,
+          category: NotificationCategory.INFO,
+          metadata: { type: formattedItem.isPartner ? 'pros' : 'clients', clientId: String(formattedItem._id) }
+        });
+
         resolve({
           status: defines.status.created,
           message: locale.controller.successSave,

@@ -4,6 +4,7 @@ import { IClient, ClientSet } from '../client';
 import { locale } from '../../public';
 import { notificationManager , NotificationCategory , NotificationType } from '../../services/notification';
 import { MessageHelper } from '../../helpers/message.helper';
+import { NotificationHelper } from '../../helpers/notification.helper';
 
 
 
@@ -60,6 +61,14 @@ export class CertificationService {
 					message: locale.notfound('Client')
 				};
 			}
+
+			// Suivi admin : un nouveau dossier KYC vient d'être soumis.
+			await NotificationHelper.notifySuperAdmins({
+				title: 'Nouveau dossier KYC',
+				message: `Un client a soumis un document « ${certification.documentType} » à vérifier.`,
+				category: NotificationCategory.WARNING,
+				metadata: { type: 'moderation', clientId: String(certification.user), certificationId: String(certification._id) }
+			});
 
 			// Retourner le document sauvegardé
 			return await dao.selectOne({ _id: certification._id });
