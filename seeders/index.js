@@ -46,10 +46,9 @@ class SeederRunner {
       await this.rolesSeeder.seed();
       console.log('✅ Rôles seedés avec succès\n');
 
-      // 5. Données de démonstration (clients, pros/villes, transactions, KYC)
-      console.log('🎭 Seeding des données de démonstration...');
-      await this.demoSeeder.seed();
-      console.log('✅ Données de démonstration seedées avec succès\n');
+      // Les données de démonstration ne sont PAS incluses ici : elles se lancent
+      // explicitement via `node seed.js --demo` (évite de créer des données de test
+      // par mégarde sur un environnement réel).
 
       console.log('🎉 Tous les seeders ont été exécutés avec succès!');
     } catch (error) {
