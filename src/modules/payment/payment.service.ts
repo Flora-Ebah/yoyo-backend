@@ -29,7 +29,7 @@ export class PaymentService {
    * Récupère tous les éléments
    * @returns Liste des éléments
    */
-	async getAll(payloads: { page?: number; pageSize?: number; query?: string; status?: string; from?: string; to?: string }): Promise<any> {
+	async getAll(payloads: { page?: number; pageSize?: number; query?: string; status?: string; from?: string; to?: string; partner?: string }): Promise<any> {
 		try {
 			let page: number = payloads.page ?? 1;
 			let pageSize: number = payloads.pageSize ?? 10;
@@ -37,6 +37,7 @@ export class PaymentService {
 			let status: any = payloads.status ?? '';
 			let from: string = payloads.from ?? '';
 			let to: string = payloads.to ?? '';
+			let partner: string = payloads.partner ?? '';
 
 			let data: any | IErrorObject = {};
 
@@ -45,6 +46,11 @@ export class PaymentService {
 
 			if (!coddyger.string.isEmpty(status)) {
 				params.status = status;
+			}
+
+			// Filtre par partenaire (destinataire du paiement) : fiche détail partenaire.
+			if (!coddyger.string.isEmpty(partner)) {
+				params.to = partner;
 			}
 
 			if (!coddyger.string.isEmpty(from) || !coddyger.string.isEmpty(to)) {

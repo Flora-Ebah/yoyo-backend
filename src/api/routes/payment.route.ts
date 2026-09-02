@@ -88,7 +88,8 @@ const defaultRoute: any = (fastify: any, options, done) => {
           status: { type: 'string' },
           from: { type: 'string' },
           to: { type: 'string' },
-          q: { type: 'string' }
+          q: { type: 'string' },
+          partner: { type: 'string' }
         },
         required: [],
         additionalProperties: false
@@ -104,8 +105,9 @@ const defaultRoute: any = (fastify: any, options, done) => {
       let from: any = request.query.from;
       let to: any = request.query.to;
       let query: any = request.query.q;
+      let partner: any = request.query.partner;
 
-      let Q = Controller.getAll({ page, pageSize, status, from, to, query });
+      let Q = Controller.getAll({ page, pageSize, status, from, to, query, partner });
       return coddyger.api(reply, Q);
     }
   });
