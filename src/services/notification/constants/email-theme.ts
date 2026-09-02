@@ -177,12 +177,16 @@ export function wrapEmail(content: string, options?: { preheader?: string; title
         <td align="center" style="mso-line-height-rule: exactly; background-color: ${BRAND.pageBackground};">
           <table role="presentation" class="sm-w-full" cellpadding="0" cellspacing="0" border="0" style="width: 680px; max-width: 100%;">
 
-            <!-- Logo, pose sur le fond de page -->
-            <tr>
+            <!-- Logo sur le fond de page — masqué quand un bandeau `hero` porte déjà le logo. -->
+            ${
+              options?.hero
+                ? ''
+                : `<tr>
               <td class="sm-py-32 sm-px-24" align="center" style="mso-line-height-rule: exactly; padding: 48px; text-align: center;">
                 <img src="${logoSrc()}" width="92" alt="YoYo" style="width: 92px; max-width: 100%; vertical-align: middle; line-height: 100%; border: 0;">
               </td>
-            </tr>
+            </tr>`
+            }
 
             <!-- Carte de contenu -->
             <tr>
@@ -190,11 +194,24 @@ export function wrapEmail(content: string, options?: { preheader?: string; title
                 <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="width: 100%;">
                   <tr>
                     <td class="sm-px-24" style="mso-line-height-rule: exactly; padding: 0;">
-                      <!-- Carte carrée (coins droits) avec ombre douce -->
-                      <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="width: 100%; box-shadow: 0 14px 34px rgba(17, 20, 24, 0.10);">
+                      <!-- Carte carrée (coins droits), sans bordure ni ombre -->
+                      <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="width: 100%;">
                         ${
                           options?.hero
-                            ? `<tr><td style="mso-line-height-rule: exactly; background-color: ${BRAND.primary}; background-image: linear-gradient(135deg, ${BRAND.primary} 0%, ${BRAND.primaryLight} 100%); padding: 30px 40px; text-align: center;"><div style="font-family: ${FONT_STACK}; font-size: 22px; line-height: 30px; font-weight: 800; color: #FFFFFF;">${options.hero}</div></td></tr>`
+                            ? `<tr><td style="mso-line-height-rule: exactly; background-color: ${BRAND.primary}; background-image: linear-gradient(135deg, ${BRAND.primary} 0%, ${BRAND.primaryLight} 100%); padding: 24px 30px;">
+                              <table role="presentation" align="center" cellpadding="0" cellspacing="0" border="0" style="margin: 0 auto;">
+                                <tr>
+                                  <td style="mso-line-height-rule: exactly; vertical-align: middle; padding-right: 14px;">
+                                    <div style="width: 46px; height: 46px; background-color: #FFFFFF; text-align: center; line-height: 46px; mso-line-height-rule: exactly;">
+                                      <img src="${logoSrc()}" width="30" alt="YoYo" style="width: 30px; vertical-align: middle; border: 0;">
+                                    </div>
+                                  </td>
+                                  <td style="mso-line-height-rule: exactly; vertical-align: middle;">
+                                    <div style="font-family: ${FONT_STACK}; font-size: 20px; line-height: 26px; font-weight: 800; color: #FFFFFF;">${options.hero}</div>
+                                  </td>
+                                </tr>
+                              </table>
+                            </td></tr>`
                             : ''
                         }
                         <tr>

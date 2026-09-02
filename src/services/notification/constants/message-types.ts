@@ -333,7 +333,7 @@ export class MessageTypes {
         <p>Bonne nouvelle : votre boutique${details?.shopName ? ' <strong>' + details.shopName + '</strong>' : ''} est prête ! Votre compte marchand vient d'être créé${details?.commercialName ? ' par ' + details.commercialName : ''} 🙌</p>
         <p>Il ne reste qu'une petite étape pour démarrer : <strong>choisissez votre code de sécurité</strong> et c'est parti 🚀</p>
         ${emailButton(details?.activationUrl || '#', 'Activer ma boutique')}
-        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color: #F7F8FA; border: 1px solid #ECEEF2; margin-top: 4px;">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color: #F7F8FA; margin-top: 4px;">
           <tr><td style="padding: 14px 18px;">
             <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="font-size: 13px;">
               ${details?.shopName ? `<tr><td style="color: ${BRAND.textMuted}; padding: 3px 0;">Boutique</td><td align="right" style="color: ${BRAND.text}; font-weight: 600; padding: 3px 0;">${details.shopName}</td></tr>` : ''}
