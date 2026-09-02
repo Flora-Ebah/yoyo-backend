@@ -650,7 +650,8 @@ const defaultRoute: any = (fastify: any, options, done) => {
         type: 'object',
         properties: {
           token: { type: 'string', minLength: 16, maxLength: 128 },
-          password: { type: 'string', minLength: 8, maxLength: 128 }
+          // L'app YoYo Pro utilise un code PIN à 6 chiffres comme mot de passe : on l'accepte ici.
+          password: { type: 'string', minLength: 4, maxLength: 128 }
         },
         required: ['token', 'password'],
         additionalProperties: false
