@@ -177,7 +177,7 @@ export function wrapEmail(content: string, options?: { preheader?: string; title
         <td align="center" style="mso-line-height-rule: exactly; background-color: ${BRAND.pageBackground};">
           <table role="presentation" class="sm-w-full" cellpadding="0" cellspacing="0" border="0" style="width: 680px; max-width: 100%;">
 
-            <!-- Logo sur le fond de page — masqué quand un bandeau `hero` porte déjà le logo. -->
+            <!-- Logo sur le fond de page — masque quand un bandeau hero porte deja le logo. -->
             ${
               options?.hero
                 ? ''
