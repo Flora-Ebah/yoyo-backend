@@ -222,17 +222,26 @@ describe('[Sécurité] Gardes des routes', () => {
 		it('F-04 — verify-login reste publique mais plafonnée en débit', () => {
 			const route: any = find(routes, 'POST', '/clients/verify-login');
 			expect(route).to.not.be.undefined;
-			expect(route.preHandler, 'doit rester appelable sans jeton').to.be.undefined;
+
+			// La route porte désormais l'attestation d'application (App Check), qui n'exige aucun
+			// compte : ce qui doit rester absent, c'est la vérification d'un **jeton utilisateur**.
+			const handlers = Array.isArray(route.preHandler) ? route.preHandler : [route.preHandler];
+			expect(handlers, 'doit rester appelable sans jeton').to.not.include(TokenMiddleware.verify);
+			expect(handlers, 'doit rester appelable sans jeton').to.not.include(TokenMiddleware.verifyAdmin);
+
 			expect(route.config?.rateLimit?.max).to.be.a('number');
 			expect(route.config.rateLimit.max).to.be.at.most(20);
 		});
 
-		it("F-04 — verify-login est la seule route du module sans garde", () => {
-			const unguarded = routes
-				.filter(route => !route.preHandler)
+		it("F-04 — verify-login est la seule route du module sans jeton utilisateur", () => {
+			const withoutUserToken = routes
+				.filter(route => {
+					const handlers = Array.isArray(route.preHandler) ? route.preHandler : [route.preHandler];
+					return !handlers.includes(TokenMiddleware.verify) && !handlers.includes(TokenMiddleware.verifyAdmin);
+				})
 				.map(route => `${route.method} ${route.url}`);
 
-			expect(unguarded).to.deep.equal(['POST /clients/verify-login']);
+			expect(withoutUserToken).to.deep.equal(['POST /clients/verify-login']);
 		});
 
 		it('la suppression administrateur lit son motif dans le corps de la requête', () => {

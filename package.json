@@ -48,6 +48,7 @@
     "cron": "^3.1.7",
     "fastify": "^4.28.1",
     "fastify-multer": "^2.0.3",
+    "firebase-admin": "^14.3.0",
     "google-auth-library": "^9.14.2",
     "handlebars": "^4.7.8",
     "ioredis": "^5.6.1",

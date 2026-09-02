@@ -31,6 +31,40 @@ interface Config {
   swagger: {
     enabled: boolean;
   };
+  appCheck: {
+    /** Vérification active. Désactivée, le middleware laisse tout passer sans journaliser. */
+    enabled: boolean;
+    /**
+     * Rejet effectif des requêtes non attestées.
+     *
+     * `false` = mode observation : on vérifie, on journalise, on laisse passer. C'est le réglage
+     * de déploiement : il faut mesurer le taux d'échec réel avant de bloquer, sinon on coupe
+     * l'accès à des clients légitimes (appareils sans Play Services, versions antérieures de
+     * l'application, applications pas encore migrées).
+     */
+    enforce: boolean;
+    /**
+     * Détection du rejeu sur les routes marquées `verifyLimitedUse`.
+     *
+     * Exige le rôle IAM *Firebase App Check Token Verifier* sur le compte de service, accordé
+     * séparément — d'où l'interrupteur dédié. Sans lui, la détection se coupe d'elle-même après
+     * un échec, en le journalisant.
+     */
+    consume: boolean;
+    /**
+     * Routes passées en rejet **avant** l'interrupteur global.
+     *
+     * Toutes les applications ne migrent pas en même temps. Attendre la dernière pour protéger les
+     * premières, c'est laisser ouvertes des routes déjà couvertes. Cette liste permet de fermer
+     * route par route, en commençant par celles qu'aucune application en retard n'appelle.
+     *
+     * Fragments d'URL, comparés en minuscules sur le chemin déclaré de la route.
+     */
+    enforceRoutes: string[];
+    projectId: string;
+    clientEmail: string;
+    privateKey: string;
+  };
   broadcastSecret: string;
 }
 
@@ -64,6 +98,24 @@ export const config: Config = {
   },
   swagger: {
     enabled: process.env.SWAGGER_ENABLED !== 'false' // enabled par défaut
+  },
+  appCheck: {
+    enabled: process.env.APP_CHECK_ENABLED === 'true',
+    // Volontairement en opt-in explicite : le rejet ne s'active qu'à la main, après lecture
+    // des journaux du mode observation.
+    enforce: process.env.APP_CHECK_ENFORCE === 'true',
+    // Opt-in explicite lui aussi : dépend d'un rôle IAM et d'applications clientes qui envoient
+    // des jetons à usage unique. Activé trop tôt, il signalerait des rejeux inexistants.
+    consume: process.env.APP_CHECK_CONSUME === 'true',
+    enforceRoutes: (process.env.APP_CHECK_ENFORCE_ROUTES ?? '')
+      .split(',')
+      .map(route => route.trim().toLowerCase())
+      .filter(route => route.length > 0),
+    projectId: process.env.FIREBASE_PROJECT_ID!,
+    clientEmail: process.env.FIREBASE_CLIENT_EMAIL!,
+    // La clé privée du compte de service contient de vrais sauts de ligne, qu'un fichier `.env`
+    // ne sait pas porter : on les stocke échappés en `\n` et on les restaure ici.
+    privateKey: (process.env.FIREBASE_PRIVATE_KEY ?? '').replace(/\\n/g, '\n')
   },
   broadcastSecret: process.env.BROADCAST_SECRET!
 };

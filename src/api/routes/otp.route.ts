@@ -1,6 +1,6 @@
 import coddyger from 'coddyger';
 import { OtpController } from '../../modules/otp';
-import { TokenMiddleware } from '../middleware';
+import { AppCheckMiddleware, TokenMiddleware } from '../middleware';
 
 const routePath = '/otp';
 const Controller: OtpController = new OtpController();
@@ -46,7 +46,9 @@ const defaultRoute: any = (fastify: any, options, done) => {
 		},
 		method: 'POST',
 		url: `${routePath}/generate`,
-		preHandler: TokenMiddleware.verify,
+		// [App Check] Route d'avant-connexion : l'attestation remplacera la clé partagée qui la
+		// « protégeait ». En mode observation elle journalise sans rien rejeter.
+		preHandler: [AppCheckMiddleware.verify, TokenMiddleware.verify],
 		handler: (request, reply) => {
 			const { login, messageType } = request.body;
 			let Q = Controller.generate(login, messageType);
@@ -97,7 +99,9 @@ const defaultRoute: any = (fastify: any, options, done) => {
 		},
 		method: 'POST',
 		url: `${routePath}/verify`,
-		preHandler: TokenMiddleware.verify,
+		// [App Check] `verifyLimitedUse` : c'est cette route qui émet le `resetToken`. Rejouer une
+		// requête capturée en referait émettre un — d'où le jeton d'attestation à usage unique.
+		preHandler: [AppCheckMiddleware.verifyLimitedUse, TokenMiddleware.verify],
 		config: {
 			rateLimit: {
 				max: 10,
@@ -220,7 +224,7 @@ const defaultRoute: any = (fastify: any, options, done) => {
 		},
 		method: 'POST',
 		url: `${routePath}/password-reset/request`,
-		preHandler: TokenMiddleware.verify,
+		preHandler: [AppCheckMiddleware.verify, TokenMiddleware.verify],
 		handler: (request, reply) => {
 			const { login } = request.body;
 			let Q = Controller.generate(login, 'PASSWORD_RESET');

@@ -1,6 +1,6 @@
 import coddyger from 'coddyger';
 import { LoginController } from '../../modules/login/login.controller';
-import { TokenMiddleware } from '../middleware';
+import { AppCheckMiddleware, TokenMiddleware } from '../middleware';
 
 const routePath = '/client';
 const Controller: LoginController = new LoginController();
@@ -27,7 +27,8 @@ const defaultRoute: any = (fastify: any, options, done) => {
 		},
 		method: 'POST',
 		url: `${routePath}/login`,
-		preHandler: TokenMiddleware.verify,
+		// [App Check] Route d'avant-connexion. Mode observation : journalise, ne rejette pas.
+		preHandler: [AppCheckMiddleware.verify, TokenMiddleware.verify],
 		handler: (request, reply) => {
 			let payload = {
 				login: request.body.login,

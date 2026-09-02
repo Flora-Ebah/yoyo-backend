@@ -281,9 +281,13 @@ export class TokenMiddleware {
 			// venait du fichier de configuration copié dans l'image Docker ; celle-ci ne portant
 			// plus de configuration, une variable oubliée dans l'environnement de déploiement
 			// produirait des jetons éternels, en silence. D'où ce repli explicite.
-			return jwt.sign(data, secretKey, {
-				expiresIn: expiresIn ?? process.env.JWT_TOKEN_EXPIRE ?? '7d'
-			});
+			// `@types/jsonwebtoken`, arrivé comme dépendance transitive de `firebase-admin`,
+			// restreint `expiresIn` à un littéral typé (`'7d'`, `'12h'`…) ou un nombre de secondes.
+			// La valeur vient de l'environnement, donc d'une chaîne quelconque : la conversion est
+			// explicite, `jwt.sign` validant le format à l'exécution.
+			const ttl = (expiresIn ?? process.env.JWT_TOKEN_EXPIRE ?? '7d') as jwt.SignOptions['expiresIn'];
+
+			return jwt.sign(data, secretKey, { expiresIn: ttl });
 		} else {
 			return jwt.sign(data, secretAuthKey, { expiresIn: '7d' });
 		}
