@@ -175,7 +175,7 @@ export function wrapEmail(content: string, options?: { preheader?: string; title
     <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="width: 100%; font-family: ${FONT_STACK};">
       <tr>
         <td align="center" style="mso-line-height-rule: exactly; background-color: ${BRAND.pageBackground};">
-          <table role="presentation" class="sm-w-full" cellpadding="0" cellspacing="0" border="0" style="width: 600px;">
+          <table role="presentation" class="sm-w-full" cellpadding="0" cellspacing="0" border="0" style="width: 680px; max-width: 100%;">
 
             <!-- Logo, pose sur le fond de page -->
             <tr>
@@ -189,7 +189,7 @@ export function wrapEmail(content: string, options?: { preheader?: string; title
               <td align="center" class="sm-px-24" style="mso-line-height-rule: exactly;">
                 <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="width: 100%;">
                   <tr>
-                    <td class="yoyo-content sm-px-24" style="mso-line-height-rule: exactly; border-radius: 6px; background-color: ${BRAND.surface}; padding: 48px; text-align: left; font-family: ${FONT_STACK}; font-size: 16px; line-height: 26px; color: ${BRAND.textBody};">
+                    <td class="yoyo-content sm-px-24" style="mso-line-height-rule: exactly; border-radius: 6px; background-color: ${BRAND.surface}; padding: 40px; text-align: left; font-family: ${FONT_STACK}; font-size: 16px; line-height: 26px; color: ${BRAND.textBody};">
                       ${
                         options?.title
                           ? `<p style="margin: 0 0 10px; font-family: ${FONT_STACK}; font-size: 12px; font-weight: 700; letter-spacing: 1.4px; text-transform: uppercase; color: ${BRAND.primary}; text-align: center;">${options.title}</p>`

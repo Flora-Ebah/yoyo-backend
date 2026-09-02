@@ -327,14 +327,14 @@ export class MessageTypes {
       // appelle `getEmailTemplate(template, '', ...)` avec un code vide. Le lien transite donc par
       // `details.activationUrl`, alimenté depuis `templateData`.
       template: (_code: string, name?: string, details?: any) => `
-        <h2 style="text-align: center;">Bienvenue sur YoYo !</h2>
+        <h2 style="text-align: center;">Bienvenue dans la famille YoYo 🎉</h2>
         <p>Bonjour ${name || 'cher partenaire'},</p>
-        <p>Votre compte marchand${details?.shopName ? ' et votre boutique <strong>' + details.shopName + '</strong>' : ''} viennent d'être créés sur YoYo${details?.commercialName ? ' par ' + details.commercialName : ''}.</p>
-        <p>Il ne vous reste qu'une étape : <strong>définir votre mot de passe</strong> pour accéder à votre espace.</p>
-        ${emailButton(details?.activationUrl || '#', 'Activer mon compte')}
-        <p>Ce lien est valable <strong>${details?.expiresInHours || 72} heures</strong> et ne peut être utilisé qu'une seule fois.</p>
-        <p>Si vous n'êtes pas à l'origine de cette demande, ignorez simplement cet e-mail : sans activation, aucun accès n'est possible.</p>
-        <p>Cordialement,<br>L'équipe YoYo</p>
+        <p>Bonne nouvelle : votre boutique${details?.shopName ? ' <strong>' + details.shopName + '</strong>' : ''} est prête ! Votre compte marchand vient d'être créé${details?.commercialName ? ' par ' + details.commercialName : ''} 🙌</p>
+        <p>Il ne reste qu'une petite étape pour démarrer : <strong>choisissez votre code de sécurité</strong> et c'est parti 🚀</p>
+        ${emailButton(details?.activationUrl || '#', 'Activer ma boutique')}
+        <p>Ce lien reste valable <strong>${details?.expiresInHours || 72} heures</strong> (usage unique).</p>
+        <p>Vous n'attendiez pas cet e-mail ? Pas d'inquiétude, ignorez-le simplement : sans activation, rien ne se passe.</p>
+        <p>À très vite,<br>L'équipe YoYo 💛</p>
       `
     },
     [MessageTypes.TYPES.ACCOUNT_DELETED]: {
