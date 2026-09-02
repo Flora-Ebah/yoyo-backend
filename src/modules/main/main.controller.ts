@@ -1,4 +1,4 @@
-import coddyger, { IErrorObject, defines, env } from 'coddyger';
+import coddyger, { IErrorObject, defines } from 'coddyger';
 import { locale } from '../../public';
 import { FileUpload, TokenMiddleware, uploadPath } from '../../api/middleware';
 import { NotificationCategory, notificationManager, NotificationType } from '../../services/notification';
@@ -16,27 +16,11 @@ export class MainController {
 		this.clientService = new ClientService();
 	}
 
-	generateToken(apikey: string) {
-		return new Promise((resolve, reject) => {
-			const key = env.jwt.public;
-
-			if (key !== apikey) {
-				resolve({ status: defines.status.forbidden, message: locale.controller.apiKeyNotFound, data: null });
-			} else {
-				let token = TokenMiddleware.generate(
-					{
-						data: apikey,
-						reg: new Date()
-					},
-					'accessToken'
-				);
-
-				resolve({ status: defines.status.requestOK, message: 'ok', data: token });
-			}
-		}).catch((e: IErrorObject) => {
-			return coddyger.catchReturn(e, controllerLabel, 'selectOne');
-		});
-	}
+	// [SÉCURITÉ C-01] `generateToken` et `generateRefreshToken` supprimées le 02/09/2026 avec la
+	// route `POST /get-token` qu'elles servaient. Elles signaient, avec le secret des jetons
+	// utilisateur, une charge utile anonyme délivrée contre une clé en dur dans les applications.
+	// Voir le commentaire en tête de `src/api/routes/main.route.ts`.
+	// `generateRefreshToken` n'était d'ailleurs appelée par aucune route.
 
 	verifyToken(payload: any) {
 		return new Promise(async (resolve, reject) => {
@@ -69,28 +53,6 @@ export class MainController {
 			});
 		}).catch((e: IErrorObject) => {
 			console.error(e);
-			return coddyger.catchReturn(e, controllerLabel, 'selectOne');
-		});
-	}
-
-	generateRefreshToken(apikey: string) {
-		return new Promise((resolve, reject) => {
-			const key = env.jwt.public;
-
-			if (key !== apikey) {
-				resolve({ status: defines.status.forbidden, message: locale.controller.apiKeyNotFound, data: null });
-			} else {
-				let token = TokenMiddleware.generate(
-					{
-						data: apikey,
-						reg: new Date()
-					},
-					'refreshToken'
-				);
-
-				resolve({ status: defines.status.requestOK, message: 'ok', data: token });
-			}
-		}).catch((e: IErrorObject) => {
 			return coddyger.catchReturn(e, controllerLabel, 'selectOne');
 		});
 	}

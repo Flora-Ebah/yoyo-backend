@@ -1,7 +1,7 @@
 import coddyger, { defines } from 'coddyger';
 import { ClientController } from '../../modules/client/client.controller';
 import { PasswordResetTokenHelper } from '../../helpers/password-reset-token.helper';
-import { TokenMiddleware } from '../middleware';
+import { AppCheckMiddleware, TokenMiddleware } from '../middleware';
 
 const routePath = '/clients';
 const Controller: ClientController = new ClientController();
@@ -33,13 +33,15 @@ const defaultRoute: any = (fastify: any, options, done) => {
     },
     method: 'POST',
     url: `${routePath}/register`,
-    preHandler: TokenMiddleware.verify,
+    // [App Check] Route d'avant-connexion : aucune identité utilisateur ne peut la protéger,
+    // c'est donc l'attestation de l'application qui la garde — seule, depuis la suppression du
+    // jeton public (C-01). Piloté par `APP_CHECK_ENFORCE` / `APP_CHECK_ENFORCE_ROUTES`.
+    preHandler: AppCheckMiddleware.verify,
     handler: (request, reply) => {
       let body: any = request.body;
 
-      let user: any = request.user;
-      body.user = user._id;
-
+      // [C-01] `body.user` valait `request.user._id`, lu sur le jeton public — dont la charge utile
+      // n'a jamais porté de `_id`. Le champ arrivait donc toujours à `undefined` : on le retire.
       let Q = Controller.register(body);
       return coddyger.api(reply, Q);
     }
@@ -154,7 +156,12 @@ const defaultRoute: any = (fastify: any, options, done) => {
     },
     method: 'PUT',
     url: `${routePath}/updatePassword`,
-    preHandler: TokenMiddleware.verify,
+    // [App Check] Fin du parcours « mot de passe oublié », donc atteignable sans être connecté.
+    // `verifyLimitedUse` plutôt que `verify` : rejouer cette requête, c'est reposer un mot de
+    // passe choisi par l'attaquant. Le jeton d'attestation y est donc à usage unique.
+    // L'autorisation réelle reste le `resetToken` du corps de la requête ; le jeton public qui
+    // accompagnait l'appel n'attestait rien et a été supprimé (C-01).
+    preHandler: AppCheckMiddleware.verifyLimitedUse,
     config: {
       rateLimit: {
         max: 10,
@@ -519,6 +526,10 @@ const defaultRoute: any = (fastify: any, options, done) => {
     // donc sans jeton (`yoyo-pro-main/services/api.ts`, l'intercepteur n'ajoute l'en-tête que si
     // un jeton est déjà stocké). À défaut de pouvoir l'authentifier, on plafonne le débit pour
     // rendre le balayage de masse impraticable.
+    //
+    // [App Check] C'est précisément la garantie qui manquait ici : l'attestation dira que
+    // l'appel vient d'une application YoYo authentique, sans exiger de compte. Mode observation.
+    preHandler: AppCheckMiddleware.verify,
     config: {
       rateLimit: {
         max: 10,

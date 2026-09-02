@@ -1,4 +1,5 @@
 import { expect } from 'chai';
+import sinon from 'sinon';
 import { TokenMiddleware, PaymentNotifyMiddleware } from '../api/middleware';
 import categoryRoute from '../api/routes/category.route';
 import certificationRoute from '../api/routes/certification.route';
@@ -222,17 +223,42 @@ describe('[Sécurité] Gardes des routes', () => {
 		it('F-04 — verify-login reste publique mais plafonnée en débit', () => {
 			const route: any = find(routes, 'POST', '/clients/verify-login');
 			expect(route).to.not.be.undefined;
-			expect(route.preHandler, 'doit rester appelable sans jeton').to.be.undefined;
+
+			// La route porte désormais l'attestation d'application (App Check), qui n'exige aucun
+			// compte : ce qui doit rester absent, c'est la vérification d'un **jeton utilisateur**.
+			const handlers = Array.isArray(route.preHandler) ? route.preHandler : [route.preHandler];
+			expect(handlers, 'doit rester appelable sans jeton').to.not.include(TokenMiddleware.verify);
+			expect(handlers, 'doit rester appelable sans jeton').to.not.include(TokenMiddleware.verifyAdmin);
+
 			expect(route.config?.rateLimit?.max).to.be.a('number');
 			expect(route.config.rateLimit.max).to.be.at.most(20);
 		});
 
-		it("F-04 — verify-login est la seule route du module sans garde", () => {
-			const unguarded = routes
-				.filter(route => !route.preHandler)
+		/**
+		 * [C-01, 02/09/2026] La liste s'est allongée de deux entrées, et c'est voulu.
+		 *
+		 * `register` et `updatePassword` réclamaient un jeton — mais le **jeton public**, obtenu
+		 * contre une clé en dur dans les binaires. Elles avaient l'apparence de routes
+		 * authentifiées sans l'être. Elles rejoignent `verify-login` dans la catégorie à laquelle
+		 * elles ont toujours appartenu : les routes d'avant-connexion, gardées par l'attestation
+		 * d'application (`app-check.security.test.ts`).
+		 *
+		 * Ce test reste utile en sens inverse : il verrouille la liste, pour qu'aucune route
+		 * nominative n'y tombe par inadvertance.
+		 */
+		it("seules les routes d'avant-connexion sont sans jeton utilisateur", () => {
+			const withoutUserToken = routes
+				.filter(route => {
+					const handlers = Array.isArray(route.preHandler) ? route.preHandler : [route.preHandler];
+					return !handlers.includes(TokenMiddleware.verify) && !handlers.includes(TokenMiddleware.verifyAdmin);
+				})
 				.map(route => `${route.method} ${route.url}`);
 
-			expect(unguarded).to.deep.equal(['POST /clients/verify-login']);
+			expect(withoutUserToken).to.deep.equal([
+				'POST /clients/register',
+				'PUT /clients/updatePassword',
+				'POST /clients/verify-login'
+			]);
 		});
 
 		it('la suppression administrateur lit son motif dans le corps de la requête', () => {
@@ -300,17 +326,73 @@ describe('[Sécurité] Gardes des routes', () => {
 	});
 
 	/**
-	 * [B-05 / F-08] La clé technique partagée par les 4 applications était placée en valeur par
-	 * défaut du schéma : la documentation Swagger la publiait en clair.
+	 * [C-01] La clé technique partagée par les 4 applications a d'abord cessé d'être **publiée**
+	 * (B-05 : elle figurait en valeur par défaut du schéma, donc dans Swagger), puis d'**exister** :
+	 * la route qui l'échangeait contre un jeton a été supprimée le 02/09/2026.
+	 *
+	 * Ce jeton était signé avec le secret des jetons utilisateur et ne désignait personne. Il
+	 * franchissait `TokenMiddleware.verify` sur toutes les routes — c'est le mécanisme qui a rendu
+	 * F-03 et F-05 exploitables sans compte.
 	 */
-	describe('B-05 / F-08 — Délivrance des jetons', () => {
+	describe('C-01 — Délivrance des jetons publics', () => {
 		const routes = collectRoutes(mainRoute);
 
-		it("la documentation ne publie plus la clé technique", () => {
-			const body = find(routes, 'POST', '/get-token')!.schema.body;
+		// La liste de révocation vit en base ; ces tests portent sur la **charge utile** du jeton,
+		// pas sur son état de révocation. On neutralise donc la consultation.
+		beforeEach(() => sinon.stub(TokenMiddleware, 'isTokenDeactivated').resolves(false));
+		afterEach(() => sinon.restore());
 
-			expect(body.properties.apikey).to.not.have.property('default');
-			expect(JSON.stringify(body)).to.not.contain('TrQpAbG2tByxw0eS');
+		/** Réponse Fastify minimale : `coddyger.api` écrit dedans, on veut seulement savoir s'il l'a fait. */
+		const fakeReply = () => {
+			const state = { refused: false };
+			const reply: any = {
+				status: () => reply,
+				code: () => reply,
+				header: () => reply,
+				send: () => {
+					state.refused = true;
+					return reply;
+				}
+			};
+
+			return { reply, state };
+		};
+
+		it('la route qui échangeait la clé partagée contre un jeton a été supprimée', () => {
+			expect(find(routes, 'POST', '/get-token')).to.be.undefined;
+		});
+
+		it("aucune route du module ne réclame plus de clé d'API", () => {
+			expect(JSON.stringify(routes)).to.not.contain('apikey');
+			expect(JSON.stringify(routes)).to.not.contain('TrQpAbG2tByxw0eS');
+		});
+
+		/**
+		 * La suppression de la route ne révoque rien : la clé est dans l'historique Git et dans
+		 * chaque binaire déjà publié, et les jetons émis restent valides jusqu'à leur expiration.
+		 * C'est ce contrôle-ci qui les invalide, tous, immédiatement.
+		 */
+		it('un jeton sans `_id` est refusé par la vérification utilisateur', async () => {
+			// La charge utile exacte que produisait `MainController.generateToken`.
+			const token = TokenMiddleware.generate({ data: 'TrQpAbG2tByxw0eS', reg: new Date() }, 'accessToken');
+			const request: any = { headers: { authorization: `Bearer ${token}` } };
+			const { reply, state } = fakeReply();
+
+			await TokenMiddleware.verify(request, reply, () => {});
+
+			expect(request.user, "le jeton public ne doit jamais peupler `request.user`").to.be.undefined;
+			expect(state.refused, 'la requête aurait dû être refusée').to.be.true;
+		});
+
+		it('un jeton nominatif reste accepté', async () => {
+			const token = TokenMiddleware.generate({ _id: '507f1f77bcf86cd799439011', email: 'a@b.c' }, 'accessToken');
+			const request: any = { headers: { authorization: `Bearer ${token}` } };
+			const { reply, state } = fakeReply();
+
+			await TokenMiddleware.verify(request, reply, () => {});
+
+			expect(state.refused, 'un jeton nominatif ne doit pas être refusé').to.be.false;
+			expect(request.user?._id).to.equal('507f1f77bcf86cd799439011');
 		});
 	});
 

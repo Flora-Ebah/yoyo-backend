@@ -6,6 +6,42 @@ import fs from 'fs';
 import path from 'path';
 import handlebars from 'handlebars';
 import { MessageTypes } from './constants/message-types';
+import { logEvent } from '../../config/logger';
+
+/**
+ * Chiffrement de la connexion SMTP.
+ *
+ * `MAILER_SECURE` reste prioritaire quand elle est renseignée. Absente, on la déduit du port, car
+ * les deux ne sont pas libres l'un de l'autre : 465 attend une session TLS ouverte d'emblée
+ * (`secure: true`), 587 attend une session en clair passée en TLS par STARTTLS (`secure: false`).
+ * Les croiser ne produit pas une erreur lisible mais une connexion qui reste pendue jusqu'au délai
+ * d'expiration — le symptôme le plus coûteux à diagnostiquer d'un changement de fournisseur.
+ */
+const resolveSecure = (port: number): boolean => {
+  const declared = process.env.MAILER_SECURE;
+
+  if (declared !== undefined && declared !== '') return declared === 'true';
+
+  return port === 465;
+};
+
+/**
+ * Expéditeur et adresse de réponse, communs à tous les envois.
+ *
+ * `MAILER_FROM` doit désigner la boîte authentifiée par `MAILER_USER`, ou l'un de ses alias
+ * déclarés chez le fournisseur : Titan refuse en 550 tout expéditeur qu'il n'a pas reconnu comme
+ * appartenant au compte, y compris sur un domaine voisin.
+ *
+ * `replyTo` existe parce que l'expéditeur est une boîte `no-reply` : sans lui, la réponse d'un
+ * marchand à son mail d'activation part dans le vide. `SUPPORT_EMAIL` était déclarée dans
+ * `.env.sample` sans être lue nulle part ; c'est ici qu'elle sert.
+ */
+const buildEnvelope = () => {
+  const from = process.env.MAILER_FROM ?? `${env.appName} <noreply@${env.domain}>`;
+  const replyTo = process.env.SUPPORT_EMAIL;
+
+  return replyTo ? { from, replyTo } : { from };
+};
 
 /**
  * Service d'envoi d'emails
@@ -24,10 +60,12 @@ export class EmailService extends NotificationService {
 
     try {
       // Créer le transporteur Nodemailer avec les mêmes paramètres que le module OTP
+      const port = parseInt(process.env.MAILER_PORT ?? '587');
+
       this.transporter = nodemailer.createTransport({
         host: process.env.MAILER_HOST,
-        port: parseInt(process.env.MAILER_PORT ?? '587'),
-        secure: process.env.MAILER_SECURE === 'true',
+        port,
+        secure: resolveSecure(port),
         auth: {
           user: process.env.MAILER_USER,
           pass: process.env.MAILER_PASSWORD
@@ -38,8 +76,20 @@ export class EmailService extends NotificationService {
         },
       });
 
-      // Vérifier la connexion
-      await this.verifyConnection();
+      // Vérifier la connexion. Son échec ne bloque pas le démarrage — certains serveurs refusent
+      // la commande de vérification tout en acceptant les envois — mais il doit être visible :
+      // silencieux, il ne se manifestait qu'au premier mail perdu, souvent bien plus tard.
+      const reachable = await this.verifyConnection();
+
+      logEvent({
+        type: reachable ? LogLevel.Info : LogLevel.Error,
+        content: reachable
+          ? `Serveur SMTP joignable : ${process.env.MAILER_USER} sur ${process.env.MAILER_HOST}:${port} (TLS ${resolveSecure(port) ? 'direct' : 'STARTTLS'})`
+          : `Serveur SMTP injoignable : ${process.env.MAILER_HOST}:${port}. Les envois échoueront — vérifier MAILER_HOST, MAILER_PORT, MAILER_SECURE et les identifiants.`,
+        location: this.serviceLabel,
+        method: 'init'
+      });
+
       this.initialized = true;
     } catch (error) {
       console.error('Erreur lors de l\'initialisation du service d\'email:', error);
@@ -131,7 +181,7 @@ export class EmailService extends NotificationService {
       
       // Envoyer l'email
       const mailOptions = {
-        from: process.env.MAILER_FROM ?? `${env.appName} <noreply@${env.domain}>`,
+        ...buildEnvelope(),
         to: recipients,
         subject,
         html,
@@ -195,7 +245,7 @@ export class EmailService extends NotificationService {
       
       // Configurer les options d'email
       const mailOptions = {
-        from: process.env.MAILER_FROM ?? `${env.appName} <noreply@${env.domain}>`,
+        ...buildEnvelope(),
         to: [email],
         subject: emailTemplate.subject,
         html: emailTemplate.body

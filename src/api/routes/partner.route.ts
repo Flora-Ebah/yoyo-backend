@@ -1,6 +1,6 @@
 import coddyger, { defines } from 'coddyger';
 import { PartnerController } from '../../modules/partner/partner.controller';
-import { TokenMiddleware } from '../middleware';
+import { AppCheckMiddleware, TokenMiddleware } from '../middleware';
 
 const routePath = '/partners';
 const Controller: PartnerController = new PartnerController();
@@ -713,8 +713,16 @@ const defaultRoute: any = (fastify: any, options, done) => {
     },
     method: 'POST',
     url: `${routePath}/activate`,
-    // Aucun preHandler : le jeton d'activation fait office d'autorisation. Le rate-limit couvre
-    // le risque d'énumération de jetons.
+    // [App Check] Pas de vérification de jeton utilisateur : le jeton d'activation fait office
+    // d'autorisation, le marchand n'a pas encore de session. L'attestation couvre ce que le jeton
+    // d'activation ne couvre pas — l'origine de la requête.
+    //
+    // `verify` et non `verifyLimitedUse` : le jeton d'activation est déjà à usage unique côté
+    // serveur, donc une requête rejouée à l'identique échoue de toute façon. Y ajouter la
+    // consommation de l'attestation coûterait un aller-retour vers Google sans rien fermer de plus.
+    //
+    // Le rate-limit ci-dessous reste la défense contre l'énumération de jetons.
+    preHandler: AppCheckMiddleware.verify,
     config: { rateLimit: { max: 5, timeWindow: '10 minutes' } },
     handler: (request, reply) => {
       const body: any = request.body;

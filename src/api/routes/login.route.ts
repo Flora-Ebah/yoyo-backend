@@ -1,6 +1,6 @@
 import coddyger from 'coddyger';
 import { LoginController } from '../../modules/login/login.controller';
-import { TokenMiddleware } from '../middleware';
+import { AppCheckMiddleware, TokenMiddleware } from '../middleware';
 
 const routePath = '/client';
 const Controller: LoginController = new LoginController();
@@ -27,7 +27,9 @@ const defaultRoute: any = (fastify: any, options, done) => {
 		},
 		method: 'POST',
 		url: `${routePath}/login`,
-		preHandler: TokenMiddleware.verify,
+		// [App Check] Route d'avant-connexion : c'est elle qui **délivre** le jeton utilisateur, elle
+		// ne peut donc pas en exiger un. L'attestation dit d'où vient l'appel, jamais qui le fait.
+		preHandler: AppCheckMiddleware.verify,
 		handler: (request, reply) => {
 			let payload = {
 				login: request.body.login,

@@ -7,6 +7,24 @@ const secretAuthKey: string = env.jwt.secretAuth!;
 
 const daoToken: any = new TokenSet();
 
+/**
+ * [SÉCURITÉ C-01] Un jeton doit désigner quelqu'un.
+ *
+ * `POST /get-token` signait, avec **le même secret** que les jetons utilisateur, une charge utile
+ * anonyme (`{ data: <clé partagée>, reg }`). Rien ne distinguait ce jeton d'une session légitime :
+ * il franchissait `verify` sur **toutes** les routes. C'est ce qui a rendu F-03 (prise de contrôle
+ * de compte) et F-05 (secrets des prestataires de paiement) exploitables sans aucun compte.
+ *
+ * La route a été supprimée, mais la clé reste dans l'historique Git et dans chaque binaire déjà
+ * publié : tout jeton public encore en circulation est valide jusqu'à son expiration. Ce contrôle
+ * les invalide tous immédiatement, quelle que soit leur date d'émission.
+ *
+ * L'attestation d'application (`AppCheckMiddleware`) a pris le relais sur les routes
+ * d'avant-connexion, qui n'exigent donc plus de jeton du tout.
+ */
+const designatesUser = (payload: any): boolean =>
+	typeof payload?._id === 'string' ? payload._id.trim().length > 0 : Boolean(payload?._id);
+
 export class TokenMiddleware {
 	static async verify(request, reply, done) {
 		try {
@@ -38,6 +56,11 @@ export class TokenMiddleware {
 					}
 				});
 			});
+
+			// [SÉCURITÉ C-01] Voir `designatesUser` : un jeton anonyme n'ouvre plus rien.
+			if (!designatesUser(user)) {
+				throw new Error('Jeton non nominatif : cette route exige un utilisateur authentifié.');
+			}
 
 			request.user = user;
 		} catch (error: any) {
@@ -81,6 +104,13 @@ export class TokenMiddleware {
 					} else {
 						if (!user.isAdmin) {
 							reject(new Error('Unauthorized'));
+						}
+
+						// [SÉCURITÉ C-01] Redondant avec `isAdmin` — un jeton public n'en porte pas —
+						// mais `verifyAdmin` désigne systématiquement l'appelant par `request.user._id`
+						// (contrôles de propriété, RBAC) : la garantie doit être explicite ici aussi.
+						if (!designatesUser(user)) {
+							reject(new Error('Jeton non nominatif : cette route exige un administrateur authentifié.'));
 						}
 
 						resolve(user);
@@ -281,9 +311,13 @@ export class TokenMiddleware {
 			// venait du fichier de configuration copié dans l'image Docker ; celle-ci ne portant
 			// plus de configuration, une variable oubliée dans l'environnement de déploiement
 			// produirait des jetons éternels, en silence. D'où ce repli explicite.
-			return jwt.sign(data, secretKey, {
-				expiresIn: expiresIn ?? process.env.JWT_TOKEN_EXPIRE ?? '7d'
-			});
+			// `@types/jsonwebtoken`, arrivé comme dépendance transitive de `firebase-admin`,
+			// restreint `expiresIn` à un littéral typé (`'7d'`, `'12h'`…) ou un nombre de secondes.
+			// La valeur vient de l'environnement, donc d'une chaîne quelconque : la conversion est
+			// explicite, `jwt.sign` validant le format à l'exécution.
+			const ttl = (expiresIn ?? process.env.JWT_TOKEN_EXPIRE ?? '7d') as jwt.SignOptions['expiresIn'];
+
+			return jwt.sign(data, secretKey, { expiresIn: ttl });
 		} else {
 			return jwt.sign(data, secretAuthKey, { expiresIn: '7d' });
 		}
