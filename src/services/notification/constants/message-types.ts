@@ -333,9 +333,6 @@ export class MessageTypes {
         <p>Il ne vous reste qu'une étape : <strong>définir votre mot de passe</strong> pour accéder à votre espace.</p>
         ${emailButton(details?.activationUrl || '#', 'Activer mon compte')}
         <p>Ce lien est valable <strong>${details?.expiresInHours || 72} heures</strong> et ne peut être utilisé qu'une seule fois.</p>
-        <p style="font-size: 13px; line-height: 20px; color: ${BRAND.textMuted};">Si le bouton ne fonctionne pas, copiez ce lien dans votre navigateur :<br>
-          <span style="word-break: break-all; color: ${BRAND.primary};">${details?.activationUrl || ''}</span>
-        </p>
         <p>Si vous n'êtes pas à l'origine de cette demande, ignorez simplement cet e-mail : sans activation, aucun accès n'est possible.</p>
         <p>Cordialement,<br>L'équipe YoYo</p>
       `
