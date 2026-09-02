@@ -27,7 +27,9 @@ export class Main {
   }
 
   private run() {
-    let port = Number(process.env.SERVER_PORT)
+    // Render (et la plupart des PaaS) injectent le port via PORT : on le privilégie,
+    // sinon SERVER_PORT (dev/VPS), sinon 3014 par défaut.
+    let port = Number(process.env.PORT || process.env.SERVER_PORT || 3014)
     
     this.server.listen({ port, host: '0.0.0.0' }, async (err:any, address) => {
       if (err) {

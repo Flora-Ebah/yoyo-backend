@@ -7,6 +7,7 @@ const { PlanSeeder } = require('./plan.seeder');
 const { AdminSeeder } = require('./admin.seeder');
 const { RolesSeeder } = require('./roles.seeder');
 const { CommercialSeeder } = require('./commercial.seeder');
+const { DemoSeeder } = require('./demo.seeder');
 
 class SeederRunner {
   constructor() {
@@ -15,6 +16,7 @@ class SeederRunner {
     this.adminSeeder = new AdminSeeder();
     this.rolesSeeder = new RolesSeeder();
     this.commercialSeeder = new CommercialSeeder();
+    this.demoSeeder = new DemoSeeder();
   }
 
   /**
@@ -43,6 +45,11 @@ class SeederRunner {
       console.log('🛡️  Seeding des rôles...');
       await this.rolesSeeder.seed();
       console.log('✅ Rôles seedés avec succès\n');
+
+      // 5. Données de démonstration (clients, pros/villes, transactions, KYC)
+      console.log('🎭 Seeding des données de démonstration...');
+      await this.demoSeeder.seed();
+      console.log('✅ Données de démonstration seedées avec succès\n');
 
       console.log('🎉 Tous les seeders ont été exécutés avec succès!');
     } catch (error) {
@@ -113,6 +120,15 @@ class SeederRunner {
   }
 
   /**
+   * Exécute seulement le seeder des données de démonstration
+   */
+  async runDemo() {
+    console.log('🎭 Seeding des données de démonstration...');
+    await this.demoSeeder.seed();
+    console.log('✅ Données de démonstration seedées avec succès!');
+  }
+
+  /**
    * Nettoie toutes les données seedées
    */
   async cleanAll() {
@@ -139,5 +155,6 @@ module.exports = {
   PlanSeeder,
   AdminSeeder,
   RolesSeeder,
-  CommercialSeeder
+  CommercialSeeder,
+  DemoSeeder
 };

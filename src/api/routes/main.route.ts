@@ -11,7 +11,9 @@ const tags: string[] = ['Gestion des connexions'];
 // Create a FileUpload instance with appropriate options
 const maxSizeTmp: any = process.env.ALLOWED_FILE_SIZE! ?? 5;
 const maxSize: number = Number(maxSizeTmp) * 1024 * 1024;
-const allowedExtensions: string[] = process.env.ALLOWED_FILE_TYPES!.split(',') ?? [
+const allowedExtensions: string[] = process.env.ALLOWED_FILE_TYPES
+	? process.env.ALLOWED_FILE_TYPES.split(',')
+	: [
 	'.pdf',
 	'.doc',
 	'.docx',

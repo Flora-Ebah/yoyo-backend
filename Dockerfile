@@ -37,6 +37,9 @@ COPY --from=builder /usr/src/app/build ./build
 COPY seed.js load-env.js ./
 COPY seeders/ ./seeders/
 
+# Fichiers de données requis par les seeders (référentiel de catégories, etc.)
+COPY src/config/category-taxonomy.json ./src/config/category-taxonomy.json
+
 # [SÉCURITÉ B-05 / F-08] L'image copiait ici `.env.sample` comme configuration réelle. Elle
 # embarquait donc les secrets d'exemple — clé de signature des jetons et compte administrateur par
 # défaut — dans chaque conteneur. La configuration doit être injectée à l'exécution

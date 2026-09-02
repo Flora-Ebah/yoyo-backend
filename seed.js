@@ -78,6 +78,8 @@ Exemples:
       await seederRunner.runRoles();
     } else if (args.includes('--commercial')) {
       await seederRunner.runCommercial();
+    } else if (args.includes('--demo')) {
+      await seederRunner.runDemo();
     } else {
       // Par défaut, exécuter tous les seeders
       await seederRunner.runAll();

@@ -9,12 +9,13 @@ const daoAdmin: IData<IAdmin> = new AdminSet();
 export class MainHelper {
 	static async generateDefaultProfile(): Promise<any> {
 		try {
-			// Vérifier si un profil super admin existe déjà
-			const existingProfile: any = await daoProfile.exist({
+			// Vérifier si un profil super admin existe déjà (récupérer le document COMPLET,
+			// avec son _id — `exist` peut ne renvoyer qu'un booléen, ce qui cassait la liaison).
+			const existingProfile: any = await daoProfile.selectOne({
 				name: 'Super Administrateur'
 			});
 
-			if (existingProfile) {
+			if (existingProfile && existingProfile._id) {
 				return existingProfile;
 			}
 
@@ -78,6 +79,12 @@ export class MainHelper {
 			// Check if admin already exists
 			const existingAdmin: any = await daoAdmin.selectOne({ email });
 			if (existingAdmin) {
+				// Auto-réparation : un admin sans profil lié n'a aucun droit côté front.
+				if (!existingAdmin.profile && defaultProfile && (defaultProfile as any)._id) {
+					await daoAdmin.update({ email }, { profile: (defaultProfile as any)._id });
+					console.log('=====> Admin par défaut relié au profil Super Administrateur :', email);
+				}
+
 				return existingAdmin;
 			}
 
@@ -119,6 +126,31 @@ export class MainHelper {
 
 			// Then generate default admin with this profile
 			await this.generateDefaultAdmin(defaultProfile);
+
+			// Filet de sécurité (réparation) : relier via les modèles Mongoose bruts tout admin
+			// sans profil vers un profil disposant de droits (manage/all).
+			try {
+				const mongoose = require('mongoose');
+				const Admin = mongoose.model('Admin');
+				const Profile = mongoose.model('Profile');
+
+				const superProfile =
+					(await Profile.findOne({ name: 'Super Administrateur', status: 'active' })) ||
+					(await Profile.findOne({ 'ability.0': { $exists: true }, status: 'active' }));
+
+				if (superProfile && superProfile._id) {
+					const res = await Admin.updateMany(
+						{ status: { $ne: 'removed' }, $or: [{ profile: { $exists: false } }, { profile: null }] },
+						{ $set: { profile: superProfile._id } }
+					);
+
+					if (res.modifiedCount > 0) {
+						console.log(`=====> ${res.modifiedCount} admin(s) relié(s) au profil "${superProfile.name}"`);
+					}
+				}
+			} catch (repairErr) {
+				console.error('Réparation du profil admin échouée :', repairErr);
+			}
 
 			return defaultProfile;
 		} catch (error) {
