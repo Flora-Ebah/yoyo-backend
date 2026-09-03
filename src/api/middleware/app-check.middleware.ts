@@ -73,21 +73,6 @@ const getFirebaseApp = (): App | null => {
 	}
 };
 
-/**
- * Vrai si la route figure dans la liste de rejet anticipé.
- *
- * Comparaison par fragment, en minuscules : la liste porte des chemins courts
- * (`/clients/register`) tandis que Fastify expose l'URL préfixée (`/v1/yoyo/clients/register`).
- *
- * Exporté pour être testé sans dépendre de la configuration du processus.
- */
-export const matchesEnforcedRoute = (routeUrl: string, patterns: string[]): boolean => {
-	if (!routeUrl || patterns.length === 0) return false;
-	const normalized = routeUrl.toLowerCase();
-
-	return patterns.some(pattern => normalized.includes(pattern));
-};
-
 type AttestationOutcome = { attested: true; replayed: boolean } | { attested: false; reason: string };
 
 /**
@@ -110,7 +95,7 @@ const evaluate = async (request: any, { consume }: { consume: boolean }): Promis
 		return { attested: false, reason: 'configuration Firebase absente côté serveur' };
 	}
 
-	const wantsConsumption = consume && config.appCheck.consume && !consumptionUnavailable;
+	const wantsConsumption = consume && !consumptionUnavailable;
 	let consumptionError: any = null;
 
 	if (wantsConsumption) {
@@ -153,7 +138,7 @@ const evaluate = async (request: any, { consume }: { consume: boolean }): Promis
  * Corps commun de `verify` et `verifyLimitedUse`.
  */
 const run = async (request: any, reply: any, { consume }: { consume: boolean }) => {
-	if (!config.appCheck.enabled) return;
+	if (config.appCheck.mode === 'off') return;
 
 	const outcome = await evaluate(request, { consume });
 	// `request.routerPath` est déprécié et disparaît dans Fastify 5 ; `routeOptions.url` est son
@@ -161,16 +146,14 @@ const run = async (request: any, reply: any, { consume }: { consume: boolean }) 
 	const routeUrl = request.routeOptions?.url ?? request.url ?? '';
 	const route = `${request.method} ${routeUrl}`;
 
-	// Rejet global, ou rejet anticipé sur cette route précise. Le second permet de fermer les
-	// routes qu'aucune application en retard n'appelle, sans attendre la migration de toutes.
-	const enforced = config.appCheck.enforce || matchesEnforcedRoute(routeUrl, config.appCheck.enforceRoutes);
+	const enforced = config.appCheck.mode === 'enforce';
 
 	if (outcome.attested) {
 		if (!outcome.replayed) {
 			// En observation, le succès est journalisé lui aussi : sans cela, « aucune requête
 			// refusée » et « aucune requête reçue » produiraient la même trace — c'est-à-dire
 			// aucune. Or la décision d'activer le rejet se prend sur un **taux**, pas sur un
-			// silence. Cette ligne disparaît d'elle-même une fois `APP_CHECK_ENFORCE=true`.
+			// silence. Cette ligne disparaît d'elle-même une fois `APP_CHECK=enforce`.
 			if (!enforced) {
 				logEvent({
 					type: LogLevel.Info,
@@ -245,14 +228,12 @@ export class AppCheckMiddleware {
 	 * données d'un utilisateur ; il protège les routes qu'aucune identité ne peut protéger, parce
 	 * qu'elles servent justement à s'inscrire ou à récupérer son accès.
 	 *
-	 * Trois comportements, pilotés par la configuration :
-	 *  - `APP_CHECK_ENABLED=false` (défaut) : ne fait rien du tout ;
-	 *  - `APP_CHECK_ENABLED=true`, `APP_CHECK_ENFORCE=false` : vérifie et journalise, laisse passer ;
-	 *  - les deux à `true` : rejette en 401 les requêtes non attestées.
+	 * Une seule variable, `APP_CHECK`, décide de tout :
+	 *  - `off`     : ne fait rien du tout ;
+	 *  - `observe` : vérifie et journalise, laisse passer — pour mesurer avant de couper ;
+	 *  - `enforce` : rejette en 401 les requêtes non attestées.
 	 *
-	 * `APP_CHECK_ENFORCE_ROUTES` ouvre une quatrième voie : rejeter sur certaines routes seulement,
-	 * avant l'interrupteur global. Les applications ne migrent pas toutes en même temps, et
-	 * attendre la dernière pour protéger les premières laisse ouvertes des routes déjà couvertes.
+	 * Absente ou non reconnue, elle vaut `enforce` : on échoue fermé.
 	 */
 	static async verify(request: any, reply: any, done?: any) {
 		return run(request, reply, { consume: false });
@@ -270,13 +251,14 @@ export class AppCheckMiddleware {
 	 * (30 minutes par défaut). Google la marque ici comme utilisée et signale toute présentation
 	 * ultérieure du même jeton.
 	 *
-	 * ⚠️ **Contrat côté client** : ces routes doivent recevoir un jeton **à usage unique**
-	 * (`getLimitedUseToken()`), pas le jeton mis en cache par le SDK — sans quoi le deuxième appel
-	 * légitime serait signalé comme un rejeu.
+	 * ⚠️ **Contrat côté client, désormais impératif** : ces deux routes doivent recevoir un jeton
+	 * **à usage unique** (`getLimitedUseToken()`), jamais celui que le SDK met en cache. La
+	 * détection n'a plus d'interrupteur pour amortir un écart : une application qui réutiliserait
+	 * un jeton verrait ses **deuxièmes appels légitimes** refusés comme des rejeux.
 	 *
-	 * ⚠️ **Contrat côté infrastructure** : `APP_CHECK_CONSUME=true` et le rôle IAM *Firebase App
-	 * Check Token Verifier* sur le compte de service. À défaut, la détection se désactive d'elle-même
-	 * après un échec, en le journalisant : la route reste attestée, simplement sans contrôle de rejeu.
+	 * ⚠️ **Contrat côté infrastructure** : le rôle IAM *Firebase App Check Token Verifier* sur le
+	 * compte de service. À défaut, la détection se désactive d'elle-même après un échec, en le
+	 * journalisant : la route reste attestée, simplement sans contrôle de rejeu.
 	 */
 	static async verifyLimitedUse(request: any, reply: any, done?: any) {
 		return run(request, reply, { consume: true });

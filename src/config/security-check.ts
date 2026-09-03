@@ -1,4 +1,5 @@
 import { LogLevel } from 'coddyger';
+import { parseAppCheckMode } from './env';
 import { logEvent } from './logger';
 
 /**
@@ -36,11 +37,12 @@ const MIN_SIGNING_SECRET_LENGTH = 32;
 const MIN_ADMIN_PASSWORD_LENGTH = 8;
 
 /**
- * `ENV` porte parfois un commentaire en ligne (`dev # dev | prod`) : on ne compare donc pas la
- * valeur brute.
+ * Nettoyage commun aux variables que les fichiers du projet écrivent avec un commentaire en ligne
+ * (`dev # dev | prod`, `enforce # off | observe | enforce`) : on ne compare jamais la valeur brute.
  */
-export const isProduction = (raw = process.env.ENV): boolean =>
-	(raw ?? '').split('#')[0].trim().toLowerCase().startsWith('prod');
+const normalize = (raw?: string): string => (raw ?? '').split('#')[0].trim().toLowerCase();
+
+export const isProduction = (raw = process.env.ENV): boolean => normalize(raw).startsWith('prod');
 
 /**
  * Renvoie la liste des problèmes de configuration. Vide = configuration saine.
@@ -120,9 +122,19 @@ export const collectAppCheckWarnings = (source: NodeJS.ProcessEnv = process.env)
 		);
 	}
 
-	if (source.APP_CHECK_ENABLED !== 'true') {
+	const mode = parseAppCheckMode(source.APP_CHECK);
+
+	// Une valeur non reconnue est traitée comme `enforce` : le comportement est sûr, mais celui qui
+	// a écrit la variable croit avoir réglé autre chose. Le dire évite un « pourquoi ça bloque ? ».
+	if (source.APP_CHECK !== undefined && parseAppCheckMode(source.APP_CHECK) !== normalize(source.APP_CHECK)) {
 		warnings.push(
-			"APP_CHECK_ENABLED n'est pas à `true` : les 8 routes d'avant-connexion n'ont plus aucun contrôle d'origine depuis la suppression du jeton public (C-01)."
+			`APP_CHECK vaut « ${source.APP_CHECK} », qui n'est pas une valeur reconnue : off, observe ou enforce. Le mode strict (enforce) s'applique.`
+		);
+	}
+
+	if (mode === 'off') {
+		warnings.push(
+			"APP_CHECK=off : les 8 routes d'avant-connexion n'ont plus aucun contrôle d'origine depuis la suppression du jeton public (C-01)."
 		);
 		return warnings;
 	}
@@ -142,15 +154,9 @@ export const collectAppCheckWarnings = (source: NodeJS.ProcessEnv = process.env)
 		);
 	}
 
-	const enforcing = source.APP_CHECK_ENFORCE === 'true';
-	const enforcedRoutes = (source.APP_CHECK_ENFORCE_ROUTES ?? '')
-		.split(',')
-		.map(route => route.trim())
-		.filter(route => route.length > 0);
-
-	if (!enforcing && enforcedRoutes.length === 0) {
+	if (mode === 'observe') {
 		warnings.push(
-			"App Check est en observation pure : il journalise sans rien rejeter, et aucune route n'est fermée par APP_CHECK_ENFORCE_ROUTES. Les routes d'avant-connexion restent donc ouvertes. Fermer route par route dès que les journaux d'observation le permettent."
+			"APP_CHECK=observe : App Check journalise sans rien rejeter, les routes d'avant-connexion restent donc ouvertes. Passer à `enforce` dès que les journaux d'observation le permettent."
 		);
 	}
 

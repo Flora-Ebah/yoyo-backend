@@ -35,7 +35,7 @@ const defaultRoute: any = (fastify: any, options, done) => {
     url: `${routePath}/register`,
     // [App Check] Route d'avant-connexion : aucune identité utilisateur ne peut la protéger,
     // c'est donc l'attestation de l'application qui la garde — seule, depuis la suppression du
-    // jeton public (C-01). Piloté par `APP_CHECK_ENFORCE` / `APP_CHECK_ENFORCE_ROUTES`.
+    // jeton public (C-01). Piloté par `APP_CHECK` (off | observe | enforce).
     preHandler: AppCheckMiddleware.verify,
     handler: (request, reply) => {
       let body: any = request.body;

@@ -1,5 +1,6 @@
 import { expect } from 'chai';
 import { collectAppCheckWarnings, collectConfigurationIssues, isProduction } from '../config/security-check';
+import { parseAppCheckMode } from '../config/env';
 
 /**
  * [SÉCURITÉ B-05 / F-08] Le dépôt publiait ses propres secrets : `SEEDERS_SETUP.md` donnait la clé
@@ -89,8 +90,7 @@ describe('[Sécurité] Configuration au démarrage', () => {
 	 */
 	describe("C-01 — Posture de l'attestation d'application", () => {
 		const attested = {
-			APP_CHECK_ENABLED: 'true',
-			APP_CHECK_ENFORCE: 'true',
+			APP_CHECK: 'enforce',
 			FIREBASE_PROJECT_ID: 'yoyo-la-carte',
 			FIREBASE_CLIENT_EMAIL: 'sa@yoyo.iam.gserviceaccount.com',
 			FIREBASE_PRIVATE_KEY: '-----BEGIN PRIVATE KEY-----'
@@ -107,9 +107,9 @@ describe('[Sécurité] Configuration au démarrage', () => {
 		 * garde depuis la suppression du jeton public.
 		 */
 		it("signale une attestation désactivée", () => {
-			const warnings = warningsFor({ APP_CHECK_ENABLED: 'false' });
+			const warnings = warningsFor({ APP_CHECK: 'off' });
 			expect(warnings).to.have.lengthOf(1);
-			expect(warnings[0]).to.contain('APP_CHECK_ENABLED');
+			expect(warnings[0]).to.contain('APP_CHECK=off');
 		});
 
 		it('signale des identifiants Firebase incomplets', () => {
@@ -118,20 +118,20 @@ describe('[Sécurité] Configuration au démarrage', () => {
 			expect(warnings[0]).to.contain('FIREBASE_PRIVATE_KEY');
 		});
 
-		it("signale l'observation pure, où rien n'est rejeté", () => {
-			const warnings = warningsFor({ APP_CHECK_ENFORCE: 'false' });
+		it("signale l'observation, où rien n'est rejeté", () => {
+			const warnings = warningsFor({ APP_CHECK: 'observe' });
 			expect(warnings).to.have.lengthOf(1);
-			expect(warnings[0]).to.contain('observation');
+			expect(warnings[0]).to.contain('observe');
 		});
 
 		/**
-		 * Le rejet route par route est l'étape intermédiaire prévue : il ferme ce qu'aucune
-		 * application en retard n'appelle. Une liste non vide vaut donc protection.
+		 * Le comportement est sûr — `enforce` s'applique — mais celui qui a écrit la variable croit
+		 * avoir réglé autre chose. Sans cet avertissement, il cherche la panne dans le code.
 		 */
-		it("ne signale rien quand des routes sont fermées une à une", () => {
-			expect(
-				warningsFor({ APP_CHECK_ENFORCE: 'false', APP_CHECK_ENFORCE_ROUTES: '/clients/register,/otp/verify' })
-			).to.deep.equal([]);
+		it('signale une valeur non reconnue tout en appliquant le mode strict', () => {
+			const warnings = warningsFor({ APP_CHECK: 'true' });
+			expect(warnings).to.have.lengthOf(1);
+			expect(warnings[0]).to.contain('off, observe ou enforce');
 		});
 
 		/**
@@ -146,7 +146,56 @@ describe('[Sécurité] Configuration au démarrage', () => {
 		});
 
 		it("n'est pas comptée parmi les problèmes bloquants", () => {
-			expect(collectConfigurationIssues({ ...sound, APP_CHECK_ENABLED: 'false' })).to.deep.equal([]);
+			expect(collectConfigurationIssues({ ...sound, APP_CHECK: 'off' })).to.deep.equal([]);
+		});
+	});
+
+	/**
+	 * [C-01] `APP_CHECK` a remplacé quatre variables (`APP_CHECK_ENABLED`, `APP_CHECK_ENFORCE`,
+	 * `APP_CHECK_ENFORCE_ROUTES`, `APP_CHECK_CONSUME`) dont les combinaisons étaient illisibles —
+	 * au point qu'une configuration en place déclarait une liste de routes que le court-circuit du
+	 * `||` rendait morte.
+	 *
+	 * Tout le risque du changement tient désormais dans cet analyseur : c'est lui seul qui décide
+	 * si une plateforme rejette ou laisse passer.
+	 */
+	describe('APP_CHECK — lecture de la posture', () => {
+		it('reconnaît les trois valeurs nominales', () => {
+			expect(parseAppCheckMode('off')).to.equal('off');
+			expect(parseAppCheckMode('observe')).to.equal('observe');
+			expect(parseAppCheckMode('enforce')).to.equal('enforce');
+		});
+
+		it('ignore la casse et les espaces', () => {
+			expect(parseAppCheckMode('  Off ')).to.equal('off');
+			expect(parseAppCheckMode('ENFORCE')).to.equal('enforce');
+		});
+
+		/**
+		 * `.env.sample` documente les valeurs acceptées en commentaire de fin de ligne, et le
+		 * fichier réel finit toujours par le recopier — c'est déjà le cas de `ENV`.
+		 */
+		it('tolère un commentaire en fin de ligne', () => {
+			expect(parseAppCheckMode('observe # off | observe | enforce')).to.equal('observe');
+		});
+
+		/**
+		 * Le cœur du sujet : on échoue **fermé**. Une variable oubliée dans un nouvel environnement
+		 * doit protéger, jamais ouvrir — c'était exactement le défaut de C-01.
+		 */
+		it('applique le mode strict quand la variable est absente', () => {
+			expect(parseAppCheckMode(undefined)).to.equal('enforce');
+			expect(parseAppCheckMode('')).to.equal('enforce');
+		});
+
+		/**
+		 * Le piège propre à cette migration : quelqu'un recopie l'ancien `APP_CHECK_ENABLED=true`.
+		 * Une lecture permissive ouvrirait alors les 8 routes d'avant-connexion en silence.
+		 */
+		it("applique le mode strict sur l'ancienne valeur booléenne", () => {
+			expect(parseAppCheckMode('true')).to.equal('enforce');
+			expect(parseAppCheckMode('false')).to.equal('enforce');
+			expect(parseAppCheckMode('yes')).to.equal('enforce');
 		});
 	});
 

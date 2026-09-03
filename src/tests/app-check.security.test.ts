@@ -1,5 +1,5 @@
 import { expect } from 'chai';
-import { AppCheckMiddleware, TokenMiddleware, matchesEnforcedRoute } from '../api/middleware';
+import { AppCheckMiddleware, TokenMiddleware } from '../api/middleware';
 import clientRoute from '../api/routes/client.route';
 import loginRoute from '../api/routes/login.route';
 import otpRoute from '../api/routes/otp.route';
@@ -181,51 +181,6 @@ describe("[Sécurité] Attestation d'application (App Check)", () => {
 		].forEach(handlers => {
 			expect(handlers).to.include(AppCheckMiddleware.verify);
 			expect(handlers).to.not.include(TokenMiddleware.verify);
-		});
-	});
-
-	/**
-	 * [Déploiement progressif] `APP_CHECK_ENFORCE` est global : il attend que la dernière
-	 * application ait migré. `APP_CHECK_ENFORCE_ROUTES` permet de fermer les routes qu'aucune
-	 * application en retard n'appelle, sans attendre.
-	 *
-	 * La correspondance se fait par fragment, parce que la liste porte des chemins courts alors
-	 * que Fastify expose l'URL préfixée. C'est commode et c'est exactement pour cela que ça mérite
-	 * un test : un fragment trop court fermerait des routes qu'on ne visait pas.
-	 */
-	describe('Rejet anticipé, route par route', () => {
-		it('reconnaît une route malgré le préfixe de montage', () => {
-			expect(matchesEnforcedRoute('/v1/yoyo/clients/register', ['/clients/register'])).to.be.true;
-		});
-
-		it('ignore la casse', () => {
-			expect(matchesEnforcedRoute('/v1/yoyo/clients/updatePassword', ['/clients/updatepassword'])).to.be.true;
-		});
-
-		it('ne ferme rien quand la liste est vide', () => {
-			expect(matchesEnforcedRoute('/v1/yoyo/clients/register', [])).to.be.false;
-		});
-
-		it("ne ferme pas une route absente de la liste", () => {
-			expect(matchesEnforcedRoute('/v1/yoyo/client/login', ['/clients/register', '/otp/verify'])).to.be.false;
-		});
-
-		/**
-		 * Le risque propre au filtrage par fragment : `/otp/verify` ne doit pas emporter
-		 * `/otp/verify-something`, et surtout `/client/login` et `/clients/...` sont deux préfixes
-		 * distincts qu'une correspondance approximative confondrait.
-		 */
-		it('ne déborde pas sur une route au chemin voisin', () => {
-			expect(matchesEnforcedRoute('/v1/yoyo/clients/verify-login', ['/client/login'])).to.be.false;
-			expect(matchesEnforcedRoute('/v1/yoyo/otp/password-reset/request', ['/otp/verify'])).to.be.false;
-		});
-
-		it('accepte plusieurs routes à la fois', () => {
-			const patterns = ['/clients/verify-login', '/otp/password-reset/request'];
-
-			expect(matchesEnforcedRoute('/v1/yoyo/clients/verify-login', patterns)).to.be.true;
-			expect(matchesEnforcedRoute('/v1/yoyo/otp/password-reset/request', patterns)).to.be.true;
-			expect(matchesEnforcedRoute('/v1/yoyo/clients/register', patterns)).to.be.false;
 		});
 	});
 
