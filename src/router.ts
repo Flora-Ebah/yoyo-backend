@@ -98,6 +98,29 @@ export default class Router {
 			});
 		});
 
+		// Android App Links : Android télécharge ce fichier pour vérifier que l'app peut ouvrir les
+		// liens https du domaine (ex. le lien d'activation marchand `/activation?token=…`). DOIT être
+		// servi à `/.well-known/assetlinks.json` (racine, hors préfixe versionné), en JSON, 200.
+		// Le(s) SHA-256 de la clé de signature viennent de `ANDROID_CERT_SHA256` (séparés par des
+		// virgules) — récupérables via `eas credentials`. Sans la variable, la liste est vide.
+		this.router.get('/.well-known/assetlinks.json', async (request, reply) => {
+			const fingerprints = (process.env.ANDROID_CERT_SHA256 ?? '')
+				.split(',')
+				.map(s => s.trim())
+				.filter(Boolean);
+
+			return reply.status(defines.status.requestOK).send([
+				{
+					relation: ['delegate_permission/common.handle_all_urls'],
+					target: {
+						namespace: 'android_app',
+						package_name: process.env.ANDROID_PACKAGE_NAME ?? 'com.yoyopro.yoyoafrica',
+						sha256_cert_fingerprints: fingerprints
+					}
+				}
+			]);
+		});
+
 		this.router.get(`${prefix}/container`, async (request, reply) => {
 			let Q = Promise.resolve({
 					status: defines.status.created,
