@@ -72,6 +72,16 @@ export default class Router {
 			prefix: prefix + '/file/'
 			// constraints: { host: 'example.com' } // optional: default {}
 		});
+		// Assets publics des e-mails (logo, favicon…) : fichiers versionnés dans le dépôt
+		// (`src/public/mail-template/images/`), servis en lecture seule. C'est la cible de
+		// `MAIL_ASSETS_URL` (voir `email-theme.ts` → `logoSrc`), qui vaut donc `<host>${prefix}/assets`.
+		// `decorateReply: false` est obligatoire : @fastify/static est déjà enregistré ci-dessus pour
+		// `/file/` et il ne peut décorer `reply.sendFile` qu'une seule fois.
+		this.router.register(require('@fastify/static'), {
+			root: path.join(coddyger.root() + '/src/public/mail-template/images/'),
+			prefix: prefix + '/assets/',
+			decorateReply: false
+		});
 		// Log requests
 		this.router.addHook('onResponse', (request, reply, done) => {
 			console.log(`${request.method} ${request.url} :: ${reply.statusCode}`);
