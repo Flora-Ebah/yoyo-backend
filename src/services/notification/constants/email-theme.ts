@@ -53,8 +53,10 @@ export function logoSrc(): string {
 	return `${base}/${LOGO_FILENAME}`;
 }
 
+// Même police que le back-office admin (`@core/theme` → Plus Jakarta Sans). Repli système pour
+// les clients de messagerie qui ne chargent pas la webfont.
 const FONT_STACK =
-	"Montserrat, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif";
+	"'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif";
 
 /**
  * Bouton d'action principal, en `<table>` pour rester cliquable sur toute sa surface sous Outlook
@@ -84,6 +86,54 @@ export function emailButton(url: string, label: string): string {
 }
 
 /**
+ * Encart d'informations clé/valeur (boutique, date, appareil, expiration…).
+ * Même style discret que l'encart du mail d'activation, factorisé pour être réutilisé
+ * par tous les mails qui présentent des détails.
+ *
+ * @param rows Lignes à afficher ; les valeurs vides sont ignorées.
+ */
+export function infoBox(rows: Array<{ label: string; value?: string | number | null }>): string {
+	const cells = rows
+		.filter(r => r.value !== undefined && r.value !== null && String(r.value).trim() !== '')
+		.map(
+			r => `<tr>
+              <td style="mso-line-height-rule: exactly; color: ${BRAND.textMuted}; padding: 4px 0; font-family: ${FONT_STACK}; font-size: 13px;">${r.label}</td>
+              <td align="right" style="mso-line-height-rule: exactly; color: ${BRAND.text}; font-weight: 600; padding: 4px 0; font-family: ${FONT_STACK}; font-size: 13px;">${r.value}</td>
+            </tr>`
+		)
+		.join('');
+
+	if (!cells) return '';
+
+	return `
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color: ${BRAND.surfaceTinted}; margin: 4px 0 20px;">
+        <tr><td style="mso-line-height-rule: exactly; padding: 14px 18px;">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">${cells}</table>
+        </td></tr>
+      </table>`;
+}
+
+/**
+ * Note de bas de message discrète — typiquement le « si vous n'êtes pas à l'origine… ».
+ * Barre d'accent à gauche, fond très clair, pour attirer l'œil sans dramatiser.
+ *
+ * @param text Contenu (HTML inline autorisé)
+ * @param tone `muted` (gris, défaut) ou `danger` (accent rouge, pour les alertes réelles)
+ */
+export function securityNote(text: string, tone: 'muted' | 'danger' = 'muted'): string {
+	const accent = tone === 'danger' ? BRAND.danger : BRAND.textMuted;
+	const bg = tone === 'danger' ? '#FDECEA' : '#F4F6F7';
+
+	return `
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin: 4px 0 20px;">
+        <tr>
+          <td width="3" style="mso-line-height-rule: exactly; background-color: ${accent}; line-height: 1px;">&zwnj;</td>
+          <td style="mso-line-height-rule: exactly; background-color: ${bg}; padding: 12px 16px; font-family: ${FONT_STACK}; font-size: 13px; line-height: 20px; color: ${BRAND.textMuted};">${text}</td>
+        </tr>
+      </table>`;
+}
+
+/**
  * Encart mettant en valeur un code à usage unique.
  * @param code Code à afficher
  */
@@ -108,10 +158,19 @@ export function codeBox(code: string): string {
  * @param options.preheader Texte d'aperçu affiché par la boîte de réception à côté de l'objet
  * @param options.title Titre affiché en surtitre, au-dessus du contenu
  */
-export function wrapEmail(content: string, options?: { preheader?: string; title?: string; hero?: string }): string {
+export function wrapEmail(
+	content: string,
+	options?: { preheader?: string; title?: string; hero?: string; heroTone?: 'brand' | 'neutral' }
+): string {
 	const year = new Date().getFullYear();
 	const preheader = options?.preheader ?? '';
 	const label = options?.title ?? 'YoYo';
+	// Bandeau hero : orange chaleureux par défaut ; ton neutre (ardoise) pour les messages de
+	// sécurité ou négatifs (alerte, échec, suppression) où l'orange festif serait déplacé.
+	const heroBg =
+		options?.heroTone === 'neutral'
+			? `background-color: #37474F; background-image: linear-gradient(135deg, #37474F 0%, #546E7A 100%);`
+			: `background-color: ${BRAND.primary}; background-image: linear-gradient(135deg, ${BRAND.primary} 0%, ${BRAND.primaryLight} 100%);`;
 
 	return `<!DOCTYPE html>
 <html lang="fr" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office">
@@ -129,7 +188,7 @@ export function wrapEmail(content: string, options?: { preheader?: string; title
     <xml><o:officedocumentsettings><o:pixelsperinch>96</o:pixelsperinch></o:officedocumentsettings></xml>
   <![endif]-->
   <title>${label}</title>
-  <link href="https://fonts.googleapis.com/css?family=Montserrat:wght@400;500;600;700&display=swap" rel="stylesheet" media="screen">
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" media="screen">
   <style>
     /* Typographie du contenu : ignoree par quelques clients, sans consequence — la structure et
        les couleurs porteuses de sens restent en style en ligne. */
@@ -198,7 +257,7 @@ export function wrapEmail(content: string, options?: { preheader?: string; title
                       <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="width: 100%;">
                         ${
                           options?.hero
-                            ? `<tr><td style="mso-line-height-rule: exactly; background-color: ${BRAND.primary}; background-image: linear-gradient(135deg, ${BRAND.primary} 0%, ${BRAND.primaryLight} 100%); padding: 24px 30px;">
+                            ? `<tr><td style="mso-line-height-rule: exactly; ${heroBg} padding: 24px 30px;">
                               <table role="presentation" align="center" cellpadding="0" cellspacing="0" border="0" style="margin: 0 auto;">
                                 <tr>
                                   <td style="mso-line-height-rule: exactly; vertical-align: middle; padding-right: 14px;">

@@ -1,4 +1,4 @@
-import { BRAND, codeBox, emailButton, wrapEmail } from './email-theme';
+import { BRAND, codeBox, emailButton, infoBox, securityNote, wrapEmail } from './email-theme';
 
 /**
  * Types de messages pour les communications avec les utilisateurs
@@ -63,7 +63,7 @@ export class MessageTypes {
   /**
    * Templates d'e-mails.
    *
-   * ⚠️ La signature est **imposée** : `(code, name, details)`, dans cet ordre, y compris pour les
+   * La signature est **imposée** : `(code, name, details)`, dans cet ordre, y compris pour les
    * messages qui n'utilisent pas de code — `getEmailTemplate` appelle toujours
    * `template(code, name, details)`. Quinze templates déclaraient `(name, details)` : `name` y
    * recevait donc le code (une chaîne vide hors OTP, d'où un « cher utilisateur » systématique) et
@@ -73,265 +73,297 @@ export class MessageTypes {
   static readonly EMAIL_TEMPLATES = {
     [MessageTypes.TYPES.ACCOUNT_VERIFICATION]: {
       subject: 'Vérification de votre compte YoYo',
+      hero: 'Vérifiez votre compte',
       template: (code: string, name?: string) => `
-        <h2 style="text-align: center;">Vérification de votre compte</h2>
-        <p>Bonjour ${name || 'cher utilisateur'},</p>
-        <p>Merci d'avoir créé un compte sur notre plateforme. Pour finaliser votre inscription, veuillez utiliser le code de vérification suivant :</p>
+        <p>Bonjour <strong>${name || 'cher utilisateur'}</strong></p>
+        <p>Bienvenue chez YoYo ! Pour finaliser votre inscription, saisissez ce code de vérification :</p>
         ${codeBox(code)}
-        <p>Ce code est valable pendant 10 minutes.</p>
-        <p>Si vous n'avez pas demandé ce code, veuillez ignorer cet email.</p>
-        <p>Cordialement,<br>L'équipe YoYo</p>
+        ${infoBox([{ label: 'Validité du code', value: '10 minutes · usage unique' }])}
+        ${securityNote("Vous n'avez pas créé de compte YoYo ? Ignorez simplement cet e-mail, aucune action ne sera engagée.")}
+        <p>À très vite,<br>L'équipe YoYo</p>
       `
     },
     [MessageTypes.TYPES.PASSWORD_RESET]: {
       subject: 'Réinitialisation de votre mot de passe YoYo',
+      hero: 'Réinitialisation du mot de passe',
       template: (code: string, name?: string) => `
-        <h2 style="text-align: center;">Réinitialisation de mot de passe</h2>
-        <p>Bonjour ${name || 'cher utilisateur'},</p>
-        <p>Vous avez demandé la réinitialisation de votre mot de passe. Veuillez utiliser le code suivant pour confirmer cette action :</p>
+        <p>Bonjour <strong>${name || 'cher utilisateur'}</strong></p>
+        <p>Vous avez demandé à réinitialiser votre mot de passe. Utilisez ce code pour confirmer :</p>
         ${codeBox(code)}
-        <p>Ce code est valable pendant 10 minutes.</p>
-        <p>Si vous n'avez pas demandé cette réinitialisation, veuillez sécuriser votre compte immédiatement.</p>
-        <p>Cordialement,<br>L'équipe YoYo</p>
+        ${infoBox([{ label: 'Validité du code', value: '10 minutes · usage unique' }])}
+        ${securityNote("Vous n'êtes pas à l'origine de cette demande ? Ignorez cet e-mail : votre mot de passe restera inchangé.")}
+        <p>À très vite,<br>L'équipe YoYo</p>
       `
     },
     [MessageTypes.TYPES.LOGIN_VERIFICATION]: {
       subject: 'Code de vérification pour votre connexion YoYo',
+      hero: 'Vérification de connexion',
       template: (code: string, name?: string) => `
-        <h2 style="text-align: center;">Vérification de connexion</h2>
-        <p>Bonjour ${name || 'cher utilisateur'},</p>
-        <p>Nous avons détecté une tentative de connexion à votre compte. Veuillez utiliser le code suivant pour confirmer qu'il s'agit bien de vous :</p>
+        <p>Bonjour <strong>${name || 'cher utilisateur'}</strong></p>
+        <p>Une connexion à votre compte a été demandée. Saisissez ce code pour confirmer que c'est bien vous :</p>
         ${codeBox(code)}
-        <p>Ce code est valable pendant 10 minutes.</p>
-        <p>Si vous n'avez pas tenté de vous connecter, veuillez sécuriser votre compte immédiatement.</p>
-        <p>Cordialement,<br>L'équipe YoYo</p>
+        ${infoBox([{ label: 'Validité du code', value: '10 minutes · usage unique' }])}
+        ${securityNote("Vous n'êtes pas à l'origine de cette connexion ? Sécurisez votre compte en changeant votre mot de passe.")}
+        <p>À très vite,<br>L'équipe YoYo</p>
       `
     },
     [MessageTypes.TYPES.TWO_FACTOR_AUTH]: {
       subject: 'Code d\'authentification à deux facteurs YoYo',
+      hero: 'Authentification à deux facteurs',
       template: (code: string, name?: string) => `
-        <h2 style="text-align: center;">Authentification à deux facteurs</h2>
-        <p>Bonjour ${name || 'cher utilisateur'},</p>
-        <p>Pour compléter votre processus d'authentification à deux facteurs, veuillez utiliser le code suivant :</p>
+        <p>Bonjour <strong>${name || 'cher utilisateur'}</strong></p>
+        <p>Pour finaliser votre authentification à deux facteurs, saisissez ce code :</p>
         ${codeBox(code)}
-        <p>Ce code est valable pendant 5 minutes.</p>
-        <p>Si vous n'avez pas initié cette connexion, veuillez sécuriser votre compte immédiatement.</p>
-        <p>Cordialement,<br>L'équipe YoYo</p>
+        ${infoBox([{ label: 'Validité du code', value: '5 minutes · usage unique' }])}
+        ${securityNote("Vous n'avez pas initié cette connexion ? Sécurisez votre compte immédiatement.")}
+        <p>À très vite,<br>L'équipe YoYo</p>
       `
     },
     [MessageTypes.TYPES.TRANSACTION_CONFIRMATION]: {
       subject: 'Confirmation de transaction YoYo',
+      hero: 'Confirmation de transaction',
       template: (code: string, name?: string, details?: any) => `
-        <h2 style="text-align: center;">Confirmation de transaction</h2>
-        <p>Bonjour ${name || 'cher utilisateur'},</p>
-        <p>Nous avons besoin de confirmer une transaction sur votre compte${details ? ' (' + details.amount + ' ' + details.currency + ')' : ''}. Veuillez utiliser le code suivant pour autoriser cette opération :</p>
+        <p>Bonjour <strong>${name || 'cher utilisateur'}</strong></p>
+        <p>Confirmez cette transaction sur votre compte à l'aide du code ci-dessous :</p>
         ${codeBox(code)}
-        <p>Ce code est valable pendant 10 minutes.</p>
-        <p>Si vous n'avez pas initié cette transaction, veuillez contacter notre service client immédiatement.</p>
-        <p>Cordialement,<br>L'équipe YoYo</p>
+        ${infoBox([
+          { label: 'Montant', value: details?.amount ? details.amount + ' ' + (details.currency || '') : undefined },
+          { label: 'Validité du code', value: '10 minutes · usage unique' }
+        ])}
+        ${securityNote("Vous n'avez pas initié cette transaction ? Contactez notre service client immédiatement.")}
+        <p>À très vite,<br>L'équipe YoYo</p>
       `
     },
     [MessageTypes.TYPES.PAYMENT_CONFIRMATION]: {
       subject: 'Confirmation de paiement YoYo',
+      hero: 'Confirmation de paiement',
       template: (code: string, name?: string, details?: any) => `
-        <h2 style="text-align: center;">Confirmation de paiement</h2>
-        <p>Bonjour ${name || 'cher utilisateur'},</p>
-        <p>Nous avons besoin de confirmer un paiement${details ? ' de ' + details.amount + ' ' + details.currency : ''} sur votre compte. Veuillez utiliser le code suivant pour autoriser cette opération :</p>
+        <p>Bonjour <strong>${name || 'cher utilisateur'}</strong></p>
+        <p>Confirmez ce paiement sur votre compte à l'aide du code ci-dessous :</p>
         ${codeBox(code)}
-        <p>Ce code est valable pendant 5 minutes.</p>
-        <p>Si vous n'avez pas initié ce paiement, veuillez contacter notre service client immédiatement.</p>
-        <p>Cordialement,<br>L'équipe YoYo</p>
+        ${infoBox([
+          { label: 'Montant', value: details?.amount ? details.amount + ' ' + (details.currency || '') : undefined },
+          { label: 'Validité du code', value: '5 minutes · usage unique' }
+        ])}
+        ${securityNote("Vous n'avez pas initié ce paiement ? Contactez notre service client immédiatement.")}
+        <p>À très vite,<br>L'équipe YoYo</p>
       `
     },
     [MessageTypes.TYPES.TRANSFER_NOTIFICATION]: {
       subject: 'Notification de transfert YoYo',
+      hero: 'Notification de transfert',
       template: (code: string, name?: string, details?: any) => `
-        <h2 style="text-align: center;">Notification de transfert</h2>
-        <p>Bonjour ${name || 'cher utilisateur'},</p>
-        <p>Un transfert${details ? ' de ' + details.amount + ' ' + details.currency : ''} a été initié sur votre compte. Si vous souhaitez autoriser cette opération, veuillez utiliser le code suivant :</p>
+        <p>Bonjour <strong>${name || 'cher utilisateur'}</strong></p>
+        <p>Un transfert a été initié sur votre compte. Pour l'autoriser, saisissez ce code :</p>
         ${codeBox(code)}
-        <p>Ce code est valable pendant 5 minutes.</p>
-        <p>Si vous n'avez pas initié ce transfert, veuillez contacter notre service client immédiatement.</p>
-        <p>Cordialement,<br>L'équipe YoYo</p>
+        ${infoBox([
+          { label: 'Montant', value: details?.amount ? details.amount + ' ' + (details.currency || '') : undefined },
+          { label: 'Validité du code', value: '5 minutes · usage unique' }
+        ])}
+        ${securityNote("Vous n'avez pas initié ce transfert ? Contactez notre service client immédiatement.")}
+        <p>À très vite,<br>L'équipe YoYo</p>
       `
     },
     [MessageTypes.TYPES.ACCOUNT_UPDATED]: {
       subject: 'Mise à jour de votre compte YoYo',
+      hero: 'Confirmez la modification',
       template: (code: string, name?: string, details?: any) => `
-        <h2 style="text-align: center;">Mise à jour de compte</h2>
-        <p>Bonjour ${name || 'cher utilisateur'},</p>
-        <p>Des modifications ont été apportées à votre compte${details?.changes ? ' (' + details.changes + ')' : ''}. Pour confirmer ces changements, veuillez utiliser le code suivant :</p>
+        <p>Bonjour <strong>${name || 'cher utilisateur'}</strong></p>
+        <p>Une modification a été demandée sur votre compte. Confirmez-la avec ce code :</p>
         ${codeBox(code)}
-        <p>Ce code est valable pendant 15 minutes.</p>
-        <p>Si vous n'avez pas demandé ces modifications, veuillez contacter notre service client immédiatement.</p>
-        <p>Cordialement,<br>L'équipe YoYo</p>
+        ${infoBox([
+          { label: 'Modification', value: details?.changes },
+          { label: 'Validité du code', value: '15 minutes · usage unique' }
+        ])}
+        ${securityNote("Vous n'avez pas demandé ce changement ? Ignorez cet e-mail et vérifiez la sécurité de votre compte.")}
+        <p>À très vite,<br>L'équipe YoYo</p>
       `
     },
     [MessageTypes.TYPES.SECURITY_ALERT]: {
       subject: 'Alerte de sécurité YoYo',
+      hero: 'Alerte de sécurité',
+      heroTone: 'neutral',
       template: (code: string, name?: string, details?: any) => `
-        <h2 style="text-align: center;">Alerte de sécurité</h2>
-        <p>Bonjour ${name || 'cher utilisateur'},</p>
-        <p>Nous avons détecté une activité inhabituelle sur votre compte${details?.activity ? ' : ' + details.activity : ''}. Pour vérifier votre identité, veuillez utiliser le code suivant :</p>
+        <p>Bonjour <strong>${name || 'cher utilisateur'}</strong></p>
+        <p>Une activité inhabituelle a été détectée sur votre compte. Pour vérifier votre identité, saisissez ce code :</p>
         ${codeBox(code)}
-        <p>Ce code est valable pendant 10 minutes.</p>
-        <p>Si vous n'êtes pas à l'origine de cette activité, veuillez sécuriser votre compte immédiatement en modifiant votre mot de passe.</p>
-        <p>Cordialement,<br>L'équipe YoYo</p>
+        ${infoBox([
+          { label: 'Activité', value: details?.activity },
+          { label: 'Validité du code', value: '10 minutes · usage unique' }
+        ])}
+        ${securityNote("Vous n'êtes pas à l'origine de cette activité ? Changez votre mot de passe immédiatement.", 'danger')}
+        <p>À très vite,<br>L'équipe YoYo</p>
       `
     },
     [MessageTypes.TYPES.PROFILE_CHANGES]: {
       subject: 'Confirmation des modifications de profil YoYo',
+      hero: 'Modification de profil',
       template: (code: string, name?: string, details?: any) => `
-        <h2 style="text-align: center;">Modifications de profil</h2>
-        <p>Bonjour ${name || 'cher utilisateur'},</p>
-        <p>Des modifications ont été apportées à votre profil${details?.changes ? ' (' + details.changes + ')' : ''}. Pour confirmer ces changements, veuillez utiliser le code suivant :</p>
+        <p>Bonjour <strong>${name || 'cher utilisateur'}</strong></p>
+        <p>Confirmez la modification de votre profil à l'aide du code ci-dessous :</p>
         ${codeBox(code)}
-        <p>Ce code est valable pendant 15 minutes.</p>
-        <p>Si vous n'avez pas demandé ces modifications, veuillez contacter notre service client immédiatement.</p>
-        <p>Cordialement,<br>L'équipe YoYo</p>
+        ${infoBox([
+          { label: 'Modification', value: details?.changes },
+          { label: 'Validité du code', value: '15 minutes · usage unique' }
+        ])}
+        ${securityNote("Vous n'avez pas demandé ces modifications ? Contactez notre service client immédiatement.")}
+        <p>À très vite,<br>L'équipe YoYo</p>
       `
     },
     [MessageTypes.TYPES.WELCOME_MESSAGE]: {
       subject: 'Bienvenue sur YoYo !',
+      hero: 'Bienvenue sur YoYo',
       template: (code: string, name?: string) => `
-        <h2 style="text-align: center;">Bienvenue sur YoYo !</h2>
-        <p>Bonjour ${name || 'cher utilisateur'},</p>
-        <p>Nous sommes ravis de vous accueillir sur notre plateforme. Pour activer votre compte et commencer à utiliser nos services, veuillez utiliser le code suivant :</p>
+        <p>Bonjour <strong>${name || 'cher utilisateur'}</strong></p>
+        <p>Nous sommes ravis de vous accueillir ! Pour activer votre compte et commencer à profiter de nos services, saisissez ce code :</p>
         ${codeBox(code)}
-        <p>Ce code est valable pendant 24 heures.</p>
-        <p>Nous vous souhaitons une excellente expérience avec YoYo !</p>
-        <p>Cordialement,<br>L'équipe YoYo</p>
+        ${infoBox([{ label: 'Validité du code', value: '24 heures' }])}
+        ${securityNote("Vous n'avez pas créé de compte YoYo ? Ignorez simplement cet e-mail.")}
+        <p>À très vite,<br>L'équipe YoYo</p>
       `
     },
     [MessageTypes.TYPES.ACCOUNT_REMINDER]: {
       subject: 'Rappel concernant votre compte YoYo',
+      hero: 'Rappel de compte',
       template: (code: string, name?: string) => `
-        <h2 style="text-align: center;">Rappel concernant votre compte</h2>
-        <p>Bonjour ${name || 'cher utilisateur'},</p>
-        <p>Ce message est un rappel concernant votre compte YoYo. Pour accéder à votre compte et vérifier les informations importantes, veuillez utiliser le code suivant :</p>
+        <p>Bonjour <strong>${name || 'cher utilisateur'}</strong></p>
+        <p>Voici un rappel concernant votre compte YoYo. Pour y accéder et vérifier vos informations, saisissez ce code :</p>
         ${codeBox(code)}
-        <p>Ce code est valable pendant 24 heures.</p>
-        <p>Cordialement,<br>L'équipe YoYo</p>
+        ${infoBox([{ label: 'Validité du code', value: '24 heures' }])}
+        <p>À très vite,<br>L'équipe YoYo</p>
       `
     },
     [MessageTypes.TYPES.INACTIVITY_ALERT]: {
       subject: 'Alerte d\'inactivité de votre compte YoYo',
+      hero: 'Votre compte est inactif',
       template: (code: string, name?: string) => `
-        <h2 style="text-align: center;">Alerte d'inactivité</h2>
-        <p>Bonjour ${name || 'cher utilisateur'},</p>
-        <p>Nous avons remarqué que votre compte YoYo est inactif depuis un certain temps. Pour le maintenir actif et éviter sa désactivation, veuillez utiliser le code suivant pour vous connecter :</p>
+        <p>Bonjour <strong>${name || 'cher utilisateur'}</strong></p>
+        <p>Votre compte YoYo est inactif depuis un certain temps. Pour le garder actif et éviter sa désactivation, connectez-vous avec ce code :</p>
         ${codeBox(code)}
-        <p>Ce code est valable pendant 48 heures.</p>
-        <p>Si vous n'utilisez plus votre compte et souhaitez le fermer, vous pouvez ignorer ce message.</p>
-        <p>Cordialement,<br>L'équipe YoYo</p>
+        ${infoBox([{ label: 'Validité du code', value: '48 heures' }])}
+        ${securityNote("Vous ne souhaitez plus utiliser votre compte ? Vous pouvez ignorer ce message.")}
+        <p>À très vite,<br>L'équipe YoYo</p>
       `
     },
     [MessageTypes.TYPES.PROMOTIONAL_OFFER]: {
       subject: 'Offre spéciale YoYo - Code promo exclusif',
+      hero: 'Une offre rien que pour vous',
       template: (code: string, name?: string, details?: any) => `
-        <h2 style="text-align: center;">Offre spéciale pour vous !</h2>
-        <p>Bonjour ${name || 'cher utilisateur'},</p>
-        <p>Nous avons le plaisir de vous offrir une promotion exclusive${details?.offer ? ' : ' + details.offer : ''}. Pour en bénéficier, utilisez le code suivant :</p>
+        <p>Bonjour <strong>${name || 'cher utilisateur'}</strong></p>
+        <p>Nous avons le plaisir de vous offrir une promotion exclusive${details?.offer ? ' : ' + details.offer : ''}. Pour en profiter, utilisez ce code :</p>
         ${codeBox(code)}
-        <p>Cette offre est valable ${details?.validity || 'pendant une durée limitée'}.</p>
+        ${infoBox([{ label: 'Validité de l\'offre', value: details?.validity || 'durée limitée' }])}
         <p>Ne manquez pas cette opportunité !</p>
-        <p>Cordialement,<br>L'équipe YoYo</p>
+        <p>À très vite,<br>L'équipe YoYo</p>
       `
     },
     [MessageTypes.TYPES.NEW_FEATURE_ANNOUNCEMENT]: {
       subject: 'Découvrez les nouvelles fonctionnalités de YoYo',
+      hero: 'Du nouveau sur YoYo',
       template: (code: string, name?: string, details?: any) => `
-        <h2 style="text-align: center;">Nouvelles fonctionnalités disponibles</h2>
-        <p>Bonjour ${name || 'cher utilisateur'},</p>
-        <p>Nous sommes heureux de vous annoncer le lancement de nouvelles fonctionnalités sur YoYo${details?.features ? ' : ' + details.features : ''}. Pour les découvrir, utilisez le code suivant :</p>
+        <p>Bonjour <strong>${name || 'cher utilisateur'}</strong></p>
+        <p>Nous lançons de nouvelles fonctionnalités sur YoYo${details?.features ? ' : ' + details.features : ''}. Pour les découvrir, utilisez ce code :</p>
         ${codeBox(code)}
-        <p>Nous espérons que ces nouveautés amélioreront votre expérience sur notre plateforme.</p>
-        <p>Cordialement,<br>L'équipe YoYo</p>
+        <p>Nous espérons que ces nouveautés amélioreront votre expérience.</p>
+        <p>À très vite,<br>L'équipe YoYo</p>
       `
     },
     [MessageTypes.TYPES.SURVEY_INVITATION]: {
       subject: 'Invitation à participer à notre enquête YoYo',
+      hero: 'Votre avis compte',
       template: (code: string, name?: string) => `
-        <h2 style="text-align: center;">Votre avis nous intéresse</h2>
-        <p>Bonjour ${name || 'cher utilisateur'},</p>
-        <p>Nous vous invitons à participer à notre enquête pour nous aider à améliorer nos services. Pour accéder à l'enquête, veuillez utiliser le code suivant :</p>
+        <p>Bonjour <strong>${name || 'cher utilisateur'}</strong></p>
+        <p>Aidez-nous à améliorer nos services en participant à notre enquête. Pour y accéder, utilisez ce code :</p>
         ${codeBox(code)}
-        <p>Votre participation est grandement appréciée. En guise de remerciement, vous pourriez recevoir un avantage exclusif.</p>
-        <p>Cordialement,<br>L'équipe YoYo</p>
+        <p>Votre participation compte beaucoup pour nous — un avantage exclusif pourrait vous être réservé.</p>
+        <p>À très vite,<br>L'équipe YoYo</p>
       `
     },
     // Templates sans OTP
     [MessageTypes.TYPES.PAYMENT_SUCCESS]: {
       subject: 'Paiement réussi - YoYo',
+      hero: 'Paiement réussi',
       template: (_code: string, name?: string, details?: any) => `
-        <h2 style="text-align: center;">Paiement réussi</h2>
-        <p>Bonjour ${name || 'cher utilisateur'},</p>
-        <p>Votre paiement${details ? ' de ' + details.amount + ' ' + details.currency : ''} a été traité avec succès.</p>
-        <p>Date de la transaction : ${new Date().toLocaleString()}</p>
-        <p>Si vous n'avez pas effectué cette transaction, veuillez contacter notre service client immédiatement.</p>
-        <p>Cordialement,<br>L'équipe YoYo</p>
+        <p>Bonjour <strong>${name || 'cher utilisateur'}</strong></p>
+        <p>Votre paiement a bien été traité.</p>
+        ${infoBox([
+          { label: 'Montant', value: details?.amount ? details.amount + ' ' + (details.currency || '') : undefined },
+          { label: 'Date', value: new Date().toLocaleString() }
+        ])}
+        ${securityNote("Vous n'avez pas effectué ce paiement ? Contactez notre service client immédiatement.")}
+        <p>À très vite,<br>L'équipe YoYo</p>
       `
     },
     [MessageTypes.TYPES.PAYMENT_FAILED]: {
       subject: 'Échec du paiement - YoYo',
+      hero: 'Paiement échoué',
+      heroTone: 'neutral',
       template: (_code: string, name?: string, details?: any) => `
-        <h2 style="text-align: center;">Échec du paiement</h2>
-        <p>Bonjour ${name || 'cher utilisateur'},</p>
-        <p>Nous regrettons de vous informer que votre paiement${details ? ' de ' + details.amount + ' ' + details.currency : ''} n'a pas pu être traité.</p>
-        <p>Raison : ${details?.reason || 'Non spécifiée'}</p>
-        <p>Veuillez réessayer ou contacter notre service client pour plus d'informations.</p>
-        <p>Cordialement,<br>L'équipe YoYo</p>
+        <p>Bonjour <strong>${name || 'cher utilisateur'}</strong></p>
+        <p>Votre paiement n'a pas pu être traité.</p>
+        ${infoBox([
+          { label: 'Montant', value: details?.amount ? details.amount + ' ' + (details.currency || '') : undefined },
+          { label: 'Motif', value: details?.reason || 'Non spécifié' }
+        ])}
+        <p>Vous pouvez réessayer ou contacter notre service client pour plus d'informations.</p>
+        <p>À très vite,<br>L'équipe YoYo</p>
       `
     },
     [MessageTypes.TYPES.TRANSFER_SUCCESS]: {
       subject: 'Transfert réussi - YoYo',
+      hero: 'Transfert réussi',
       template: (_code: string, name?: string, details?: any) => `
-        <h2 style="text-align: center;">Transfert réussi</h2>
-        <p>Bonjour ${name || 'cher utilisateur'},</p>
-        <p>Votre transfert${details ? ' de ' + details.amount + ' ' + details.currency : ''} a été effectué avec succès.</p>
-        <p>Date de la transaction : ${new Date().toLocaleString()}</p>
-        <p>Si vous n'avez pas effectué ce transfert, veuillez contacter notre service client immédiatement.</p>
-        <p>Cordialement,<br>L'équipe YoYo</p>
+        <p>Bonjour <strong>${name || 'cher utilisateur'}</strong></p>
+        <p>Votre transfert a bien été effectué.</p>
+        ${infoBox([
+          { label: 'Montant', value: details?.amount ? details.amount + ' ' + (details.currency || '') : undefined },
+          { label: 'Date', value: new Date().toLocaleString() }
+        ])}
+        ${securityNote("Vous n'avez pas effectué ce transfert ? Contactez notre service client immédiatement.")}
+        <p>À très vite,<br>L'équipe YoYo</p>
       `
     },
     [MessageTypes.TYPES.TRANSFER_FAILED]: {
       subject: 'Échec du transfert - YoYo',
+      hero: 'Transfert échoué',
+      heroTone: 'neutral',
       template: (_code: string, name?: string, details?: any) => `
-        <h2 style="text-align: center;">Échec du transfert</h2>
-        <p>Bonjour ${name || 'cher utilisateur'},</p>
-        <p>Nous regrettons de vous informer que votre transfert${details ? ' de ' + details.amount + ' ' + details.currency : ''} n'a pas pu être effectué.</p>
-        <p>Raison : ${details?.reason || 'Non spécifiée'}</p>
-        <p>Veuillez réessayer ou contacter notre service client pour plus d'informations.</p>
-        <p>Cordialement,<br>L'équipe YoYo</p>
+        <p>Bonjour <strong>${name || 'cher utilisateur'}</strong></p>
+        <p>Votre transfert n'a pas pu être effectué.</p>
+        ${infoBox([
+          { label: 'Montant', value: details?.amount ? details.amount + ' ' + (details.currency || '') : undefined },
+          { label: 'Motif', value: details?.reason || 'Non spécifié' }
+        ])}
+        <p>Vous pouvez réessayer ou contacter notre service client pour plus d'informations.</p>
+        <p>À très vite,<br>L'équipe YoYo</p>
       `
     },
     [MessageTypes.TYPES.ACCOUNT_CREATED]: {
       subject: 'Compte créé avec succès - YoYo',
+      hero: 'Bienvenue dans la famille YoYo',
       template: (_code: string, name?: string) => `
-        <h2 style="text-align: center;">Bienvenue sur YoYo !</h2>
-        <p>Bonjour ${name || 'cher utilisateur'},</p>
-        <p>Votre compte a été créé avec succès. Vous pouvez maintenant commencer à utiliser nos services.</p>
-        <p>Pour des raisons de sécurité, nous vous recommandons de :</p>
+        <p>Bonjour <strong>${name || 'cher utilisateur'}</strong></p>
+        <p>Votre compte a été créé avec succès. Vous pouvez dès maintenant profiter de nos services.</p>
+        <p>Pour bien démarrer, nous vous recommandons de :</p>
         <ul>
-          <li>Changer votre mot de passe lors de votre première connexion</li>
-          <li>Activer l'authentification à deux facteurs</li>
           <li>Vérifier vos informations personnelles</li>
+          <li>Activer l'authentification à deux facteurs</li>
+          <li>Choisir un mot de passe fort</li>
         </ul>
-        <p>Nous vous souhaitons une excellente expérience avec YoYo !</p>
-        <p>Cordialement,<br>L'équipe YoYo</p>
+        <p>À très vite,<br>L'équipe YoYo</p>
       `
     },
     [MessageTypes.TYPES.MERCHANT_ACTIVATION]: {
       subject: 'Activez votre boutique YoYo',
       // Bandeau de marque coloré en tête de carte (rendu par wrapEmail via l'option `hero`).
-      hero: 'Bienvenue dans la famille YoYo 🎉',
+      hero: 'Bienvenue dans la famille YoYo',
       // Contrairement aux autres templates, le premier paramètre n'est pas exploité : `EmailService.send`
       // appelle `getEmailTemplate(template, '', ...)` avec un code vide. Le lien transite donc par
       // `details.activationUrl`, alimenté depuis `templateData`.
       template: (_code: string, name?: string, details?: any) => `
-        <p>Bonjour <strong>${name || 'cher partenaire'}</strong> 👋</p>
-        <p>Bonne nouvelle : votre boutique${details?.shopName ? ' <strong>' + details.shopName + '</strong>' : ''} est prête ! Votre compte marchand vient d'être créé${details?.commercialName ? ' par ' + details.commercialName : ''} 🙌</p>
-        <p>Il ne reste qu'une petite étape pour démarrer : <strong>choisissez votre code de sécurité</strong> et c'est parti 🚀</p>
+        <p>Bonjour <strong>${name || 'cher partenaire'}</strong></p>
+        <p>Bonne nouvelle : votre boutique${details?.shopName ? ' <strong>' + details.shopName + '</strong>' : ''} est prête ! Votre compte marchand vient d'être créé${details?.commercialName ? ' par ' + details.commercialName : ''}</p>
+        <p>Il ne reste qu'une petite étape pour démarrer : <strong>choisissez votre code de sécurité</strong> et c'est parti</p>
         ${emailButton(details?.activationUrl || '#', 'Activer ma boutique')}
         <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color: #F7F8FA; margin-top: 4px;">
           <tr><td style="padding: 14px 18px;">
@@ -341,138 +373,144 @@ export class MessageTypes {
             </table>
           </td></tr>
         </table>
-        <p style="margin-top: 20px;">Vous n'attendiez pas cet e-mail ? Pas d'inquiétude, ignorez-le simplement : sans activation, rien ne se passe. 💛</p>
+        <p style="margin-top: 20px;">Vous n'attendiez pas cet e-mail ? Pas d'inquiétude, ignorez-le simplement : sans activation, rien ne se passe.</p>
       `
     },
     [MessageTypes.TYPES.ACCOUNT_DELETED]: {
       subject: 'Compte supprimé - YoYo',
+      hero: 'Compte supprimé',
+      heroTone: 'neutral',
       template: (_code: string, name?: string) => `
-        <h2 style="text-align: center;">Compte supprimé</h2>
-        <p>Bonjour ${name || 'cher utilisateur'},</p>
-        <p>Votre compte YoYo a été supprimé avec succès.</p>
-        <p>Nous espérons vous revoir bientôt !</p>
-        <p>Cordialement,<br>L'équipe YoYo</p>
+        <p>Bonjour <strong>${name || 'cher utilisateur'}</strong></p>
+        <p>Votre compte YoYo a bien été supprimé.</p>
+        <p>Nous espérons vous revoir bientôt.</p>
+        <p>À très vite,<br>L'équipe YoYo</p>
       `
     },
     [MessageTypes.TYPES.PROFILE_UPDATED]: {
       subject: 'Profil mis à jour - YoYo',
+      hero: 'Profil mis à jour',
       template: (_code: string, name?: string, details?: any) => `
-        <h2 style="text-align: center;">Profil mis à jour</h2>
-        <p>Bonjour ${name || 'cher utilisateur'},</p>
-        <p>Votre profil a été mis à jour avec succès.</p>
-        <p>Modifications apportées : ${details?.changes || 'Non spécifiées'}</p>
-        <p>Si vous n'avez pas effectué ces modifications, veuillez contacter notre service client immédiatement.</p>
-        <p>Cordialement,<br>L'équipe YoYo</p>
+        <p>Bonjour <strong>${name || 'cher utilisateur'}</strong></p>
+        <p>Votre profil a bien été mis à jour.</p>
+        ${infoBox([{ label: 'Modifications', value: details?.changes }])}
+        ${securityNote("Vous n'êtes pas à l'origine de ces modifications ? Contactez notre service client immédiatement.")}
+        <p>À très vite,<br>L'équipe YoYo</p>
       `
     },
     [MessageTypes.TYPES.PASSWORD_CHANGED]: {
       subject: 'Mot de passe modifié - YoYo',
+      hero: 'Mot de passe modifié',
       template: (_code: string, name?: string) => `
-        <h2 style="text-align: center;">Mot de passe modifié</h2>
-        <p>Bonjour ${name || 'cher utilisateur'},</p>
-        <p>Votre mot de passe a été modifié avec succès.</p>
-        <p>Si vous n'avez pas effectué cette modification, veuillez sécuriser votre compte immédiatement.</p>
-        <p>Cordialement,<br>L'équipe YoYo</p>
+        <p>Bonjour <strong>${name || 'cher utilisateur'}</strong></p>
+        <p>Votre mot de passe a bien été modifié.</p>
+        ${securityNote("Vous n'êtes pas à l'origine de ce changement ? Sécurisez votre compte immédiatement.", 'danger')}
+        <p>À très vite,<br>L'équipe YoYo</p>
       `
     },
     [MessageTypes.TYPES.EMAIL_CHANGED]: {
       subject: 'Email modifié - YoYo',
+      hero: 'Adresse e-mail modifiée',
       template: (_code: string, name?: string, details?: any) => `
-        <h2 style="text-align: center;">Email modifié</h2>
-        <p>Bonjour ${name || 'cher utilisateur'},</p>
-        <p>Votre adresse email a été modifiée avec succès.</p>
-        <p>Nouvelle adresse : ${details?.newEmail || 'Non spécifiée'}</p>
-        <p>Si vous n'avez pas effectué cette modification, veuillez sécuriser votre compte immédiatement.</p>
-        <p>Cordialement,<br>L'équipe YoYo</p>
+        <p>Bonjour <strong>${name || 'cher utilisateur'}</strong></p>
+        <p>Votre adresse e-mail a bien été modifiée.</p>
+        ${infoBox([{ label: 'Nouvelle adresse', value: details?.newEmail }])}
+        ${securityNote("Vous n'êtes pas à l'origine de ce changement ? Sécurisez votre compte immédiatement.", 'danger')}
+        <p>À très vite,<br>L'équipe YoYo</p>
       `
     },
     [MessageTypes.TYPES.PHONE_CHANGED]: {
       subject: 'Numéro de téléphone modifié - YoYo',
+      hero: 'Numéro de téléphone modifié',
       template: (_code: string, name?: string, details?: any) => `
-        <h2 style="text-align: center;">Numéro de téléphone modifié</h2>
-        <p>Bonjour ${name || 'cher utilisateur'},</p>
-        <p>Votre numéro de téléphone a été modifié avec succès.</p>
-        <p>Nouveau numéro : ${details?.newPhone || 'Non spécifié'}</p>
-        <p>Si vous n'avez pas effectué cette modification, veuillez sécuriser votre compte immédiatement.</p>
-        <p>Cordialement,<br>L'équipe YoYo</p>
+        <p>Bonjour <strong>${name || 'cher utilisateur'}</strong></p>
+        <p>Votre numéro de téléphone a bien été modifié.</p>
+        ${infoBox([{ label: 'Nouveau numéro', value: details?.newPhone }])}
+        ${securityNote("Vous n'êtes pas à l'origine de ce changement ? Sécurisez votre compte immédiatement.", 'danger')}
+        <p>À très vite,<br>L'équipe YoYo</p>
       `
     },
     [MessageTypes.TYPES.BALANCE_LOW]: {
       subject: 'Solde faible - YoYo',
+      hero: 'Solde faible',
+      heroTone: 'neutral',
       template: (_code: string, name?: string, details?: any) => `
-        <h2 style="text-align: center;">Solde faible</h2>
-        <p>Bonjour ${name || 'cher utilisateur'},</p>
-        <p>Votre solde actuel est faible : ${details?.balance || 'Non spécifié'}</p>
-        <p>Nous vous recommandons de recharger votre compte pour éviter toute interruption de service.</p>
-        <p>Cordialement,<br>L'équipe YoYo</p>
+        <p>Bonjour <strong>${name || 'cher utilisateur'}</strong></p>
+        <p>Votre solde est faible. Pensez à recharger votre compte pour éviter toute interruption de service.</p>
+        ${infoBox([{ label: 'Solde actuel', value: details?.balance }])}
+        <p>À très vite,<br>L'équipe YoYo</p>
       `
     },
     [MessageTypes.TYPES.BALANCE_HIGH]: {
       subject: 'Solde élevé - YoYo',
+      hero: 'Solde élevé',
       template: (_code: string, name?: string, details?: any) => `
-        <h2 style="text-align: center;">Solde élevé</h2>
-        <p>Bonjour ${name || 'cher utilisateur'},</p>
-        <p>Votre solde actuel est élevé : ${details?.balance || 'Non spécifié'}</p>
-        <p>Nous vous recommandons de vérifier vos transactions récentes.</p>
-        <p>Cordialement,<br>L'équipe YoYo</p>
+        <p>Bonjour <strong>${name || 'cher utilisateur'}</strong></p>
+        <p>Votre solde est élevé. Nous vous invitons à vérifier vos transactions récentes.</p>
+        ${infoBox([{ label: 'Solde actuel', value: details?.balance }])}
+        <p>À très vite,<br>L'équipe YoYo</p>
       `
     },
     [MessageTypes.TYPES.SUSPICIOUS_ACTIVITY]: {
       subject: 'Activité suspecte détectée - YoYo',
+      hero: 'Activité suspecte',
+      heroTone: 'neutral',
       template: (_code: string, name?: string, details?: any) => `
-        <h2 style="text-align: center;">Activité suspecte détectée</h2>
-        <p>Bonjour ${name || 'cher utilisateur'},</p>
-        <p>Nous avons détecté une activité suspecte sur votre compte : ${details?.activity || 'Non spécifiée'}</p>
-        <p>Si vous n'êtes pas à l'origine de cette activité, veuillez sécuriser votre compte immédiatement.</p>
-        <p>Cordialement,<br>L'équipe YoYo</p>
+        <p>Bonjour <strong>${name || 'cher utilisateur'}</strong></p>
+        <p>Une activité suspecte a été détectée sur votre compte.</p>
+        ${infoBox([{ label: 'Activité', value: details?.activity }])}
+        ${securityNote("Vous n'êtes pas à l'origine de cette activité ? Sécurisez votre compte immédiatement.", 'danger')}
+        <p>À très vite,<br>L'équipe YoYo</p>
       `
     },
     [MessageTypes.TYPES.MAINTENANCE_NOTICE]: {
       subject: 'Maintenance planifiée - YoYo',
+      hero: 'Maintenance planifiée',
       template: (_code: string, name?: string, details?: any) => `
-        <h2 style="text-align: center;">Maintenance planifiée</h2>
-        <p>Bonjour ${name || 'cher utilisateur'},</p>
+        <p>Bonjour <strong>${name || 'cher utilisateur'}</strong></p>
         <p>Une maintenance est planifiée pour améliorer nos services.</p>
-        <p>Date : ${details?.date || 'Non spécifiée'}</p>
-        <p>Durée estimée : ${details?.duration || 'Non spécifiée'}</p>
+        ${infoBox([
+          { label: 'Date', value: details?.date },
+          { label: 'Durée estimée', value: details?.duration }
+        ])}
         <p>Nous nous excusons pour la gêne occasionnée.</p>
-        <p>Cordialement,<br>L'équipe YoYo</p>
+        <p>À très vite,<br>L'équipe YoYo</p>
       `
     },
     [MessageTypes.TYPES.SYSTEM_UPDATE]: {
       subject: 'Mise à jour du système - YoYo',
+      hero: 'Mise à jour du système',
       template: (_code: string, name?: string, details?: any) => `
-        <h2 style="text-align: center;">Mise à jour du système</h2>
-        <p>Bonjour ${name || 'cher utilisateur'},</p>
-        <p>Une mise à jour du système a été effectuée pour améliorer nos services.</p>
-        <p>Nouvelles fonctionnalités : ${details?.features || 'Non spécifiées'}</p>
-        <p>Nous vous souhaitons une excellente expérience avec ces nouveautés !</p>
-        <p>Cordialement,<br>L'équipe YoYo</p>
+        <p>Bonjour <strong>${name || 'cher utilisateur'}</strong></p>
+        <p>Une mise à jour a été déployée pour améliorer nos services.</p>
+        ${infoBox([{ label: 'Nouveautés', value: details?.features }])}
+        <p>À très vite,<br>L'équipe YoYo</p>
       `
     },
     [MessageTypes.TYPES.LOGIN_NOTIFICATION]: {
       subject: 'Notification de connexion - YoYo',
+      hero: 'Nouvelle connexion',
+      heroTone: 'neutral',
       template: (code?: string, name?: string, details?: any) => `
-        <h2 style="text-align: center;">Notification de connexion</h2>
-        <p>Bonjour ${name ?? 'cher utilisateur'},</p>
-        <p>Vous avez été connecté à votre compte YoYo.</p>
-        <p>Date et heure de connexion : ${details?.date || 'Non spécifiée'}</p>
-        <p>Source : ${details?.device || 'Non spécifiée'}</p>
-        <p>IP : ${details?.ip || 'Non spécifiée'}</p>
-        <p>Si vous n'êtes pas à l'origine de cette connexion, veuillez sécuriser votre compte immédiatement.</p>
-        <p>Cordialement,<br>L'équipe YoYo</p>
+        <p>Bonjour <strong>${name ?? 'cher utilisateur'}</strong></p>
+        <p>Une connexion à votre compte YoYo vient d'avoir lieu.</p>
+        ${infoBox([
+          { label: 'Date', value: details?.date },
+          { label: 'Appareil', value: details?.device },
+          { label: 'Adresse IP', value: details?.ip }
+        ])}
+        ${securityNote("Vous n'êtes pas à l'origine de cette connexion ? Sécurisez votre compte immédiatement.")}
+        <p>À très vite,<br>L'équipe YoYo</p>
       `
     },
     [MessageTypes.TYPES.CERTIFICATION_NOTIFICATION]: {
       subject: 'Notification de certification - YoYo',
+      hero: 'Documents vérifiés',
       template: (code?: string, name?: string, details?: any) => `
-        <h2 style="text-align: center;">Notification de certification</h2>
-        <p>Bonjour ${name ?? 'cher utilisateur'},</p>
+        <p>Bonjour <strong>${name ?? 'cher utilisateur'}</strong></p>
         <p>Vos documents ont été vérifiés avec succès.</p>
-        <p>Date et heure de vérification : ${details?.date || 'Non spécifiée'}</p>
-        <p>Si vous n'êtes pas à l'origine de cette certification, veuillez sécuriser votre compte immédiatement.</p>
-        <p>Merci de nous contacter si vous avez des questions ou des préoccupations.</p>  
-        <p>Cordialement,<br>L'équipe YoYo</p>
+        ${infoBox([{ label: 'Date de vérification', value: details?.date }])}
+        <p>À très vite,<br>L'équipe YoYo</p>
       `
     }
   };
@@ -779,7 +817,12 @@ export class MessageTypes {
     return {
       subject: template.subject,
       // `hero` (optionnel) : bandeau de marque coloré en tête de carte (ex. activation marchand).
-      body: wrapEmail(content, { preheader: template.subject, hero: (template as any).hero })
+      // `heroTone` : `brand` (orange, défaut) ou `neutral` (ardoise) pour les messages sécurité/négatifs.
+      body: wrapEmail(content, {
+        preheader: template.subject,
+        hero: (template as any).hero,
+        heroTone: (template as any).heroTone
+      })
     };
   }
 
