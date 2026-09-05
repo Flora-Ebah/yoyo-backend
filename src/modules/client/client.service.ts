@@ -174,12 +174,23 @@ export class ClientService {
 			}
 
 			const partners = await this.partnerService.removePartnersByUserId(id);
-			if(partners.error) {
+			if (partners?.error) {
 				throw new Error(partners);
 			}
 
-			await MessageHelper.deleteAccountNotify(user);
-			await MessageHelper.deleteAccountClientNotify(user);
+			// Notifications best-effort : elles ne doivent jamais faire échouer la suppression
+			// (le compte et la boutique sont déjà supprimés à ce stade).
+			try {
+				await MessageHelper.deleteAccountNotify(user);
+				await MessageHelper.deleteAccountClientNotify(user);
+			} catch (notifyError) {
+				LoggerService.log({
+					type: LogLevel.Error,
+					content: notifyError,
+					location: this.serviceLabel,
+					method: 'delete:notify'
+				});
+			}
 		} catch (error) {
 			LoggerService.log({
 				type: LogLevel.Error,
