@@ -213,12 +213,14 @@ export class ClientController {
           });
         }
 
-        // Vérification de l'existence de l'élément
-        const existingItem = await this.service.getById(id);
-        
-        if (!existingItem) {
+        // Vérification de l'existence de l'élément. On utilise `getOne` (et non `getById`) car ce
+        // dernier exclut les comptes `removed` : or le parcours « code oublié » doit fonctionner sur
+        // un compte supprimé (l'OTP a prouvé la propriété) pour permettre sa réactivation.
+        const existingItem: any = await this.service.getOne({ _id: id });
+
+        if (!existingItem || existingItem.error) {
           return resolve({
-            status: defines.status.notFound,  
+            status: defines.status.notFound,
             message: locale.notfound('Client'),
             data: null
           });
@@ -226,7 +228,7 @@ export class ClientController {
 
         const newPassword:string = item.newPassword ?? '';
         const confirmPassword:string = item.confirmPassword ?? '';
-        
+
         if (newPassword !== confirmPassword) {
           return resolve({
             status: defines.status.badRequest,
@@ -239,6 +241,12 @@ export class ClientController {
 
         // Mise à jour du mot de passe
         await this.service.updatePassword(id, item);
+
+        // Réactivation (DCP/RGPD) : un compte supprimé qui réinitialise son code via OTP prouve la
+        // propriété ⇒ on le restaure et on relance le délai de grâce.
+        if (existingItem.status === 'removed') {
+          await this.service.reactivate(id);
+        }
 
         // [SÉCURITÉ F-03] Ne renvoie plus le document : `getById()` remonte le client complet,
         // empreinte du mot de passe incluse, alors que l'appelant n'est pas authentifié comme
