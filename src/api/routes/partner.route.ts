@@ -1,9 +1,12 @@
 import coddyger, { defines } from 'coddyger';
 import { PartnerController } from '../../modules/partner/partner.controller';
+import { SettingsService } from '../../modules/settings';
 import { AppCheckMiddleware, TokenMiddleware } from '../middleware';
 
 const routePath = '/partners';
 const Controller: PartnerController = new PartnerController();
+// Bornes de remise paramétrables depuis le CMS (module Settings) — source de vérité serveur.
+const settingsService: SettingsService = new SettingsService();
 const tags: string[] = ['Partenaires YoYo'];
 
 const defaultRoute: any = (fastify: any, options, done) => {
@@ -209,7 +212,7 @@ const defaultRoute: any = (fastify: any, options, done) => {
     method: 'PUT',
     url: `${routePath}`,
     preHandler: TokenMiddleware.verify,
-    handler: (request, reply) => {
+    handler: async (request, reply) => {
       let body: any = request.body;
       const _id = body._id;
       delete body._id;
@@ -217,10 +220,9 @@ const defaultRoute: any = (fastify: any, options, done) => {
       let user: any = request.user;
       body.user = user._id;
 
-      // Verrou métier : un marchand ne peut ni désactiver sa boutique ni
-      // supprimer/vider sa remise depuis l'app. Seule l'équipe YoYo (admin)
-      // peut désactiver une boutique. La désactivation passe donc par le
-      // back-office, pas par le marchand.
+      // Verrou métier : un marchand ne peut ni désactiver sa boutique ni descendre sa remise sous
+      // le minimum (ni dépasser le maximum). Ces bornes sont désormais paramétrables depuis le CMS
+      // (module Settings). Seule l'équipe YoYo (admin) peut désactiver une boutique.
       const isAdmin: boolean = !!(user && user.isAdmin);
       if (!isAdmin) {
         if (typeof body.status !== 'undefined' && body.status !== 'active') {
@@ -231,13 +233,24 @@ const defaultRoute: any = (fastify: any, options, done) => {
           }));
         }
 
-        const MIN_MERCHANT_DISCOUNT = 5;
-        if (typeof body.maxDiscount !== 'undefined' && Number(body.maxDiscount) < MIN_MERCHANT_DISCOUNT) {
-          return coddyger.api(reply, Promise.resolve({
-            status: defines.status.forbidden,
-            message: `La remise proposée ne peut pas être inférieure à ${MIN_MERCHANT_DISCOUNT}%.`,
-            data: null
-          }));
+        if (typeof body.maxDiscount !== 'undefined') {
+          const { min, max } = await settingsService.getDiscountBounds();
+          const discount = Number(body.maxDiscount);
+
+          if (discount < min) {
+            return coddyger.api(reply, Promise.resolve({
+              status: defines.status.forbidden,
+              message: `La remise proposée ne peut pas être inférieure à ${min}%.`,
+              data: null
+            }));
+          }
+          if (discount > max) {
+            return coddyger.api(reply, Promise.resolve({
+              status: defines.status.forbidden,
+              message: `La remise proposée ne peut pas dépasser ${max}%.`,
+              data: null
+            }));
+          }
         }
       }
 
@@ -630,7 +643,7 @@ const defaultRoute: any = (fastify: any, options, done) => {
               description: { type: 'string', maxLength: 1000 },
               // Réduction négociée sur le terrain par le commercial. Plancher à 5 %
               // (cohérent avec le verrou marchand) ; le marchand pourra l'ajuster ensuite.
-              maxDiscount: { type: 'number', minimum: 5, maximum: 100 },
+              maxDiscount: { type: 'number', minimum: 0, maximum: 100 },
               openingHours: {
                 type: 'array',
                 items: {

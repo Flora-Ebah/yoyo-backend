@@ -1,0 +1,98 @@
+import coddyger, { IData, LoggerService, LogLevel } from 'coddyger';
+import { ISettings } from './settings.interface';
+import { SettingsSet } from './settings.model';
+
+// Valeurs par défaut si aucun document de configuration n'existe encore en base.
+const DEFAULTS: Pick<ISettings, 'discountMin' | 'discountMax'> = {
+  discountMin: 10,
+  discountMax: 50
+};
+
+export class SettingsService {
+  private readonly dao: IData<ISettings>;
+  private readonly serviceLabel = 'SettingsService';
+
+  // Cache mémoire du document unique : évite un accès base à chaque validation de remise.
+  // Invalidé à chaque mise à jour (`update`).
+  private static cache: ISettings | null = null;
+
+  constructor() {
+    this.dao = new SettingsSet();
+  }
+
+  /**
+   * Récupère (ou crée à la volée) le document de configuration unique.
+   * Utilise un cache mémoire ; le premier appel lit la base, les suivants servent le cache.
+   */
+  async getSettings(): Promise<ISettings> {
+    if (SettingsService.cache) {
+      return SettingsService.cache;
+    }
+
+    try {
+      let doc: any = await this.dao.selectOne({ status: { $ne: 'removed' } });
+
+      if (doc && doc.error) {
+        throw doc;
+      }
+
+      // Aucune configuration : on crée le singleton avec les valeurs par défaut.
+      if (!doc) {
+        const created: ISettings = {
+          _id: coddyger.string.generateObjectId(),
+          discountMin: DEFAULTS.discountMin,
+          discountMax: DEFAULTS.discountMax,
+          status: 'active'
+        };
+        const result: any = await this.dao.save(created);
+        if (result && result.error) {
+          throw result;
+        }
+        doc = created;
+      }
+
+      const resolved = doc as ISettings;
+      SettingsService.cache = resolved;
+      return resolved;
+    } catch (error) {
+      LoggerService.log({ type: LogLevel.Error, content: error, location: this.serviceLabel, method: 'getSettings' });
+      // Repli sûr : en cas d'erreur base, on renvoie les valeurs par défaut (jamais de blocage).
+      return { ...DEFAULTS, status: 'active' };
+    }
+  }
+
+  /**
+   * Bornes de la remise marchand, lues depuis la configuration. Utilisé par la validation
+   * des partenaires (création/mise à jour) — source de vérité côté serveur.
+   */
+  async getDiscountBounds(): Promise<{ min: number; max: number }> {
+    const s = await this.getSettings();
+    return { min: Number(s.discountMin), max: Number(s.discountMax) };
+  }
+
+  /**
+   * Met à jour la configuration (remise min/max). Réservé à l'administrateur (garde côté route).
+   */
+  async update(data: Partial<ISettings>): Promise<ISettings> {
+    try {
+      const current = await this.getSettings();
+
+      const next: any = {};
+      if (typeof data.discountMin !== 'undefined') next.discountMin = Number(data.discountMin);
+      if (typeof data.discountMax !== 'undefined') next.discountMax = Number(data.discountMax);
+
+      const result: any = await this.dao.update({ _id: current._id }, next);
+      if (result && result.error) {
+        throw result;
+      }
+
+      // Rafraîchir le cache pour que la prochaine lecture reflète la mise à jour.
+      const updated = { ...current, ...next } as ISettings;
+      SettingsService.cache = updated;
+      return updated;
+    } catch (error) {
+      LoggerService.log({ type: LogLevel.Error, content: error, location: this.serviceLabel, method: 'update' });
+      throw error;
+    }
+  }
+}

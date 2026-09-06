@@ -9,6 +9,7 @@ import { CategoryService } from '../category/category.service';
 import { ClientSet } from '../client/client.model';
 import { ClientService } from '../client/client.service';
 import { EnrolmentService } from '../enrolment/enrolment.service';
+import { SettingsService } from '../settings';
 import { PartnerService } from './partner.service';
 
 const serviceLabel = 'PartnerOnboardingService';
@@ -65,12 +66,14 @@ export class PartnerOnboardingService {
   private readonly partnerService: PartnerService;
   private readonly categoryService: CategoryService;
   private readonly enrolmentService: EnrolmentService;
+  private readonly settingsService: SettingsService;
 
   constructor() {
     this.clientService = new ClientService();
     this.partnerService = new PartnerService();
     this.categoryService = new CategoryService();
     this.enrolmentService = new EnrolmentService();
+    this.settingsService = new SettingsService();
   }
 
   /**
@@ -265,6 +268,13 @@ export class PartnerOnboardingService {
         return { ok: false, status: defines.status.clientError, message: 'La création du compte marchand a échoué' };
       }
 
+      // Bornes de remise paramétrables depuis le CMS (module Settings). Si le commercial ne fournit
+      // pas de remise, on applique le minimum configuré ; sinon on borne (clamp) la valeur dans
+      // [min, max] — filet de sécurité serveur, le formulaire d'enrôlement reflétant déjà ces bornes.
+      const { min: discountMin, max: discountMax } = await this.settingsService.getDiscountBounds();
+      let resolvedDiscount = typeof shop.maxDiscount === 'number' ? shop.maxDiscount : discountMin;
+      resolvedDiscount = Math.min(Math.max(resolvedDiscount, discountMin), discountMax);
+
       // --- 5. Boutique -------------------------------------------------------------------
       const savedPartner: any = await this.partnerService.create({
         name: shopName,
@@ -276,10 +286,9 @@ export class PartnerOnboardingService {
         // Le contrat expose un `categoryId` unique ; le modèle stocke un tableau. Ranger la valeur
         // ici évite un changement de schéma et laisse la porte ouverte au multi-catégories.
         categories: [shop.categoryId],
-        // Réduction et horaires saisis par le commercial à l'enrôlement. Défaut
-        // réduction 15 % si non fournie ; horaires laissés vides sinon (le
-        // marchand les complète dans l'app, où un gabarit 7 jours s'affiche).
-        maxDiscount: typeof shop.maxDiscount === 'number' ? shop.maxDiscount : 15,
+        // Réduction (bornée par les paramètres CMS) et horaires saisis à l'enrôlement ; horaires
+        // laissés vides sinon (le marchand les complète dans l'app, gabarit 7 jours).
+        maxDiscount: resolvedDiscount,
         openingHours: Array.isArray(shop.openingHours) ? shop.openingHours : [],
         user: merchantId,
         createdBy: commercial._id,
