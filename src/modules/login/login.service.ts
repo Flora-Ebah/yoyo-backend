@@ -265,9 +265,12 @@ export class LoginService {
 	 * @returns Requête de recherche
 	 */
 	buildClientSearchQuery(formattedLogin: string, isEmail: boolean): any {
+		// On inclut `removed` (en plus de `active`) pour permettre la réactivation au login d'un compte
+		// supprimé (DCP/RGPD) : sans cela le compte serait « introuvable » et jamais réactivé. Les
+		// comptes `anonymized`, `suspended`, `inactive` et `locked` restent exclus.
 		let searchQuery: any = {
 			$or: [],
-			status: 'active'
+			status: { $in: ['active', 'removed'] }
 		};
 
 		if (isEmail) {
