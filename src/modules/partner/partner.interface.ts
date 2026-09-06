@@ -36,6 +36,8 @@ export interface IPartner {
   openingHours?: IOpeningHours[];
   
   status?: string;
+  /** Statut mémorisé avant suppression de compte, pour restauration exacte à la réactivation. */
+  statusBeforeRemoval?: string;
   user?: any;
   /** Admin (commercial) auteur de l'enrôlement à distance. */
   createdBy?: any;

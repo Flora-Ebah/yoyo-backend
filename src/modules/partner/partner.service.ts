@@ -397,7 +397,18 @@ export class PartnerService {
    */
   async removePartnersByUserId(userId: string): Promise<any> {
     try {
-      await this.dao.updateMany({ user: userId }, { status: 'removed' });
+      // Pipeline de mise à jour : on mémorise le statut courant dans `statusBeforeRemoval` (sauf s'il
+      // est déjà `removed`, pour ne pas écraser une mémorisation antérieure) puis on passe en `removed`.
+      await this.dao.updateMany({ user: userId }, [
+        {
+          $set: {
+            statusBeforeRemoval: {
+              $cond: [{ $ne: ['$status', 'removed'] }, '$status', '$statusBeforeRemoval']
+            },
+            status: 'removed'
+          }
+        }
+      ] as any);
       // Retour explicite : sans lui, la méthode renvoyait `undefined` et l'appelant
       // (`client.service.delete`) plantait sur `partners.error` alors que la suppression
       // avait réussi — d'où une erreur affichée bien que le compte/la boutique soient supprimés.
@@ -414,7 +425,12 @@ export class PartnerService {
    */
   async restorePartnersByUserId(userId: string): Promise<any> {
     try {
-      await this.dao.updateMany({ user: userId, status: 'removed' }, { status: 'active' });
+      // Restaure le statut mémorisé (repli sur `active` pour les suppressions antérieures au champ)
+      // puis retire le champ de mémorisation.
+      await this.dao.updateMany({ user: userId, status: 'removed' }, [
+        { $set: { status: { $ifNull: ['$statusBeforeRemoval', 'active'] } } },
+        { $unset: 'statusBeforeRemoval' }
+      ] as any);
       return { error: false };
     } catch (error) {
       return { error: true, data: error };

@@ -41,11 +41,14 @@ const schema = new mongoose.Schema<IPartner>({
   // Jours et heures d'ouverture
   openingHours: [openingHoursSchema],
   
-  status: { 
-    type: String, 
-    enum: ['active', 'inactive', 'suspended', 'removed'], 
-    default: 'active' 
+  status: {
+    type: String,
+    enum: ['active', 'inactive', 'suspended', 'removed'],
+    default: 'active'
   },
+  // Statut mémorisé avant une suppression de compte, pour le restaurer à l'identique lors d'une
+  // réactivation (évite qu'une boutique suspendue/non validée ne revienne en `active`).
+  statusBeforeRemoval: { type: String },
   user: { type: mongoose.Schema.Types.ObjectId, ref: 'Client' },
   // Admin (commercial) qui a enrôlé cette boutique à distance. Posé depuis le jeton, jamais du
   // corps de la requête. Absent sur les boutiques créées par le marchand lui-même.
