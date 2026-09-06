@@ -1,6 +1,7 @@
 import { MessageHelper } from '../../helpers';
 import { PartnerService } from '../partner';
 import { SettingsService } from '../settings';
+import { AnonymizationLogService } from '../anonymization-log';
 import { IClient, IUpdatePassword } from './client.interface';
 import { ClientSet } from './client.model';
 import coddyger, { IData, IErrorObject, LoggerService, LogLevel } from 'coddyger';
@@ -10,11 +11,13 @@ export class ClientService {
 	private readonly serviceLabel = 'ClientService';
 	private readonly partnerService: PartnerService;
 	private readonly settingsService: SettingsService;
+	private readonly anonymizationLogService: AnonymizationLogService;
 
 	constructor() {
 		this.dao = new ClientSet();
 		this.partnerService = new PartnerService();
 		this.settingsService = new SettingsService();
+		this.anonymizationLogService = new AnonymizationLogService();
 	}
 
 	/**
@@ -210,8 +213,9 @@ export class ClientService {
 	 * client et de ses boutiques, rend la connexion impossible, mais conserve la ligne (`_id`,
 	 * historique) pour ne pas fausser les statistiques. Opération idempotente.
 	 * @param id ID du client à anonymiser
+	 * @param context Origine de l'anonymisation (journal d'audit) : cron automatique ou admin.
 	 */
-	async anonymize(id: string): Promise<{ error: boolean; data?: any }> {
+	async anonymize(id: string, context?: { trigger: 'cron' | 'admin'; performedBy?: any }): Promise<{ error: boolean; data?: any }> {
 		try {
 			const scrub: any = {
 				email: `deleted+${id}@yoyo.invalid`,
@@ -239,6 +243,13 @@ export class ClientService {
 
 			// Boutiques/partenaires liés : retrait des données nominatives du marchand.
 			await this.partnerService.anonymizePartnersByUserId(id);
+
+			// Journal d'audit (best-effort) : trace non nominative de l'acte d'anonymisation.
+			await this.anonymizationLogService.record({
+				clientId: id,
+				trigger: context?.trigger ?? 'cron',
+				performedBy: context?.performedBy
+			});
 
 			return { error: false };
 		} catch (error) {
@@ -289,7 +300,7 @@ export class ClientService {
 
 			let count = 0;
 			for (const row of rows) {
-				const res = await this.anonymize(String(row._id));
+				const res = await this.anonymize(String(row._id), { trigger: 'cron' });
 				if (!res.error) {
 					count++;
 				}

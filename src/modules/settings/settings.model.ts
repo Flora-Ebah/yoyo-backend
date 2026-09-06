@@ -8,8 +8,8 @@ const schema = new mongoose.Schema<ISettings>(
     // Bornes de la remise marchand (cf. ISettings). Valeurs par défaut : min 10 %, max 50 %.
     discountMin: { type: Number, default: 10 },
     discountMax: { type: Number, default: 50 },
-    // Délai de grâce avant anonymisation d'un compte supprimé (cf. ISettings). Défaut : 90 jours.
-    accountDeletionGraceDays: { type: Number, default: 90 },
+    // Délai de grâce avant anonymisation d'un compte supprimé (cf. ISettings). Défaut : 30 jours.
+    accountDeletionGraceDays: { type: Number, default: 30 },
     status: { type: String, enum: ['active', 'inactive', 'removed'], default: 'active' }
   },
   { timestamps: true }

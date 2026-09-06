@@ -493,7 +493,7 @@ export class ClientController {
    * pouvoir être anonymisé sur-le-champ.
    * @param id ID du client à anonymiser
    */
-  anonymize(id: string) {
+  anonymize(id: string, performedBy?: any) {
     return new Promise(async (resolve, reject) => {
       try {
         if (!id || !coddyger.string.isValidObjectId(id)) {
@@ -509,7 +509,7 @@ export class ClientController {
           return resolve({ status: defines.status.requestOK, message: 'Ce compte est déjà anonymisé.', data: null });
         }
 
-        const result = await this.service.anonymize(id);
+        const result = await this.service.anonymize(id, { trigger: 'admin', performedBy });
         if (result.error) {
           return resolve({ status: defines.status.serverError, message: "Échec de l'anonymisation.", data: null });
         }

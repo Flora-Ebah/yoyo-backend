@@ -6,7 +6,7 @@ import { SettingsSet } from './settings.model';
 const DEFAULTS: Pick<ISettings, 'discountMin' | 'discountMax' | 'accountDeletionGraceDays'> = {
   discountMin: 10,
   discountMax: 50,
-  accountDeletionGraceDays: 90
+  accountDeletionGraceDays: 30
 };
 
 export class SettingsService {
