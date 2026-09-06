@@ -459,7 +459,8 @@ const defaultRoute: any = (fastify: any, options, done) => {
     preHandler: TokenMiddleware.verifyAdmin,
     handler: (request, reply) => {
       const _id: any = request.params.id;
-      let Q = Controller.anonymize(_id);
+      const admin: any = request.user;
+      let Q = Controller.anonymize(_id, admin?._id);
       return coddyger.api(reply, Q);
     }
   });
