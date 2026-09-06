@@ -627,7 +627,8 @@ export class ClientController {
           return resolve({
             status: defines.status.requestOK,
             message: result.message,
-            data: { exists: true }
+            // `removed` est exposé pour permettre à l'app de proposer « Réactiver mon compte ».
+            data: { exists: true, removed: result.status === 'removed' }
           });
         } else {
           // Le compte n'existe pas - retourner 400

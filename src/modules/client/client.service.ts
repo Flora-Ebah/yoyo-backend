@@ -678,7 +678,7 @@ export class ClientService {
 	 * @param login Email ou numéro de téléphone
 	 * @returns Information sur l'existence du compte
 	 */
-	async verifyLogin(login: string): Promise<{ exists: boolean; message: string }> {
+	async verifyLogin(login: string): Promise<{ exists: boolean; message: string; status?: string }> {
 		try {
 			// Valider et déterminer le type de login
 			const emailValidation = this.validateEmail(login);
@@ -711,9 +711,12 @@ export class ClientService {
 			const client = await this.getOne(searchQuery);
 
 			if (client) {
+				// On expose le statut pour que l'app puisse proposer « Réactiver mon compte » lorsqu'il
+				// s'agit d'un compte supprimé (réactivable en se connectant).
 				return {
 					exists: true,
-					message: 'Un compte existe avec ce login'
+					message: 'Un compte existe avec ce login',
+					status: client.status
 				};
 			} else {
 				return {
