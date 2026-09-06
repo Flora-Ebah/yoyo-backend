@@ -273,6 +273,10 @@ export class ClientService {
 			if (result?.error) {
 				throw result;
 			}
+
+			// Restaure les boutiques retirées lors de la suppression : le marchand retrouve sa boutique.
+			await this.partnerService.restorePartnersByUserId(id);
+
 			return { error: false };
 		} catch (error) {
 			LoggerService.log({ type: LogLevel.Error, content: error, location: this.serviceLabel, method: 'reactivate' });

@@ -408,6 +408,20 @@ export class PartnerService {
   }
 
   /**
+   * Restaure les boutiques d'un utilisateur qui avaient été retirées lors de la suppression de son
+   * compte (statut `removed` → `active`). Utilisé à la réactivation du compte (DCP/RGPD) pour que le
+   * marchand retrouve la boutique qu'il avait créée. N'affecte pas les boutiques anonymisées.
+   */
+  async restorePartnersByUserId(userId: string): Promise<any> {
+    try {
+      await this.dao.updateMany({ user: userId, status: 'removed' }, { status: 'active' });
+      return { error: false };
+    } catch (error) {
+      return { error: true, data: error };
+    }
+  }
+
+  /**
    * Anonymise (DCP/RGPD) les boutiques d'un utilisateur : retire les données nominatives du
    * marchand (email, téléphone) tout en conservant l'enregistrement (nom commercial, statistiques
    * de transactions) pour ne pas fausser les données de l'application.
