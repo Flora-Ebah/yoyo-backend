@@ -33,6 +33,10 @@ export interface IClient {
   removedReason?: string;
   removedAt?: Date;
   removedBy?: any;
+  /** Anonymisation DCP/RGPD : horodatage du retrait définitif des données nominatives. */
+  anonymizedAt?: Date;
+  /** Réactivation d'un compte supprimé avant la fin du délai de grâce (relance le délai). */
+  reactivatedAt?: Date;
 }
 
 export interface IRegister {

@@ -3,9 +3,10 @@ import { ISettings } from './settings.interface';
 import { SettingsSet } from './settings.model';
 
 // Valeurs par défaut si aucun document de configuration n'existe encore en base.
-const DEFAULTS: Pick<ISettings, 'discountMin' | 'discountMax'> = {
+const DEFAULTS: Pick<ISettings, 'discountMin' | 'discountMax' | 'accountDeletionGraceDays'> = {
   discountMin: 10,
-  discountMax: 50
+  discountMax: 50,
+  accountDeletionGraceDays: 90
 };
 
 export class SettingsService {
@@ -42,6 +43,7 @@ export class SettingsService {
           _id: coddyger.string.generateObjectId(),
           discountMin: DEFAULTS.discountMin,
           discountMax: DEFAULTS.discountMax,
+          accountDeletionGraceDays: DEFAULTS.accountDeletionGraceDays,
           status: 'active'
         };
         const result: any = await this.dao.save(created);
@@ -71,6 +73,16 @@ export class SettingsService {
   }
 
   /**
+   * Délai de grâce (jours) avant anonymisation d'un compte supprimé. Lu depuis la configuration ;
+   * repli sur la valeur par défaut si le champ est absent (anciens documents) ou invalide.
+   */
+  async getAccountDeletionGraceDays(): Promise<number> {
+    const s = await this.getSettings();
+    const value = Number(s.accountDeletionGraceDays);
+    return Number.isFinite(value) && value >= 0 ? value : DEFAULTS.accountDeletionGraceDays;
+  }
+
+  /**
    * Met à jour la configuration (remise min/max). Réservé à l'administrateur (garde côté route).
    */
   async update(data: Partial<ISettings>): Promise<ISettings> {
@@ -80,6 +92,7 @@ export class SettingsService {
       const next: any = {};
       if (typeof data.discountMin !== 'undefined') next.discountMin = Number(data.discountMin);
       if (typeof data.discountMax !== 'undefined') next.discountMax = Number(data.discountMax);
+      if (typeof data.accountDeletionGraceDays !== 'undefined') next.accountDeletionGraceDays = Number(data.accountDeletionGraceDays);
 
       const result: any = await this.dao.update({ _id: current._id }, next);
       if (result && result.error) {

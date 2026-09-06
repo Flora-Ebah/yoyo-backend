@@ -43,7 +43,8 @@ const defaultRoute: any = (fastify: any, options, done) => {
         type: 'object',
         properties: {
           discountMin: { type: 'number', minimum: 0, maximum: 100 },
-          discountMax: { type: 'number', minimum: 0, maximum: 100 }
+          discountMax: { type: 'number', minimum: 0, maximum: 100 },
+          accountDeletionGraceDays: { type: 'number', minimum: 1, maximum: 3650 }
         },
         additionalProperties: false
       }

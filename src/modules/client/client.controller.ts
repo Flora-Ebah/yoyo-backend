@@ -488,6 +488,43 @@ export class ClientController {
   }
 
   /**
+   * Anonymise immédiatement un client (administration, DCP/RGPD). Bypasse le délai de grâce.
+   * N'utilise pas `getById` (qui exclut les comptes déjà `removed`) : un compte supprimé doit
+   * pouvoir être anonymisé sur-le-champ.
+   * @param id ID du client à anonymiser
+   */
+  anonymize(id: string) {
+    return new Promise(async (resolve, reject) => {
+      try {
+        if (!id || !coddyger.string.isValidObjectId(id)) {
+          return resolve({ status: defines.status.badRequest, message: locale.wrongObjectId("de l'élément"), data: null });
+        }
+
+        const existing: any = await this.service.getOne({ _id: id });
+        if (!existing || existing.error) {
+          return resolve({ status: defines.status.notFound, message: locale.notfound('Client'), data: null });
+        }
+
+        if (existing.status === 'anonymized') {
+          return resolve({ status: defines.status.requestOK, message: 'Ce compte est déjà anonymisé.', data: null });
+        }
+
+        const result = await this.service.anonymize(id);
+        if (result.error) {
+          return resolve({ status: defines.status.serverError, message: "Échec de l'anonymisation.", data: null });
+        }
+
+        resolve({ status: defines.status.requestOK, message: locale.controller.done, data: null });
+      } catch (error) {
+        reject(error);
+      }
+    }).catch((e: IErrorObject) => {
+      console.error(e);
+      return coddyger.catchReturn(e, controllerLabel, 'anonymize');
+    });
+  }
+
+  /**
    * Envoie une notification à un client
    * @param clientId ID du client
    * @param message Message à envoyer

@@ -16,5 +16,12 @@ export interface ISettings {
    */
   discountMin: number;
   discountMax: number;
+  /**
+   * Délai de grâce (en jours) entre la suppression d'un compte client (`removed`) et son
+   * anonymisation automatique par le cron. Pendant ce délai, une reconnexion/recréation réactive
+   * le compte et relance le délai (modèle « soft delete » type Facebook, conformité DCP/RGPD).
+   * Défaut : 90 jours.
+   */
+  accountDeletionGraceDays: number;
   status?: string;
 }

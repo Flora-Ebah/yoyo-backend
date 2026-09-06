@@ -135,6 +135,14 @@ export class LoginController {
 					});
 				}
 
+				// Réactivation (DCP/RGPD) : un compte supprimé (soft delete) qui se reconnecte pendant le
+				// délai de grâce est restauré et le délai est relancé. Les comptes anonymisés ont un mot
+				// de passe invalide et un email brouillé ⇒ ils n'atteignent jamais ce point.
+				if (client.status === 'removed') {
+					await this.clientService.reactivate(client._id);
+					client.status = 'active';
+				}
+
         // Réinitialiser les tentatives de connexion après une connexion réussie
 				try {
 					await this.service.resetLoginAttempts(client._id, item.userAgent, item.ip);

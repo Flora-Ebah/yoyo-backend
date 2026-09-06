@@ -56,7 +56,17 @@ export class SettingsController {
           return resolve({ status: defines.status.badRequest, message: 'La remise minimale doit être inférieure à la remise maximale.', data: null });
         }
 
-        const settings = await this.service.update({ discountMin: effMin, discountMax: effMax });
+        // Délai de grâce avant anonymisation (jours). Optionnel : validé seulement s'il est fourni.
+        const patch: Partial<ISettings> = { discountMin: effMin, discountMax: effMax };
+        if (typeof body.accountDeletionGraceDays !== 'undefined') {
+          const grace = Number(body.accountDeletionGraceDays);
+          if (!Number.isFinite(grace) || grace < 1 || grace > 3650) {
+            return resolve({ status: defines.status.badRequest, message: 'Le délai de suppression doit être compris entre 1 et 3650 jours.', data: null });
+          }
+          patch.accountDeletionGraceDays = Math.round(grace);
+        }
+
+        const settings = await this.service.update(patch);
         resolve({
           status: defines.status.requestOK,
           message: 'Paramètres mis à jour',

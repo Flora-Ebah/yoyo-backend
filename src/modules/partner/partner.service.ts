@@ -406,6 +406,20 @@ export class PartnerService {
       return { error: true, data: error };
     }
   }
+
+  /**
+   * Anonymise (DCP/RGPD) les boutiques d'un utilisateur : retire les données nominatives du
+   * marchand (email, téléphone) tout en conservant l'enregistrement (nom commercial, statistiques
+   * de transactions) pour ne pas fausser les données de l'application.
+   */
+  async anonymizePartnersByUserId(userId: string): Promise<any> {
+    try {
+      await this.dao.updateMany({ user: userId }, { email: null, phone: null, status: 'removed' });
+      return { error: false };
+    } catch (error) {
+      return { error: true, data: error };
+    }
+  }
   /**
    * Récupère les partenaires ouverts à la date actuelle
    * @param payloads Paramètres de pagination et filtres

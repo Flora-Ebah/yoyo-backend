@@ -438,6 +438,32 @@ const defaultRoute: any = (fastify: any, options, done) => {
     }
   });
 
+  // Anonymisation immédiate (DCP/RGPD) par un administrateur : retire sans délai les données
+  // nominatives du client et de ses boutiques (bypass du délai de grâce). Utile notamment pour
+  // libérer une adresse/numéro utilisés lors d'un test.
+  fastify.route({
+    schema: {
+      tags,
+      summary: 'Anonymiser un client immédiatement (administration)',
+      params: {
+        type: 'object',
+        properties: {
+          id: { type: 'string' }
+        },
+        required: ['id'],
+        additionalProperties: false
+      }
+    },
+    method: 'PATCH',
+    url: `${routePath}/anonymize/:id`,
+    preHandler: TokenMiddleware.verifyAdmin,
+    handler: (request, reply) => {
+      const _id: any = request.params.id;
+      let Q = Controller.anonymize(_id);
+      return coddyger.api(reply, Q);
+    }
+  });
+
   fastify.route({
     schema: {
       tags,

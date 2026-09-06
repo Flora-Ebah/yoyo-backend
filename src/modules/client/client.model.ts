@@ -51,8 +51,8 @@ const schema = new mongoose.Schema<IClient>({
 	},
   status: { 
     type: String, 
-    enum: ['active', 'inactive', 'suspended', 'removed', 'locked', 'pending'], 
-    default: 'pending' 
+    enum: ['active', 'inactive', 'suspended', 'removed', 'locked', 'pending', 'anonymized'],
+    default: 'pending'
   },
   isPartner: { type: Boolean, default: false },
   // Onboarding à distance : le compte est créé par un commercial avec un mot de passe aléatoire
@@ -63,6 +63,9 @@ const schema = new mongoose.Schema<IClient>({
 	removedReason: { type: String },
 	removedAt: { type: Date },
 	removedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'Admin' },
+	// Anonymisation DCP/RGPD (cf. IClient).
+	anonymizedAt: { type: Date },
+	reactivatedAt: { type: Date },
 },
 { timestamps: true });
 
@@ -85,7 +88,7 @@ export class ClientSet extends MongoDbDao<IClient & Document> implements IData<I
 	}): Promise<any> {
 		return new Promise(async (resolve, reject) => {
 			if (coddyger.string.isEmpty(payloads.params.status)) {
-				payloads.params = { ...payloads.params, status: { $nin: ['removed', 'archived'] } };
+				payloads.params = { ...payloads.params, status: { $nin: ['removed', 'archived', 'anonymized'] } };
 			}
 
 			let page: number = Number(payloads.page) || 1;

@@ -1,5 +1,6 @@
 import { MessageHelper } from '../../helpers';
 import { PartnerService } from '../partner';
+import { SettingsService } from '../settings';
 import { IClient, IUpdatePassword } from './client.interface';
 import { ClientSet } from './client.model';
 import coddyger, { IData, IErrorObject, LoggerService, LogLevel } from 'coddyger';
@@ -8,10 +9,12 @@ export class ClientService {
 	private readonly dao: IData<IClient>;
 	private readonly serviceLabel = 'ClientService';
 	private readonly partnerService: PartnerService;
+	private readonly settingsService: SettingsService;
 
 	constructor() {
 		this.dao = new ClientSet();
 		this.partnerService = new PartnerService();
+		this.settingsService = new SettingsService();
 	}
 
 	/**
@@ -95,7 +98,7 @@ export class ClientService {
 	 */
 	async getById(id: string): Promise<any> {
 		try {
-			return await this.dao.selectOne({ _id: id, status: { $nin: ['removed', 'archived'] } });
+			return await this.dao.selectOne({ _id: id, status: { $nin: ['removed', 'archived', 'anonymized'] } });
 		} catch (error) {
 			LoggerService.log({
 				type: LogLevel.Error,
@@ -199,6 +202,110 @@ export class ClientService {
 				method: 'delete'
 			});
 			throw error;
+		}
+	}
+
+	/**
+	 * Anonymise définitivement un compte (DCP/RGPD) : retire toutes les données nominatives du
+	 * client et de ses boutiques, rend la connexion impossible, mais conserve la ligne (`_id`,
+	 * historique) pour ne pas fausser les statistiques. Opération idempotente.
+	 * @param id ID du client à anonymiser
+	 */
+	async anonymize(id: string): Promise<{ error: boolean; data?: any }> {
+		try {
+			const scrub: any = {
+				email: `deleted+${id}@yoyo.invalid`,
+				contact: null,
+				firstname: 'Utilisateur',
+				lastname: 'supprimé',
+				// Mot de passe rendu inutilisable (aucun hash valide ⇒ connexion impossible).
+				password: `${coddyger.string.generateObjectId()}${coddyger.string.generateObjectId()}`,
+				address: null,
+				birthdate: null,
+				country: null,
+				gender: null,
+				avatar: null,
+				documents: [],
+				secretResponse: null,
+				secretQuestion: null,
+				status: 'anonymized',
+				anonymizedAt: new Date()
+			};
+
+			const result: any = await this.dao.update({ _id: id }, scrub);
+			if (result?.error) {
+				throw result;
+			}
+
+			// Boutiques/partenaires liés : retrait des données nominatives du marchand.
+			await this.partnerService.anonymizePartnersByUserId(id);
+
+			return { error: false };
+		} catch (error) {
+			LoggerService.log({ type: LogLevel.Error, content: error, location: this.serviceLabel, method: 'anonymize' });
+			return { error: true, data: error };
+		}
+	}
+
+	/**
+	 * Réactive un compte supprimé (`removed`) tant que le délai de grâce n'est pas écoulé : le
+	 * statut repasse à `active`, les marqueurs de suppression sont effacés et le délai est relancé
+	 * (modèle « soft delete » type Facebook). Sans effet sur un compte déjà `anonymized`.
+	 * @param id ID du client à réactiver
+	 */
+	async reactivate(id: string): Promise<{ error: boolean }> {
+		try {
+			const result: any = await this.dao.update(
+				{ _id: id },
+				{ status: 'active', removedAt: null, removedReason: null, reactivatedAt: new Date() }
+			);
+			if (result?.error) {
+				throw result;
+			}
+			return { error: false };
+		} catch (error) {
+			LoggerService.log({ type: LogLevel.Error, content: error, location: this.serviceLabel, method: 'reactivate' });
+			return { error: true };
+		}
+	}
+
+	/**
+	 * Anonymise les comptes supprimés dont le délai de grâce est écoulé. Appelé quotidiennement par
+	 * le cron. Le délai (jours) est lu depuis les paramètres de la plateforme (module Settings).
+	 * @returns Nombre de comptes anonymisés
+	 */
+	async cleanupRemovedClients(): Promise<{ anonymized: number }> {
+		try {
+			const graceDays = await this.settingsService.getAccountDeletionGraceDays();
+			const cutoff = new Date(Date.now() - graceDays * 24 * 60 * 60 * 1000);
+
+			// On capte les comptes supprimés dont le délai est écoulé. Repli sur `updatedAt` pour les
+			// anciens comptes `removed` sans `removedAt` (backfill) : sinon ils ne seraient jamais purgés.
+			const candidates: any = await this.dao.selectHug({
+				status: 'removed',
+				$or: [{ removedAt: { $lte: cutoff } }, { removedAt: null, updatedAt: { $lte: cutoff } }]
+			});
+			const rows: any[] = Array.isArray(candidates) ? candidates : [];
+
+			let count = 0;
+			for (const row of rows) {
+				const res = await this.anonymize(String(row._id));
+				if (!res.error) {
+					count++;
+				}
+			}
+
+			LoggerService.log({
+				type: LogLevel.Info,
+				content: `Anonymisation : ${count}/${rows.length} compte(s) supprimé(s) depuis plus de ${graceDays} jours.`,
+				location: this.serviceLabel,
+				method: 'cleanupRemovedClients'
+			});
+
+			return { anonymized: count };
+		} catch (error) {
+			LoggerService.log({ type: LogLevel.Error, content: error, location: this.serviceLabel, method: 'cleanupRemovedClients' });
+			return { anonymized: 0 };
 		}
 	}
 
@@ -445,17 +552,25 @@ export class ClientService {
 
 	async checkExistingCredentials(email?: string, contact?: string): Promise<{ exists: boolean; message?: string, data?: any }> {
 		try {
+			// Les comptes anonymisés ont des identifiants brouillés (email/contact retirés) : ils ne
+			// « réservent » plus rien, l'adresse/numéro d'origine redeviennent disponibles.
 			if (email) {
-				const isEmail: any = await this.dao.selectOne({ email });
+				const isEmail: any = await this.dao.selectOne({ email, status: { $ne: 'anonymized' } });
 				if (isEmail) {
-					return { exists: true, message: 'Cette adresse email est déjà utilisée', data: isEmail.status };
+					const message = isEmail.status === 'removed'
+						? 'Un compte supprimé utilise cette adresse. Connectez-vous pour le réactiver.'
+						: 'Cette adresse email est déjà utilisée';
+					return { exists: true, message, data: isEmail.status };
 				}
 			}
 
 			if (contact) {
-				const isContact: any = await this.dao.selectOne({ contact });
+				const isContact: any = await this.dao.selectOne({ contact, status: { $ne: 'anonymized' } });
 				if (isContact) {
-					return { exists: true, message: 'Ce numéro de téléphone est déjà utilisé', data: isContact.status };
+					const message = isContact.status === 'removed'
+						? 'Un compte supprimé utilise ce numéro. Connectez-vous pour le réactiver.'
+						: 'Ce numéro de téléphone est déjà utilisé';
+					return { exists: true, message, data: isContact.status };
 				}
 			}
 
@@ -506,12 +621,18 @@ export class ClientService {
 			// Formater le numéro pour la recherche
 			const formattedContact = this.formatIvorianPhoneNumber(contact);
 
-			// Vérifier si le numéro existe déjà
-			const existingClient = await this.dao.selectOne({ contact: formattedContact });
+			// Vérifier si le numéro existe déjà (hors comptes anonymisés dont le numéro a été retiré).
+			const existingClient: any = await this.dao.selectOne({ contact: formattedContact, status: { $ne: 'anonymized' } });
+
+			const message = !existingClient
+				? 'Ce numéro de téléphone est disponible'
+				: existingClient.status === 'removed'
+					? 'Un compte supprimé utilise ce numéro. Connectez-vous pour le réactiver.'
+					: 'Ce numéro de téléphone est déjà utilisé';
 
 			return {
 				exists: !!existingClient,
-				message: existingClient ? 'Ce numéro de téléphone est déjà utilisé' : 'Ce numéro de téléphone est disponible'
+				message
 			};
 		} catch (error) {
 			throw error;
@@ -570,6 +691,10 @@ export class ClientService {
 				const formattedPhone = this.formatIvorianPhoneNumber(login);
 				searchQuery.contact = formattedPhone;
 			}
+
+			// Exclure les comptes anonymisés (identifiants brouillés) : leur email/numéro d'origine
+			// est de nouveau disponible pour une nouvelle inscription.
+			searchQuery.status = { $ne: 'anonymized' };
 
 			// Rechercher le client
 			const client = await this.getOne(searchQuery);
