@@ -86,6 +86,43 @@ export function emailButton(url: string, label: string): string {
 }
 
 /**
+ * Boutons de téléchargement des stores (Google Play / App Store), façon badge, en `<table>` pour
+ * rester compatibles avec tous les clients de messagerie (Gmail bloque les SVG : on reste en texte
+ * + fond noir plutôt qu'en icônes vectorielles).
+ *
+ * Les URLs viennent de `PRO_ANDROID_STORE_URL` / `PRO_IOS_STORE_URL` (repli Play Store construit
+ * depuis `ANDROID_PACKAGE_NAME`). Le bouton App Store n'apparaît que si son URL est renseignée.
+ */
+export function storeButtons(): string {
+	const android =
+		(process.env.PRO_ANDROID_STORE_URL ?? '').trim() ||
+		`https://play.google.com/store/apps/details?id=${process.env.ANDROID_PACKAGE_NAME ?? 'com.yoyopro.yoyoafrica'}`;
+	const ios = (process.env.PRO_IOS_STORE_URL ?? '').trim();
+
+	const badge = (url: string, small: string, big: string) => `
+                <td style="padding: 0 5px;">
+                  <a href="${url}" target="_blank" style="display: block; background-color: #000000; text-decoration: none; padding: 9px 16px; font-family: ${FONT_STACK};">
+                    <span style="display: block; font-size: 10px; font-weight: 500; letter-spacing: .04em; text-transform: uppercase; color: #FFFFFF; opacity: .85;">${small}</span>
+                    <span style="display: block; font-size: 16px; font-weight: 700; color: #FFFFFF; line-height: 1.2;">${big}</span>
+                  </a>
+                </td>`;
+
+	return `
+      <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="width: 100%; margin: 4px 0 8px;">
+        <tr>
+          <td align="center" style="text-align: center;">
+            <table role="presentation" align="center" cellpadding="0" cellspacing="0" border="0" style="margin: 0 auto;">
+              <tr>
+                ${badge(android, 'Disponible sur', 'Google Play')}
+                ${ios ? badge(ios, 'Télécharger dans', 'App Store') : ''}
+              </tr>
+            </table>
+          </td>
+        </tr>
+      </table>`;
+}
+
+/**
  * Encart d'informations clé/valeur (boutique, date, appareil, expiration…).
  * Même style discret que l'encart du mail d'activation, factorisé pour être réutilisé
  * par tous les mails qui présentent des détails.
