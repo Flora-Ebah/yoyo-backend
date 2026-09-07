@@ -121,6 +121,48 @@ export default class Router {
 			]);
 		});
 
+		// Page de repli d'activation marchand. Le lien `/activation?token=…` est un App Link : quand
+		// l'app YoYo Pro est installée (et la vérification Android/iOS OK), le système ouvre l'app
+		// AVANT que le navigateur ne charge cette page. Sinon (app absente), le navigateur affiche
+		// cette page qui invite à installer l'application (Play Store / App Store) — au lieu du 404 JSON.
+		this.router.get('/activation', async (request, reply) => {
+			const androidUrl = (process.env.PRO_ANDROID_STORE_URL ?? '').trim()
+				|| `https://play.google.com/store/apps/details?id=${process.env.ANDROID_PACKAGE_NAME ?? 'com.yoyopro.yoyoafrica'}`;
+			const iosUrl = (process.env.PRO_IOS_STORE_URL ?? '').trim();
+
+			const html = `<!doctype html><html lang="fr"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Activer votre boutique YoYo</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap">
+<style>
+  :root{--brand:#FF6100;--brand2:#FF904B;--ink:#1F2933;--muted:#78868F;--paper:#fff;--sand:#F1EDE7}
+  *{box-sizing:border-box}
+  body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:var(--sand);
+    font-family:"Plus Jakarta Sans",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;color:var(--ink);padding:20px}
+  .card{background:var(--paper);max-width:420px;width:100%;padding:34px 26px;text-align:center}
+  .logo{width:64px;height:64px;border-radius:18px;background:linear-gradient(135deg,var(--brand),var(--brand2));
+    display:flex;align-items:center;justify-content:center;margin:0 auto 18px;color:#fff;font-weight:800;font-size:26px}
+  h1{font-size:22px;font-weight:800;margin:0 0 8px}
+  p{color:var(--muted);font-size:15px;line-height:1.55;margin:0 0 22px}
+  .btn{display:flex;align-items:center;justify-content:center;gap:10px;width:100%;padding:14px 18px;margin:10px 0;
+    border-radius:12px;font-weight:700;font-size:15px;text-decoration:none;border:1px solid #E6E1D9;color:var(--ink)}
+  .btn.primary{background:var(--brand);color:#fff;border-color:var(--brand)}
+  .note{font-size:13px;color:var(--muted);margin-top:18px;line-height:1.5}
+  .b{font-weight:700;color:var(--ink)}
+</style></head><body>
+  <div class="card">
+    <div class="logo">Y</div>
+    <h1>Installez YoYo Pro</h1>
+    <p>Pour activer votre boutique, installez l'application <span class="b">YoYo Pro</span> sur votre téléphone.</p>
+    <a class="btn primary" href="${androidUrl}">📱 Télécharger sur Google Play</a>
+    ${iosUrl ? `<a class="btn" href="${iosUrl}">🍎 Télécharger sur l'App Store</a>` : ''}
+    <p class="note">Une fois l'application installée, <span class="b">rouvrez le lien « Activer ma boutique »</span> reçu par e-mail : il ouvrira directement l'application.</p>
+  </div>
+</body></html>`;
+
+			return reply.status(defines.status.requestOK).type('text/html; charset=utf-8').send(html);
+		});
+
 		this.router.get(`${prefix}/container`, async (request, reply) => {
 			let Q = Promise.resolve({
 					status: defines.status.created,
