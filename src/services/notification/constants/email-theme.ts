@@ -99,11 +99,22 @@ export function storeButtons(): string {
 		`https://play.google.com/store/apps/details?id=${process.env.ANDROID_PACKAGE_NAME ?? 'com.yoyopro.yoyoafrica'}`;
 	const ios = (process.env.PRO_IOS_STORE_URL ?? '').trim();
 
-	const badge = (url: string, small: string, big: string) => `
+	// Base publique des images (mêmes assets que le logo). Icônes PNG servies à `/assets/`.
+	const assetsBase = (
+		process.env.MAIL_ASSETS_URL ??
+		`${(process.env.SERVER_HOST ?? '').replace(/\/+$/, '')}/${process.env.API_VERSION ?? 'v1'}${process.env.SERVER_PATH ?? ''}/assets`
+	).replace(/\/+$/, '');
+
+	const badge = (url: string, icon: string, small: string, big: string) => `
                 <td style="padding: 0 5px;">
                   <a href="${url}" target="_blank" style="display: block; background-color: #000000; text-decoration: none; padding: 9px 16px; font-family: ${FONT_STACK};">
-                    <span style="display: block; font-size: 10px; font-weight: 500; letter-spacing: .04em; text-transform: uppercase; color: #FFFFFF; opacity: .85;">${small}</span>
-                    <span style="display: block; font-size: 16px; font-weight: 700; color: #FFFFFF; line-height: 1.2;">${big}</span>
+                    <table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>
+                      <td style="padding-right: 10px; vertical-align: middle;"><img src="${assetsBase}/${icon}" width="24" height="24" alt="" style="display: block; border: 0;"></td>
+                      <td style="vertical-align: middle;">
+                        <span style="display: block; font-size: 10px; font-weight: 500; letter-spacing: .04em; text-transform: uppercase; color: #FFFFFF; opacity: .85;">${small}</span>
+                        <span style="display: block; font-size: 16px; font-weight: 700; color: #FFFFFF; line-height: 1.2;">${big}</span>
+                      </td>
+                    </tr></table>
                   </a>
                 </td>`;
 
@@ -113,8 +124,8 @@ export function storeButtons(): string {
           <td align="center" style="text-align: center;">
             <table role="presentation" align="center" cellpadding="0" cellspacing="0" border="0" style="margin: 0 auto;">
               <tr>
-                ${badge(android, 'Disponible sur', 'Google Play')}
-                ${ios ? badge(ios, 'Télécharger dans', 'App Store') : ''}
+                ${badge(android, 'google-play.png', 'Disponible sur', 'Google Play')}
+                ${ios ? badge(ios, 'app-store.png', 'Télécharger dans', 'App Store') : ''}
               </tr>
             </table>
           </td>
