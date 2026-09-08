@@ -233,6 +233,31 @@ const defaultRoute: any = (fastify: any, options, done) => {
 		}
 	});
 
+	// Envoi de l'OTP d'activation marchand (parcours « je définis mon code depuis l'app, sans le
+	// lien e-mail »). OTP valable 5 min. Atteignable sans compte connecté (attesté App Check).
+	fastify.route({
+		schema: {
+			tags,
+			summary: "Envoyer un code d'activation marchand (OTP)",
+			description:
+				"Parcours d'activation par OTP : `POST /otp/activation/request` → `POST /otp/verify` → `resetToken` → `PUT /clients/updatePassword` (définit le code et active le compte).",
+			body: {
+				type: 'object',
+				properties: { login: { type: 'string' } },
+				required: ['login'],
+				additionalProperties: false
+			}
+		},
+		method: 'POST',
+		url: `${routePath}/activation/request`,
+		preHandler: AppCheckMiddleware.verify,
+		handler: (request, reply) => {
+			const { login } = request.body;
+			let Q = Controller.generate(login, 'MERCHANT_ACTIVATION_OTP');
+			return coddyger.api(reply, Q);
+		}
+	});
+
 	done();
 };
 

@@ -233,9 +233,13 @@ export class OtpController {
 				// [SÉCURITÉ F-03] Un parcours « mot de passe oublié » est autorisé par la
 				// vérification de l'OTP, pas par l'identifiant que l'appelant annonce. On émet
 				// donc ici le jeton court et à usage unique qu'exigera `updatePassword`.
-				const isPasswordReset = otp.purpose === MessageTypes.TYPES.PASSWORD_RESET;
+				// Le resetToken autorise `updatePassword`. On l'émet pour le « mot de passe oublié » ET
+				// pour l'activation marchand par OTP (définition du code sans le lien e-mail).
+				const grantsCredentialChange =
+					otp.purpose === MessageTypes.TYPES.PASSWORD_RESET ||
+					otp.purpose === MessageTypes.TYPES.MERCHANT_ACTIVATION_OTP;
 				const resetToken =
-					isPasswordReset && user ? PasswordResetTokenHelper.issue(user._id) : null;
+					grantsCredentialChange && user ? PasswordResetTokenHelper.issue(user._id) : null;
 
 				// [SÉCURITÉ] `userId` n'est plus renvoyé : il n'autorise plus rien depuis F-03, et
 				// l'exposer invite à réintroduire le schéma « l'appelant annonce sa cible ».

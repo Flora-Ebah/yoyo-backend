@@ -248,6 +248,12 @@ export class ClientController {
           await this.service.reactivate(id);
         }
 
+        // Activation par OTP : un compte marchand en attente (`pending`, créé par un commercial/admin)
+        // qui définit son code via OTP devient actif. L'OTP a prouvé la possession de l'e-mail/numéro.
+        if (existingItem.status === 'pending') {
+          await this.service.update(id, { status: 'active', mustChangePassword: false } as any);
+        }
+
         // [SÉCURITÉ F-03] Ne renvoie plus le document : `getById()` remonte le client complet,
         // empreinte du mot de passe incluse, alors que l'appelant n'est pas authentifié comme
         // étant ce client.
@@ -635,8 +641,13 @@ export class ClientController {
           return resolve({
             status: defines.status.requestOK,
             message: result.message,
-            // `removed` est exposé pour permettre à l'app de proposer « Réactiver mon compte ».
-            data: { exists: true, removed: result.status === 'removed' }
+            // `removed` → proposer « Réactiver mon compte » ; `pendingActivation` → déclencher le
+            // parcours d'activation par OTP (compte créé par un commercial/admin, code pas encore défini).
+            data: {
+              exists: true,
+              removed: result.status === 'removed',
+              pendingActivation: result.status === 'pending'
+            }
           });
         } else {
           // Le compte n'existe pas - retourner 400

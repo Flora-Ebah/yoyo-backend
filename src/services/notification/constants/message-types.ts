@@ -16,6 +16,9 @@ export class MessageTypes {
     // Messages liés à l'authentification
     ACCOUNT_VERIFICATION: 'account_verification',
     PASSWORD_RESET: 'password_reset',
+    // OTP d'activation marchand : permet de définir son code depuis n'importe quel appareil,
+    // sans le lien e-mail (le compte est en attente d'activation). Validité courte (5 min).
+    MERCHANT_ACTIVATION_OTP: 'merchant_activation_otp',
     LOGIN_VERIFICATION: 'login_verification',
     TWO_FACTOR_AUTH: 'two_factor_auth',
     
@@ -80,6 +83,18 @@ export class MessageTypes {
         ${codeBox(code)}
         ${infoBox([{ label: 'Validité du code', value: '10 minutes · usage unique' }])}
         ${securityNote("Vous n'avez pas créé de compte YoYo ? Ignorez simplement cet e-mail, aucune action ne sera engagée.")}
+        <p>À très vite,<br>L'équipe YoYo</p>
+      `
+    },
+    [MessageTypes.TYPES.MERCHANT_ACTIVATION_OTP]: {
+      subject: 'Code d’activation de votre compte YoYo',
+      hero: 'Activez votre compte',
+      template: (code: string, name?: string) => `
+        <p>Bonjour <strong>${name || 'cher partenaire'}</strong></p>
+        <p>Pour activer votre compte marchand et définir votre code de sécurité, saisissez ce code dans l'application :</p>
+        ${codeBox(code)}
+        ${infoBox([{ label: 'Validité du code', value: '5 minutes · usage unique' }])}
+        ${securityNote("Vous n'êtes pas à l'origine de cette demande ? Ignorez cet e-mail, aucune action ne sera engagée.")}
         <p>À très vite,<br>L'équipe YoYo</p>
       `
     },
@@ -522,8 +537,11 @@ export class MessageTypes {
     [MessageTypes.TYPES.ACCOUNT_VERIFICATION]: (code: string) => 
       `[YoYo] Votre code de vérification est: ${code}. Ne le partagez avec personne.`,
     
-    [MessageTypes.TYPES.PASSWORD_RESET]: (code: string) => 
+    [MessageTypes.TYPES.PASSWORD_RESET]: (code: string) =>
       `[YoYo] Votre code de réinitialisation de mot de passe est: ${code}. Ne le partagez avec personne.`,
+
+    [MessageTypes.TYPES.MERCHANT_ACTIVATION_OTP]: (code: string) =>
+      `[YoYo] Votre code d'activation est: ${code} (valable 5 min). Ne le partagez avec personne.`,
     
     [MessageTypes.TYPES.LOGIN_VERIFICATION]: (code: string) => 
       `[YoYo] Votre code de connexion est: ${code}. Ne le partagez avec personne.`,
@@ -638,6 +656,11 @@ export class MessageTypes {
       expiryMinutes: 10,
       maxAttempts: 3,
       cooldownMinutes: 2
+    },
+    [MessageTypes.TYPES.MERCHANT_ACTIVATION_OTP]: {
+      expiryMinutes: 5,
+      maxAttempts: 3,
+      cooldownMinutes: 1
     },
     [MessageTypes.TYPES.LOGIN_VERIFICATION]: {
       expiryMinutes: 5,
