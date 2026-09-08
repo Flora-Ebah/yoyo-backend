@@ -130,6 +130,16 @@ export default class Router {
 				|| `https://play.google.com/store/apps/details?id=${process.env.ANDROID_PACKAGE_NAME ?? 'com.yoyopro.yoyoafrica'}`;
 			const iosUrl = (process.env.PRO_IOS_STORE_URL ?? '').trim();
 
+			// Lien profond différé (Android) : on transmet le jeton au Play Store via `referrer`.
+			// Après installation, l'app lit ce referrer au premier lancement (Play Install Referrer) et
+			// ouvre directement l'écran d'activation — l'utilisateur n'a pas à rouvrir l'e-mail.
+			const token = ((request.query as any)?.token ?? '').toString();
+			let androidHref = androidUrl;
+			if (token) {
+				const sep = androidHref.includes('?') ? '&' : '?';
+				androidHref += `${sep}referrer=${encodeURIComponent(`token=${token}`)}`;
+			}
+
 			// URL publique du vrai logo YoYo, servi par le backend sous `/assets/` (comme dans les e-mails).
 			// Repli en chemin racine-relatif si SERVER_HOST n'est pas défini (même domaine que cette page).
 			const assetsBase = (
@@ -171,7 +181,7 @@ export default class Router {
     <h1>Activez votre boutique</h1>
     <p class="lead">L'application <b>YoYo Pro</b> n'est pas encore installée sur ce téléphone. Installez-la pour activer votre boutique et suivre vos encaissements.</p>
     <div class="stores">
-      <a class="store" href="${androidUrl}">
+      <a class="store" href="${androidHref}">
         <span class="ico">${googlePlaySvg}</span>
         <span class="txt"><small>Disponible sur</small><strong>Google Play</strong></span>
       </a>
