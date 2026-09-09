@@ -443,7 +443,24 @@ export class PartnerOnboardingService {
    * a expiré/est invalide.
    */
   async checkActivation(token: string): Promise<{ valid: boolean; reason?: string }> {
-    return this.enrolmentService.checkActivationToken(token);
+    const base = await this.enrolmentService.checkActivationToken(token);
+
+    // Jeton déjà inutilisable (consommé/expiré/invalide) : on renvoie tel quel.
+    if (!base.valid) {
+      return { valid: false, reason: base.reason };
+    }
+
+    // Le jeton est intact, mais le compte a pu être activé par un AUTRE chemin (activation par OTP
+    // depuis l'app). On vérifie donc le statut réel du client : s'il n'est plus `pending`, le compte
+    // est déjà actif → on considère le lien comme « déjà utilisé ».
+    if (base.clientId) {
+      const client: any = await this.clientService.getOne({ _id: base.clientId }, 'status');
+      if (client && !client.error && client.status && client.status !== 'pending') {
+        return { valid: false, reason: 'used' };
+      }
+    }
+
+    return { valid: true };
   }
 
   async activate(token: string, password: string): Promise<OnboardingResult> {

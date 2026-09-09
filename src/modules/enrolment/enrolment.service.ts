@@ -301,7 +301,9 @@ export class EnrolmentService {
    * expiré/est invalide.
    * @returns `{ valid: true }` si le jeton peut encore servir, sinon `{ valid: false, reason }`.
    */
-  async checkActivationToken(raw: string): Promise<{ valid: boolean; reason?: 'invalid' | 'used' | 'expired' }> {
+  async checkActivationToken(
+    raw: string
+  ): Promise<{ valid: boolean; reason?: 'invalid' | 'used' | 'expired'; clientId?: string; enrolmentStatus?: string }> {
     try {
       if (coddyger.string.isEmpty(raw ?? '')) {
         return { valid: false, reason: 'invalid' };
@@ -315,13 +317,17 @@ export class EnrolmentService {
       if (!doc) {
         return { valid: false, reason: 'invalid' };
       }
-      if (doc.activationTokenUsedAt) {
-        return { valid: false, reason: 'used' };
+      // Le compte a pu être activé par un AUTRE chemin (activation par OTP dans l'app) sans consommer
+      // ce jeton : on remonte donc `clientId` + `enrolmentStatus` pour que l'appelant vérifie aussi
+      // le statut réel du compte.
+      const clientId = doc.client ? String(doc.client) : undefined;
+      if (doc.activationTokenUsedAt || doc.enrolmentStatus === 'activated') {
+        return { valid: false, reason: 'used', clientId, enrolmentStatus: doc.enrolmentStatus };
       }
       if (doc.activationTokenExpiresAt && new Date(doc.activationTokenExpiresAt) <= new Date()) {
-        return { valid: false, reason: 'expired' };
+        return { valid: false, reason: 'expired', clientId, enrolmentStatus: doc.enrolmentStatus };
       }
-      return { valid: true };
+      return { valid: true, clientId, enrolmentStatus: doc.enrolmentStatus };
     } catch (error) {
       LoggerService.log({ type: LogLevel.Error, content: error, location: this.serviceLabel, method: 'checkActivationToken' });
       return { valid: false, reason: 'invalid' };
