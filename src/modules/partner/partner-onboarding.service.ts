@@ -437,6 +437,15 @@ export class PartnerOnboardingService {
    * @param token Jeton en clair issu du lien
    * @param password Mot de passe choisi par le marchand
    */
+  /**
+   * Vérifie si un jeton d'activation est encore utilisable (sans le consommer). L'app s'en sert
+   * pour ne pas afficher l'écran de code si le compte est déjà activé (jeton `used`) ou si le lien
+   * a expiré/est invalide.
+   */
+  async checkActivation(token: string): Promise<{ valid: boolean; reason?: string }> {
+    return this.enrolmentService.checkActivationToken(token);
+  }
+
   async activate(token: string, password: string): Promise<OnboardingResult> {
     try {
       // Consommation atomique : un seul appelant peut réussir avec un jeton donné. C'est aussi ce

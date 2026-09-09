@@ -44,6 +44,23 @@ export class PartnerController {
    * @param token Jeton d'activation à usage unique
    * @param password Mot de passe choisi
    */
+  /**
+   * Vérifie l'état d'un jeton d'activation (sans le consommer) : `{ valid, reason }`.
+   */
+  checkActivation(token: string) {
+    return new Promise(async (resolve, reject) => {
+      try {
+        const result = await this.onboardingService.checkActivation(token);
+        resolve({ status: defines.status.requestOK, message: 'Statut du jeton', data: result });
+      } catch (error) {
+        reject(error);
+      }
+    }).catch((e: IErrorObject) => {
+      console.error(e);
+      return coddyger.catchReturn(e, controllerLabel, 'checkActivation');
+    });
+  }
+
   activate(token: string, password: string) {
     return new Promise(async (resolve, reject) => {
       try {

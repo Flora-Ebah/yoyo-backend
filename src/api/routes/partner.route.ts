@@ -706,6 +706,30 @@ const defaultRoute: any = (fastify: any, options, done) => {
     }
   });
 
+  // Vérifier l'état d'un jeton d'activation (sans le consommer). Permet à l'app de ne PAS afficher
+  // l'écran de définition du code si le compte est déjà activé (jeton utilisé) ou le lien expiré.
+  fastify.route({
+    schema: {
+      tags,
+      summary: "Vérifier un jeton d'activation (sans le consommer)",
+      body: {
+        type: 'object',
+        properties: { token: { type: 'string', minLength: 16, maxLength: 128 } },
+        required: ['token'],
+        additionalProperties: false
+      }
+    },
+    method: 'POST',
+    url: `${routePath}/activation/check`,
+    preHandler: AppCheckMiddleware.verify,
+    config: { rateLimit: { max: 10, timeWindow: '10 minutes' } },
+    handler: (request, reply) => {
+      const body: any = request.body;
+      let Q = Controller.checkActivation(body.token);
+      return coddyger.api(reply, Q);
+    }
+  });
+
   // Activation du compte marchand par le porteur du lien
   fastify.route({
     schema: {

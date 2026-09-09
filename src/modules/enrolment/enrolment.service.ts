@@ -296,6 +296,39 @@ export class EnrolmentService {
   }
 
   /**
+   * Vérifie l'état d'un jeton d'activation SANS le consommer. Permet à l'app de ne pas afficher
+   * l'écran de définition du code si le compte est déjà activé (jeton utilisé) ou si le lien a
+   * expiré/est invalide.
+   * @returns `{ valid: true }` si le jeton peut encore servir, sinon `{ valid: false, reason }`.
+   */
+  async checkActivationToken(raw: string): Promise<{ valid: boolean; reason?: 'invalid' | 'used' | 'expired' }> {
+    try {
+      if (coddyger.string.isEmpty(raw ?? '')) {
+        return { valid: false, reason: 'invalid' };
+      }
+
+      const model: any = (this.dao as any).defaultModel;
+      const doc: any = await model
+        .findOne({ activationTokenHash: EnrolmentService.hashToken(raw), status: { $nin: ['removed', 'archived'] } })
+        .lean();
+
+      if (!doc) {
+        return { valid: false, reason: 'invalid' };
+      }
+      if (doc.activationTokenUsedAt) {
+        return { valid: false, reason: 'used' };
+      }
+      if (doc.activationTokenExpiresAt && new Date(doc.activationTokenExpiresAt) <= new Date()) {
+        return { valid: false, reason: 'expired' };
+      }
+      return { valid: true };
+    } catch (error) {
+      LoggerService.log({ type: LogLevel.Error, content: error, location: this.serviceLabel, method: 'checkActivationToken' });
+      return { valid: false, reason: 'invalid' };
+    }
+  }
+
+  /**
    * Projette un enrôlement vers la forme attendue par le front admin
    * @param e Document d'enrôlement
    */
