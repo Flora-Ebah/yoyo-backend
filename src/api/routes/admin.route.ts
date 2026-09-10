@@ -197,6 +197,64 @@ const defaultRoute: any = (fastify: any, options, done) => {
 		}
 	});
 
+	// Update current admin profile (self-service)
+	fastify.route({
+		schema: {
+			tags,
+			summary: 'Modifier mon profil administrateur',
+			body: {
+				type: 'object',
+				properties: {
+					firstname: { type: 'string' },
+					lastname: { type: 'string' },
+					email: { type: 'string' },
+					phone: { type: 'string' },
+					phoneOffice: { type: 'string' },
+					address: { type: 'string' },
+					office: { type: 'string' },
+					photo: { type: 'string' }
+				},
+				required: [],
+				additionalProperties: false
+			}
+		},
+		method: 'PUT',
+		url: `${routePath}/me`,
+		preHandler: TokenMiddleware.verifyAdmin,
+		handler: (request, reply) => {
+			const user: any = request.user;
+			const body: any = request.body;
+			const Q = Controller.updateMe({ _id: user?._id, data: body });
+			return coddyger.api(reply, Q);
+		}
+	});
+
+	// Change current admin password (self-service)
+	fastify.route({
+		schema: {
+			tags,
+			summary: 'Changer mon mot de passe administrateur',
+			body: {
+				type: 'object',
+				properties: {
+					currentPassword: { type: 'string' },
+					newPassword: { type: 'string' }
+				},
+				required: ['currentPassword', 'newPassword'],
+				additionalProperties: false
+			}
+		},
+		method: 'PUT',
+		url: `${routePath}/me/password`,
+		preHandler: TokenMiddleware.verifyAdmin,
+		handler: (request, reply) => {
+			const user: any = request.user;
+			const body: any = request.body;
+			const Q = Controller.updatePasswordMe({ _id: user?._id, currentPassword: body.currentPassword, newPassword: body.newPassword });
+			return coddyger.api(reply, Q);
+		}
+	});
+
 	// Admin details
 	fastify.route({
 		schema: {

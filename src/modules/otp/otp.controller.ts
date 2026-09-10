@@ -226,7 +226,14 @@ export class OtpController {
 				);
 
 				if (user && otp.purpose === MessageTypes.TYPES.ACCOUNT_VERIFICATION) {
-					await this.clientService.update(user._id, { status: 'active' });
+					// La vérification OTP d'activation prouve que le canal utilisé (email OU
+					// téléphone) appartient bien à l'utilisateur : on marque donc ce canal comme
+					// confirmé en même temps qu'on active le compte. Sans cela, `isEmailConfirmed` /
+					// `isPhoneConfirmed` restaient à `false` alors même que le contact venait
+					// d'être vérifié (d'où l'affichage « non confirmé » dans l'admin).
+					const confirmationFlag =
+						otp.type === 'email' ? { isEmailConfirmed: true } : { isPhoneConfirmed: true };
+					await this.clientService.update(user._id, { status: 'active', ...confirmationFlag });
 					MessageHelper.welcomeClient(user)
 				}
 

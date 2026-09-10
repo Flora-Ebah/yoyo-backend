@@ -243,6 +243,113 @@ export class AdminController {
 		});
 	}
 
+	/**
+	 * Auto-service : l'admin connecté modifie SES propres informations.
+	 *
+	 * Distinct de `update()` (réservé à la gestion des comptes, permission `update admins`) : ici la
+	 * seule autorisation requise est d'être connecté (route en `verifyAdmin`). On restreint donc
+	 * strictement les champs modifiables — pas de `profile`, `status`, `type` ni `password` (le mot
+	 * de passe passe par `updatePasswordMe`, qui exige l'ancien) : un titulaire ne doit pas pouvoir
+	 * s'octroyer un autre profil de permissions ni réactiver son propre compte.
+	 */
+	updateMe(payload: { _id: string; data: any }) {
+		return new Promise(async (resolve, reject) => {
+			const _id: string = payload?._id;
+
+			if (!coddyger.string.isValidObjectId(_id)) {
+				return resolve(AdminService.invalidIdResponse());
+			}
+
+			try {
+				const isData: any = await this.dao.exist({ _id });
+				if (isData.error) {
+					return reject(isData);
+				}
+				if (isData === false) {
+					return resolve(AdminService.notFoundResponse('Administrateur'));
+				}
+
+				// Liste blanche des champs auto-modifiables.
+				const allowed = ['firstname', 'lastname', 'email', 'phone', 'phoneOffice', 'address', 'office', 'photo'];
+				const update: any = {};
+				for (const key of allowed) {
+					if (payload.data[key] !== undefined) update[key] = payload.data[key];
+				}
+
+				// Changement d'email : conserver l'unicité, en autorisant l'email actuel du titulaire.
+				if (update.email !== undefined) {
+					const isEmailExists: any = await this.dao.exist({ email: update.email });
+					const ownEmail: any = await this.dao.exist({ $and: [{ email: update.email }, { _id }] });
+					if (isEmailExists && !ownEmail) {
+						return resolve(AdminService.emailExistsResponse());
+					}
+				}
+
+				const result: any = await this.dao.update({ _id }, update);
+				if (result.error) {
+					return reject(result);
+				}
+
+				const updatedItem: any = await this.dao.selectOne({ _id }, '-password -__v');
+				return resolve(AdminService.successResponse(updatedItem));
+			} catch (e) {
+				return coddyger.catchReturn(e, controllerLabel, 'updateMe');
+			}
+		});
+	}
+
+	/**
+	 * Auto-service : l'admin connecté change SON mot de passe.
+	 * Exige l'ancien mot de passe (preuve de possession du compte) avant d'enregistrer le nouveau.
+	 */
+	updatePasswordMe(payload: { _id: string; currentPassword: string; newPassword: string }) {
+		return new Promise(async (resolve, reject) => {
+			const { _id, currentPassword, newPassword } = payload || ({} as any);
+
+			if (!coddyger.string.isValidObjectId(_id)) {
+				return resolve(AdminService.invalidIdResponse());
+			}
+
+			if (coddyger.string.isEmpty(currentPassword) || coddyger.string.isEmpty(newPassword)) {
+				return resolve({
+					status: defines.status.badRequest,
+					message: locale.required('mot de passe'),
+					data: null
+				});
+			}
+
+			try {
+				const user: any = await this.dao.selectOne({ _id }, '-__v');
+				if (!user) {
+					return resolve(AdminService.notFoundResponse('Administrateur'));
+				}
+
+				const isValid: any = await coddyger.string.decryptPassword(currentPassword, user.password);
+				if (isValid === false) {
+					return resolve({
+						status: defines.status.badRequest,
+						message: 'Mot de passe actuel incorrect',
+						data: null
+					});
+				}
+
+				const hashed: string = await coddyger.string.encryptPassword(newPassword);
+				const result: any = await this.dao.update({ _id }, { password: hashed });
+				if (result.error) {
+					return reject(result);
+				}
+
+				return resolve({
+					status: defines.status.requestOK,
+					message: 'Mot de passe mis à jour avec succès',
+					data: null
+				});
+			} catch (e) {
+				return coddyger.catchReturn(e, controllerLabel, 'updatePasswordMe');
+			}
+		});
+	}
+
 	// Function to remove Admin
 	remove(_id: string, erase?: boolean) {
 		return new Promise(async (resolve, reject) => {
