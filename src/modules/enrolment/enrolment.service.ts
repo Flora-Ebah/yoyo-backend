@@ -57,6 +57,47 @@ export class EnrolmentService {
   }
 
   /**
+   * Retire (soft-delete) tous les enrôlements rattachés à un client. Appelé quand le compte
+   * marchand est supprimé/anonymisé côté admin : sans cela, l'enrôlement — qui alimente la vue
+   * du commercial — restait en `active` et la boutique supprimée continuait de s'y afficher.
+   * @param clientId ID du client (propriétaire de la boutique)
+   */
+  async removeByClientId(clientId: string): Promise<{ error: boolean; modified?: number }> {
+    try {
+      const model: any = (this.dao as any).defaultModel;
+      const res = await model.updateMany(
+        { client: clientId, status: { $nin: ['removed'] } },
+        { $set: { status: 'removed' } }
+      );
+
+      return { error: false, modified: res?.modifiedCount ?? 0 };
+    } catch (error) {
+      LoggerService.log({ type: LogLevel.Error, content: error, location: this.serviceLabel, method: 'removeByClientId' });
+      return { error: true };
+    }
+  }
+
+  /**
+   * Restaure les enrôlements retirés d'un client (miroir de `removeByClientId`), utilisé lors de
+   * la réactivation d'un compte supprimé dans le délai de grâce.
+   * @param clientId ID du client
+   */
+  async restoreByClientId(clientId: string): Promise<{ error: boolean; modified?: number }> {
+    try {
+      const model: any = (this.dao as any).defaultModel;
+      const res = await model.updateMany(
+        { client: clientId, status: 'removed' },
+        { $set: { status: 'active' } }
+      );
+
+      return { error: false, modified: res?.modifiedCount ?? 0 };
+    } catch (error) {
+      LoggerService.log({ type: LogLevel.Error, content: error, location: this.serviceLabel, method: 'restoreByClientId' });
+      return { error: true };
+    }
+  }
+
+  /**
    * Récupère un enrôlement par son ID
    * @param id ID de l'enrôlement
    */

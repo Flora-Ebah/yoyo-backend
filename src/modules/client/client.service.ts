@@ -2,6 +2,7 @@ import { MessageHelper } from '../../helpers';
 import { PartnerService } from '../partner';
 import { SettingsService } from '../settings';
 import { AnonymizationLogService } from '../anonymization-log';
+import { EnrolmentService } from '../enrolment';
 import { IClient, IUpdatePassword } from './client.interface';
 import { ClientSet } from './client.model';
 import coddyger, { IData, IErrorObject, LoggerService, LogLevel } from 'coddyger';
@@ -12,12 +13,14 @@ export class ClientService {
 	private readonly partnerService: PartnerService;
 	private readonly settingsService: SettingsService;
 	private readonly anonymizationLogService: AnonymizationLogService;
+	private readonly enrolmentService: EnrolmentService;
 
 	constructor() {
 		this.dao = new ClientSet();
 		this.partnerService = new PartnerService();
 		this.settingsService = new SettingsService();
 		this.anonymizationLogService = new AnonymizationLogService();
+		this.enrolmentService = new EnrolmentService();
 	}
 
 	/**
@@ -188,6 +191,10 @@ export class ClientService {
 				throw new Error(partners);
 			}
 
+			// Retirer aussi les enrôlements liés, sinon la boutique supprimée reste visible dans
+			// la vue du commercial (alimentée par la collection `enrolment`).
+			await this.enrolmentService.removeByClientId(id);
+
 			// Notifications best-effort : elles ne doivent jamais faire échouer la suppression
 			// (le compte et la boutique sont déjà supprimés à ce stade).
 			try {
@@ -275,6 +282,9 @@ export class ClientService {
 			// Boutiques/partenaires liés : retrait des données nominatives du marchand.
 			await this.partnerService.anonymizePartnersByUserId(id);
 
+			// Enrôlements liés : retirés pour qu'ils disparaissent de la vue du commercial.
+			await this.enrolmentService.removeByClientId(id);
+
 			// Journal d'audit (best-effort) : trace non nominative de l'acte d'anonymisation.
 			await this.anonymizationLogService.record({
 				clientId: id,
@@ -307,6 +317,9 @@ export class ClientService {
 
 			// Restaure les boutiques retirées lors de la suppression : le marchand retrouve sa boutique.
 			await this.partnerService.restorePartnersByUserId(id);
+
+			// Restaure symétriquement les enrôlements retirés.
+			await this.enrolmentService.restoreByClientId(id);
 
 			return { error: false };
 		} catch (error) {
