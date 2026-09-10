@@ -55,6 +55,10 @@ export class AdminController {
 				return resolve({ status: defines.status.badRequest, message: locale.controller.disabledProfile, data: null });
 			}
 
+			// Trace de la dernière connexion : sans cela, la colonne « Dernière connexion » de
+			// l'admin restait vide (seul loginDemo la renseignait). N'interrompt pas la connexion.
+			await this.dao.update({ _id: isData._id }, { lastLogin: new Date() });
+
 			const accessToken: any = await TokenMiddleware.generate(
 				{ _id: isData._id, email: email, isAdmin: true },
 				'accessToken'
