@@ -116,6 +116,27 @@ export class EnrolmentService {
   }
 
   /**
+   * Identifiants des comptes clients « morts » (supprimés / anonymisés / archivés).
+   *
+   * Sert de garde-fou à l'affichage : même si un enrôlement n'a pas été passé en `removed` (cas
+   * historique d'avant le nettoyage automatique), on l'exclut dès lors que son compte propriétaire
+   * n'existe plus. Évite tout recours à un script de rattrapage.
+   */
+  private async deadClientIds(): Promise<any[]> {
+    try {
+      const model: any = (this.dao as any).defaultModel;
+      const clients = model.db.collection('clients');
+
+      return await clients
+        .find({ status: { $in: ['removed', 'anonymized', 'archived'] } }, { projection: { _id: 1 } })
+        .map((d: any) => d._id)
+        .toArray();
+    } catch {
+      return [];
+    }
+  }
+
+  /**
    * Construit le filtre Mongo commun aux vues liste et récapitulatif.
    * @param filters Critères issus de la requête (déjà arbitrés côté route pour `commercialId`)
    */
@@ -192,7 +213,13 @@ export class EnrolmentService {
       const page: number = filters.page ?? 1;
       const pageSize: number = filters.pageSize ?? 10;
 
-      const data: any = await this.dao.select({ params: this.buildParams(filters), page, pageSize });
+      const params: any = this.buildParams(filters);
+
+      // Filet de sécurité : exclure les enrôlements dont le compte propriétaire n'existe plus.
+      const dead = await this.deadClientIds();
+      if (dead.length) params.client = { $nin: dead };
+
+      const data: any = await this.dao.select({ params, page, pageSize });
 
       if (data.error) {
         throw data;
@@ -227,6 +254,10 @@ export class EnrolmentService {
       const match: any = this.buildParams(filters);
 
       match.status = { $nin: ['removed', 'archived'] };
+
+      // Exclure aussi les enrôlements dont le compte propriétaire n'existe plus.
+      const dead = await this.deadClientIds();
+      if (dead.length) match.client = { $nin: dead };
 
       const rows = await model.aggregate([
         { $match: match },
