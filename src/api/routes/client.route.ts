@@ -293,6 +293,18 @@ const defaultRoute: any = (fastify: any, options, done) => {
   // [SÉCURITÉ F-04] Cette route remonte l'annuaire complet des clients (email, nom, prénom,
   // téléphone) et acceptait tout compte connecté : fuite de la base clients, enjeu RGPD.
   // Seul l'espace d'administration la consomme.
+  // Statistiques GLOBALES des utilisateurs (cartes de stats admin), indépendantes de la pagination.
+  fastify.route({
+    schema: { tags, summary: 'Statistiques globales des utilisateurs (administration)' },
+    method: 'GET',
+    url: `${routePath}/stats`,
+    preHandler: TokenMiddleware.verifyAdmin,
+    handler: (request, reply) => {
+      let Q = Controller.getStats();
+      return coddyger.api(reply, Q);
+    }
+  });
+
   fastify.route({
     schema: {
       tags,

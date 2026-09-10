@@ -502,6 +502,24 @@ export class ClientController {
   }
 
   /**
+   * Statistiques globales des utilisateurs (cartes de stats admin) : total, actifs, suspendus,
+   * KYC vérifiés, partenaires, etc. Indépendant de la pagination/filtres de liste.
+   */
+  getStats() {
+    return new Promise(async (resolve, reject) => {
+      try {
+        const data = await this.service.getStats();
+        resolve({ status: defines.status.requestOK, message: 'Statistiques des utilisateurs', data });
+      } catch (error) {
+        reject(error);
+      }
+    }).catch((e: IErrorObject) => {
+      console.error(e);
+      return coddyger.catchReturn(e, controllerLabel, 'getStats');
+    });
+  }
+
+  /**
    * Anonymise immédiatement un client (administration, DCP/RGPD). Bypasse le délai de grâce.
    * N'utilise pas `getById` (qui exclut les comptes déjà `removed`) : un compte supprimé doit
    * pouvoir être anonymisé sur-le-champ.

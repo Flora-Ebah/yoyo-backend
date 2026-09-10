@@ -650,7 +650,16 @@ export class PartnerService {
         trend = previous === 0 ? (created === 0 ? 0 : null) : Math.round(((created - previous) / previous) * 1000) / 10;
       }
 
-      return { total, newInPeriod, trend };
+      // Répartitions GLOBALES (pour les cartes de stats admin), indépendantes de la pagination.
+      const [active, suspended, inactive, pending, cities] = await Promise.all([
+        model.countDocuments({ ...base, status: 'active' }),
+        model.countDocuments({ ...base, status: 'suspended' }),
+        model.countDocuments({ ...base, status: 'inactive' }),
+        model.countDocuments({ ...base, status: 'pending' }),
+        model.distinct('ville', base).then((v: any[]) => v.filter(Boolean).length)
+      ]);
+
+      return { total, newInPeriod, trend, active, suspended, inactive, pending, cities };
     } catch (error) {
       LoggerService.log({
         type: LogLevel.Error,

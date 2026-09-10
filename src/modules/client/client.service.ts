@@ -209,6 +209,33 @@ export class ClientService {
 	}
 
 	/**
+	 * Statistiques GLOBALES des utilisateurs (indépendantes de la pagination et des filtres de liste).
+	 * Exclut les comptes retirés/archivés/anonymisés, comme les listes. Sert aux cartes de stats.
+	 */
+	async getStats(): Promise<any> {
+		try {
+			const model: any = (this.dao as any).defaultModel;
+			const base: any = { status: { $nin: ['removed', 'archived', 'anonymized'] } };
+
+			const [total, active, inactive, suspended, pending, kycVerified, partners] = await Promise.all([
+				model.countDocuments(base),
+				model.countDocuments({ ...base, status: 'active' }),
+				model.countDocuments({ ...base, status: 'inactive' }),
+				model.countDocuments({ ...base, status: 'suspended' }),
+				model.countDocuments({ ...base, status: 'pending' }),
+				model.countDocuments({ ...base, isDocumentVerified: true }),
+				model.countDocuments({ ...base, isPartner: true })
+			]);
+
+			// `clients` = utilisateurs de l'app cliente (non partenaires) ; `partners` = comptes marchands.
+			return { total, active, inactive, suspended, pending, kycVerified, partners, clients: total - partners };
+		} catch (error) {
+			LoggerService.log({ type: LogLevel.Error, content: error, location: this.serviceLabel, method: 'getStats' });
+			return { total: 0, active: 0, inactive: 0, suspended: 0, pending: 0, kycVerified: 0, partners: 0, clients: 0 };
+		}
+	}
+
+	/**
 	 * Anonymise définitivement un compte (DCP/RGPD) : retire toutes les données nominatives du
 	 * client et de ses boutiques, rend la connexion impossible, mais conserve la ligne (`_id`,
 	 * historique) pour ne pas fausser les statistiques. Opération idempotente.
