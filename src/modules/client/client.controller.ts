@@ -20,7 +20,7 @@ export class ClientController {
    * Récupère tous les éléments
    * @returns Liste des éléments
    */
-  getAll(payloads: { page?: number; pageSize?: number; query?: string; status?: string }) {
+  getAll(payloads: { page?: number; pageSize?: number; query?: string; status?: string; isPartner?: boolean }) {
     return new Promise(async (resolve, reject) => {
       try {
         const items = await this.service.getAll(payloads);

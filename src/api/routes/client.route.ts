@@ -315,7 +315,9 @@ const defaultRoute: any = (fastify: any, options, done) => {
           page: { type: 'number' },
           pageSize: { type: 'number' },
           status: { type: 'string' },
-          q: { type: 'string' }
+          q: { type: 'string' },
+          // Filtre Type : 'true' = boutiques (marchands), 'false' = utilisateurs de l'app.
+          isPartner: { type: 'string', enum: ['true', 'false'] }
         },
         required: [],
         additionalProperties: false
@@ -329,8 +331,10 @@ const defaultRoute: any = (fastify: any, options, done) => {
       let pageSize: any = request.query.pageSize;
       let status: any = request.query.status;
       let query: any = request.query.q;
+      let isPartner: any =
+        request.query.isPartner === 'true' ? true : request.query.isPartner === 'false' ? false : undefined;
 
-      let Q = Controller.getAll({ page, pageSize, status, query });
+      let Q = Controller.getAll({ page, pageSize, status, query, isPartner });
       return coddyger.api(reply, Q);
     }
   });

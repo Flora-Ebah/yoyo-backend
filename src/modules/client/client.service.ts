@@ -24,24 +24,28 @@ export class ClientService {
 	 * Récupère tous les éléments
 	 * @returns Liste des éléments
 	 */
-	async getAll(payloads: { page?: number; pageSize?: number; query?: string; status?: string }): Promise<any> {
+	async getAll(payloads: { page?: number; pageSize?: number; query?: string; status?: string; isPartner?: boolean }): Promise<any> {
 		try {
 			let page: number = payloads.page ?? 1;
 			let pageSize: number = payloads.pageSize ?? 10;
 			let query: string = payloads.query ?? '';
 			let status: any = payloads.status ?? '';
 
+			// Filtre Type (boutiques vs utilisateurs de l'app), injecté dans tous les cas de requête.
+			const typeFilter: any = typeof payloads.isPartner === 'boolean' ? { isPartner: payloads.isPartner } : {};
+
 			let data: any | IErrorObject = {};
 
 			if (coddyger.string.isEmpty(query) && coddyger.string.isEmpty(status)) {
-				data = await this.dao.select({ params: {}, page, pageSize });
+				data = await this.dao.select({ params: { ...typeFilter }, page, pageSize });
 			} else if (!coddyger.string.isEmpty(status)) {
-				data = await this.dao.select({ params: { status }, page, pageSize });
+				data = await this.dao.select({ params: { ...typeFilter, status }, page, pageSize });
 			} else {
 				data = await this.dao.select({
 					params: {
+						...typeFilter,
 						$or: [
-							{ slug: { $regex: query || '', $options: 'i' } }, 
+							{ slug: { $regex: query || '', $options: 'i' } },
 							{ firstname: { $regex: query || '', $options: 'i' } },
 							{ lastname: { $regex: query || '', $options: 'i' } },
 							{ email: { $regex: query || '', $options: 'i' } },
