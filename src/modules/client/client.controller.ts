@@ -116,6 +116,22 @@ export class ClientController {
           });
         }
 
+        // Rattachement à un agent via son matricule (facultatif, saisi depuis yoyo-pro).
+        // S'il est fourni, il DOIT correspondre à un agent actif — sinon on refuse l'inscription
+        // avec un message clair (évite un lien silencieusement perdu). S'il est vide, on continue.
+        const rawMatricule = (item as any).agentMatricule;
+        if (rawMatricule && String(rawMatricule).trim()) {
+          const agent = await this.service.resolveAgentByMatricule(String(rawMatricule).trim());
+          if (!agent) {
+            return resolve({
+              status: defines.status.badRequest,
+              message: "Le matricule de l'agent est introuvable. Vérifiez-le ou laissez le champ vide.",
+              data: null
+            });
+          }
+          formattedItem.createdBy = agent._id;
+        }
+
         // Détails du dernier compte enregistré pour le slug
 			  const theLast: any = await this.service.selectLatest();
         formattedItem._id = coddyger.string.generateObjectId();

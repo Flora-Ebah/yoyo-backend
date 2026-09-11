@@ -57,6 +57,21 @@ export class EnrolmentService {
   }
 
   /**
+   * Indique s'il existe déjà (au moins) un enrôlement rattaché à ce client. Sert à éviter de créer
+   * un doublon lorsqu'une boutique est enregistrée depuis yoyo-pro pour un compte déjà enrôlé.
+   * @param clientId ID du client (propriétaire)
+   */
+  async existsForClient(clientId: string): Promise<boolean> {
+    try {
+      const model: any = (this.dao as any).defaultModel;
+
+      return (await model.countDocuments({ client: clientId })) > 0;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
    * Retire (soft-delete) tous les enrôlements rattachés à un client. Appelé quand le compte
    * marchand est supprimé/anonymisé côté admin : sans cela, l'enrôlement — qui alimente la vue
    * du commercial — restait en `active` et la boutique supprimée continuait de s'y afficher.

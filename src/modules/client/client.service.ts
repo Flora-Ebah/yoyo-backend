@@ -3,6 +3,7 @@ import { PartnerService } from '../partner';
 import { SettingsService } from '../settings';
 import { AnonymizationLogService } from '../anonymization-log';
 import { EnrolmentService } from '../enrolment';
+import { AdminSet } from '../admin/admin.model';
 import { IClient, IUpdatePassword } from './client.interface';
 import { ClientSet } from './client.model';
 import coddyger, { IData, IErrorObject, LoggerService, LogLevel } from 'coddyger';
@@ -21,6 +22,26 @@ export class ClientService {
 		this.settingsService = new SettingsService();
 		this.anonymizationLogService = new AnonymizationLogService();
 		this.enrolmentService = new EnrolmentService();
+	}
+
+	/**
+	 * Retrouve un agent (Admin) actif par son matricule. Sert à rattacher une inscription yoyo-pro
+	 * à l'agent dont le matricule a été saisi. Renvoie `null` si aucun agent actif ne correspond.
+	 * @param matricule Matricule saisi à l'inscription
+	 */
+	async resolveAgentByMatricule(matricule: string): Promise<{ _id: string } | null> {
+		try {
+			const value = (matricule || '').trim();
+			if (!value) return null;
+
+			const dao: any = new AdminSet();
+			const admin: any = await dao.selectOne({ matricule: value, status: 'active' });
+
+			return admin && !admin.error ? admin : null;
+		} catch (error) {
+			LoggerService.log({ type: LogLevel.Error, content: error, location: this.serviceLabel, method: 'resolveAgentByMatricule' });
+			return null;
+		}
 	}
 
 	/**

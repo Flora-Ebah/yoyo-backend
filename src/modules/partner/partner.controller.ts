@@ -1,18 +1,71 @@
-import coddyger, { IErrorObject, defines } from 'coddyger';
+import coddyger, { IErrorObject, LoggerService, LogLevel, defines } from 'coddyger';
 import { locale } from '../../public';
 import { PartnerService } from './partner.service';
 import { IPartner } from './partner.interface';
 import { ICommercial, IOnboardPayload, PartnerOnboardingService } from './partner-onboarding.service';
+// Imports « feuilles » (model/service) et non les barrels, pour éviter un cycle
+// partner ↔ client ↔ enrolment lors de la création d'enrôlement depuis yoyo-pro.
+import { ClientSet } from '../client/client.model';
+import { AdminSet } from '../admin/admin.model';
+import { EnrolmentService } from '../enrolment/enrolment.service';
 
 const controllerLabel: string = 'PartnerController';
 
 export class PartnerController {
   private readonly service: PartnerService;
   private readonly onboardingService: PartnerOnboardingService;
+  private readonly enrolmentService: EnrolmentService;
 
   constructor() {
     this.service = new PartnerService();
     this.onboardingService = new PartnerOnboardingService();
+    this.enrolmentService = new EnrolmentService();
+  }
+
+  /**
+   * Crée l'enrôlement correspondant à une boutique enregistrée depuis yoyo-pro, LORSQUE le compte
+   * marchand a été rattaché à un agent (via son matricule à l'inscription : `client.createdBy`).
+   *
+   * C'est ce qui fait apparaître ces boutiques dans « Activité commerciale » avec l'agent qui a
+   * aidé à l'enregistrement. Best-effort : ne doit jamais faire échouer la création de la boutique.
+   * L'onboarding CMS a son propre enrôlement (via le service) et ne passe pas par ici.
+   * @param partner Boutique tout juste créée (porte `_id` et `user`)
+   */
+  private async createEnrolmentIfAgentLinked(partner: any): Promise<void> {
+    try {
+      const ownerId = partner && (typeof partner.user === 'object' ? partner.user?._id : partner.user);
+      if (!ownerId) return;
+
+      const client: any = await new ClientSet().selectOne({ _id: ownerId });
+      // Pas d'agent rattaché (inscription sans matricule) → rien à tracer.
+      if (!client || client.error || !client.createdBy) return;
+
+      // Éviter un doublon si un enrôlement existe déjà pour ce compte (ex. onboarding CMS).
+      if (await this.enrolmentService.existsForClient(String(ownerId))) return;
+
+      const agent: any = await new AdminSet().selectOne({ _id: client.createdBy });
+      const commercialName = agent
+        ? `${agent.firstname || ''} ${agent.lastname || ''}`.trim() || agent.email || 'Agent'
+        : 'Agent';
+
+      await this.enrolmentService.create({
+        client: ownerId,
+        partner: partner._id,
+        commercial: client.createdBy,
+        merchantName: `${client.firstname || ''} ${client.lastname || ''}`.trim() || client.email,
+        merchantEmail: client.email,
+        merchantPhone: client.contact,
+        shopName: partner.name,
+        ville: partner.ville,
+        category: '',
+        commercialName,
+        // Le compte est déjà utilisable (auto-inscription) → considéré activé.
+        enrolmentStatus: client.status === 'active' ? 'activated' : 'pending',
+        status: 'active'
+      } as any);
+    } catch (error) {
+      LoggerService.log({ type: LogLevel.Error, content: error, location: controllerLabel, method: 'createEnrolmentIfAgentLinked' });
+    }
   }
 
   /**
@@ -177,7 +230,12 @@ export class PartnerController {
             data: null
           });
         }
-        
+
+        // Trace commerciale : si le compte est rattaché à un agent (matricule saisi à
+        // l'inscription yoyo-pro), on crée l'enrôlement correspondant. `item` porte `_id`
+        // (renseigné par le service) et `user`.
+        await this.createEnrolmentIfAgentLinked(item);
+
         resolve({
           status: defines.status.created,
           message: locale.controller.successSave,
