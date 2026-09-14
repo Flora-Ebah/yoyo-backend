@@ -6,6 +6,7 @@ import helmet from '@fastify/helmet';
 import rateLimit from '@fastify/rate-limit';
 import path from 'path';
 import fs from 'fs';
+import crypto from 'crypto';
 import coddyger, { defines, env } from 'coddyger';
 import { swaggerConfig, swaggerUiConfig, isSwaggerEnabled } from './config/swagger.config';
 import { FileUpload } from './api/middleware';
@@ -44,9 +45,35 @@ export default class Router {
 		});
 
 		// Rate Limiting: Prevent abuse by limiting the number of requests
+		//
+		// Le décompte se fait par SESSION, pas par IP : les clients d'une même boutique partagent
+		// le Wi-Fi, donc une seule IP publique. Compter par IP faisait tomber toute la boutique
+		// en 429 dès qu'une cinquantaine de personnes scannaient (chaque scan coûte deux requêtes).
+		//
+		// Le plugin s'exécute en hook `onRequest`, donc AVANT les `preHandler` : `request.user`
+		// n'existe pas encore ici. On hache l'en-tête Authorization brut — inutile d'en vérifier
+		// la signature, `TokenMiddleware.verify` s'en charge juste après. Repli sur l'IP pour les
+		// routes d'avant-connexion, qui n'ont pas d'identité.
 		this.router.register(rateLimit, {
-			max: 100, // Max requests per IP per time window
-			timeWindow: '1 minute' // Time window for rate limiting
+			max: 100, // Max requests per session (ou par IP à défaut) per time window
+			timeWindow: '1 minute', // Time window for rate limiting
+			keyGenerator: (request: FastifyRequest) => {
+				const auth = request.headers?.authorization;
+				return auth
+					? 'u:' + crypto.createHash('sha256').update(auth).digest('hex').slice(0, 32)
+					: 'ip:' + request.ip;
+			}
+		});
+
+		// Protection contre la surcharge : au-delà d'un certain retard de la boucle d'événements,
+		// les nouvelles requêtes reçoivent un 503 + Retry-After AU LIEU que toutes les requêtes en
+		// cours se dégradent ensemble. C'est ce qui permet à un petit serveur d'encaisser un pic de
+		// scans de façon prévisible : quelques clients réessaient, plutôt que tout le monde attende.
+		this.router.register(require('@fastify/under-pressure'), {
+			maxEventLoopDelay: 1000,
+			maxHeapUsedBytes: 900_000_000, // cohérent avec max_memory_restart: '1G' (ecosystem.config.js)
+			retryAfter: 5,
+			exposeStatusRoute: '/health/pressure'
 		});
 
 		// Swagger: API documentation setup
@@ -83,8 +110,15 @@ export default class Router {
 			decorateReply: false
 		});
 		// Log requests
+		//
+		// `console.log` écrit sur stdout de façon SYNCHRONE : sous Dokploy stdout est un tuyau, et
+		// une fois celui-ci plein l'écriture bloque la boucle d'événements. Une ligne par requête
+		// devient donc un facteur de blocage précisément quand le trafic augmente. On ne journalise
+		// plus que ce qui a une valeur de diagnostic : les réponses en erreur.
 		this.router.addHook('onResponse', (request, reply, done) => {
-			console.log(`${request.method} ${request.url} :: ${reply.statusCode}`);
+			if (reply.statusCode >= 400) {
+				console.log(`${request.method} ${request.url} :: ${reply.statusCode}`);
+			}
 			done();
 		});
 

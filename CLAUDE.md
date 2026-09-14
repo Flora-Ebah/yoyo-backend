@@ -13,14 +13,28 @@ yarn build            # tsc -> ./build
 yarn dev              # tsc && nodemon build/main.js  (pas de recompilation à la volée : relancer pour prendre en compte les .ts)
 yarn start            # node build/main.js
 yarn pm2:start        # build + pm2 start ecosystem.config.js
-yarn seed             # tous les seeders ; aussi --categories / --plans / --admin / --clean
+yarn seed             # tous les seeders ; aussi --categories / --plans / --admin / --roles / --clean
+yarn test             # mocha sur src/tests/**/*.test.ts (ts-node, sans compilation préalable)
+yarn test:security    # uniquement les *.security.test.ts
+npx mocha src/tests/payment-concurrency.test.ts   # un seul fichier (la config .mocharc.json s'applique)
 ```
 
-Réserves à connaître avant de se fier à un script :
-- `yarn test` lance `jest`, mais jest n'est pas une dépendance et `src/tests/` est vide — **il n'y a aucune infrastructure de test fonctionnelle**. Ne pas affirmer que les tests passent ; si des tests sont nécessaires, il faut d'abord mettre en place le harnais.
+### Tests
+
+Mocha + chai + sinon, exécutés via `ts-node/register` (`.mocharc.json`, timeout 15 s, `exit: true`). `src/tests/setup.ts` est chargé avant chaque exécution et fixe `SERVER_PORT=0`, `USE_DB=no` et des secrets JWT de repli : **importer une route ou un service démarre le serveur**, car `src/main.ts` s'auto-instancie (`export const app = new Main()`) et `router.ts` / `push.service.ts` importent `main.ts`.
+
+Deux styles coexistent :
+- tests de garde, qui enregistrent un module de routes contre un faux objet Fastify pour inspecter `preHandler` / `schema` / `config` (`route-guards.security.test.ts`), ou qui stubent les prototypes DAO/service avec sinon ;
+- tests d'intégration sur `mongodb-memory-server` lorsque c'est le comportement atomique de Mongo qui est testé (index uniques, upserts — `payment-concurrency.test.ts`).
+
+Les tests `*.security.test.ts` verrouillent des correctifs d'audit référencés dans le code par des étiquettes `[SÉCURITÉ X-NN]` ; conserver ces étiquettes.
+
+### Réserves à connaître avant de se fier à un script
+
 - `cron:test` / `cron:run` pointent vers `src/scripts/*.js`, un dossier qui n'existe pas.
 - `README.md` documente des scripts `yarn dk:*` (Docker) et `yarn plop` **absents** de `package.json`. Les générateurs Plop existent (`plopfile.js` + `templates/`) mais `plop` lui-même n'est pas installé.
-- `seed.js` → `load-env.js` fait un `require('dotenv')`, lui aussi absent de `package.json`.
+- `seed.js` et les scripts de `scripts/` passent par `load-env.js`, qui fait un `require('dotenv')` : `dotenv` n'est pas déclaré dans `package.json` et n'est présent que de façon transitive.
+- `scripts/*.js` sont des scripts ponctuels de rattrapage de données en production (déduplication, backfill, nettoyage). Ils tournent en **DRY-RUN par défaut** et n'écrivent qu'avec `--apply` ; certains doivent être exécutés avant de déployer le correctif associé (voir leur en-tête).
 
 ## Architecture
 
@@ -52,6 +66,10 @@ Les erreurs du DAO sont retournées, pas levées : `{ error: true, data: e }`. L
 
 `TokenMiddleware.verify` / `verifyAdmin` (`src/api/middleware/token.middleware.ts`) en `preHandler` Fastify. JWT via `env.jwt.secret` (utilisateur) et `env.jwt.secretAuth`. Au-delà de la vérification de signature, chaque requête consulte une liste de révocation via `TokenSet` (`src/shared/models/token.model.ts`) — la déconnexion y désactive les jetons. Les handlers lisent l'appelant dans `request.user`.
 
+Autres gardes : `AppCheckMiddleware.verify` / `verifyLimitedUse` (attestation Firebase App Check, en-tête `x-firebase-appcheck`) protège les routes d'avant-connexion ; `PaymentNotifyMiddleware.verifySource` filtre par IP (`OM_NOTIFY_ALLOWED_IPS`) le callback Orange Money, le contrôle principal restant la re-vérification du statut auprès d'Orange Money dans `TransactionController.paymentNotify`.
+
+Le rate limit (`router.ts`) compte **par session** (hash de l'en-tête `Authorization`) et non par IP, car les clients d'une boutique partagent la même IP ; repli sur l'IP sans jeton. `@fastify/under-pressure` renvoie des 503 en cas de surcharge (`/health/pressure`). Seules les réponses ≥ 400 sont journalisées.
+
 ### Validation — deux systèmes coexistants
 
 1. Schéma JSON Fastify déclaré en ligne dans `schema.body` / `schema.query` de la route (la norme ; alimente aussi Swagger). `src/router.ts` réécrit les erreurs AJV en messages français.
@@ -66,12 +84,13 @@ Pour retrouver un paramètre, vérifier les deux. `.env.sample` documente l'ense
 
 ### Ordre de démarrage (`src/main.ts`)
 
-`new Router()` → `listen()` → `initPayloads()` : connexion à la base (uniquement si `USE_DATABASE=yes`) → construction de `SocketIOHelper` sur le serveur HTTP brut → `initNotificationServices().init()` → `MainHelper.setDefaultProfile()` → démarrage des crons de nettoyage et de renouvellement d'abonnement. Tout ce qui dépend de Socket.IO ou des notifications doit s'exécuter après `listen`, pas au moment de l'import.
+`assertSecureConfiguration()` (`src/config/security-check.ts` : refuse de démarrer en production si un secret est absent, trop court ou fait partie des valeurs publiées dans le dépôt ; simple avertissement hors production) → `new Router()` → `listen()` sur `PORT || SERVER_PORT || 3014` → `initPayloads()` : connexion à la base (uniquement si `env.database.useDatabase === 'yes'`) → construction de `SocketIOHelper` sur le serveur HTTP brut → `initNotificationServices().init()` → `initEventBus()` → `MainHelper.setDefaultProfile()` → démarrage des crons de nettoyage et de renouvellement d'abonnement. Tout ce qui dépend de Socket.IO, des notifications ou de la file d'événements doit s'exécuter après `listen`, pas au moment de l'import.
 
 ### Services transversaux
 
 - **Socket.IO** — créé après le `listen` et conservé dans une variable de module de `main.ts` ; y accéder via `getSocketIO()` ou le décorateur `request.io` enregistré dans `router.ts`.
 - **Notifications** — singleton `NotificationManager` (`src/services/notification/`) avec des implémentations `NotificationService` enfichables, indexées par `NotificationType`. Email et Push sont enregistrés ; **le SMS est écrit mais commenté** dans `services/notification/index.ts`.
+- **File d'événements** — `src/events/` : `eventBus.publish(AppEvents.X, payload)` sort du chemin critique HTTP le travail dont l'appelant n'a pas besoin (ex. notification du partenaire après `PaymentService.create`). `publish` ne lève jamais ; les handlers lèvent pour déclencher les réessais (3 tentatives, concurrence 5). La file est **en mémoire** : jobs perdus au redémarrage, et elle suppose un seul processus (`instances: 1` dans `ecosystem.config.js`). Nouveaux événements : déclarer le nom dans `AppEvents`, écrire le handler dans `handlers/`, l'abonner dans `initEventBus()`. Voir `src/events/README.md` (dont la bascule vers BullMQ).
 - **Crons** — `src/cron/` (`subscription-renewal`, `cleanup-clients`), démarrés depuis `main.ts`. Voir `src/cron/README.md` pour le flux d'activation `pendingRenewal`.
 - **Paiements** — `PaymentHelper` (Orange Money, `src/helpers/payment.helper.ts`) est utilisé par `transaction.service.ts`. `cinetpay.helper.ts`, `cache.helper.ts` (Redis) et `v2.helper.ts` ne sont actuellement référencés nulle part et ne sont pas exportés depuis `src/helpers/index.ts`.
 

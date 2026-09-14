@@ -20,6 +20,23 @@ const schema = new mongoose.Schema<IPayment>({
 },
 { timestamps: true });
 
+// Garantie au niveau de la base : une seule demande « pending » par couple (client, partenaire).
+// C'est le filet de sécurité du `findOneAndUpdate` atomique de `PaymentService.create` — si deux
+// scans vraiment simultanés passaient tous les deux la phase de lecture, MongoDB rejetterait le
+// second avec le code 11000, que le service rattrape en renvoyant la demande existante.
+// L'index est PARTIEL : seuls les documents `pending` sont contraints, ce qui laisse un client
+// revenir autant de fois qu'il veut chez le même partenaire une fois la demande traitée.
+schema.index(
+	{ from: 1, to: 1 },
+	{ unique: true, partialFilterExpression: { status: 'pending' }, name: 'uniq_pending_from_to' }
+);
+
+// Index de lecture. La collection n'en avait aucun : chaque scan provoquait un balayage complet,
+// ce qui devient rédhibitoire quand plusieurs dizaines de clients scannent au même moment.
+schema.index({ to: 1, status: 1, createdAt: -1 }); // last-pending, validate, transactions partenaire
+schema.index({ from: 1, createdAt: -1 }); // GET /payments/client/me
+schema.index({ status: 1, createdAt: -1 }); // liste admin, findByStatus
+
 const model = mongoose.model<IPayment>('Payment', schema);
 const userProps = '_id lastname firstname email contact';
 

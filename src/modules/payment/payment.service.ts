@@ -8,6 +8,7 @@ import { PartnerService } from '../partner/partner.service';
 import { ClientService } from '../client/client.service';
 import { ClientSet } from '../client';
 import { PartnerSet } from '../partner';
+import { AppEvents, eventBus } from '../../events';
 
 export class PaymentService {
   private readonly dao: IData<IPayment>;
@@ -16,6 +17,8 @@ export class PaymentService {
   private readonly subscriptionService: SubscriptionService;
   private readonly partnerService: PartnerService;
   private readonly clientService: ClientService;
+  /** Accès direct au modèle Partner pour les lectures projetées du chemin de scan. */
+  private readonly partnerDao: PartnerSet;
 
   constructor() {
     this.dao = new PaymentSet();
@@ -23,6 +26,7 @@ export class PaymentService {
     this.subscriptionService = new SubscriptionService();
     this.partnerService = new PartnerService();
     this.clientService = new ClientService();
+    this.partnerDao = new PartnerSet();
   }
 
   /**
@@ -305,9 +309,10 @@ export class PaymentService {
   }
 
   /**
-   * Crée un nouvel élément
-   * @param item Données de l'élément à créer
-   * @returns Élément créé
+   * Crée — ou retrouve — la demande de réduction d'un client chez un partenaire.
+   *
+   * @param item `from` (client authentifié) et `to` (partenaire scanné)
+   * @returns `{ demande, created }` — `created` distingue une création d'une réutilisation
    */
   async create(item: IPayment): Promise<any> {
     try {
@@ -321,75 +326,133 @@ export class PaymentService {
         return { error: true, message: locale.controller.payment.sameClient };
       }
 
-      const subscription:any = await this.subscriptionService.getCurrentSubscriptionWithPlanDetails(from);
+      const model: any = (this.dao as any).defaultModel;
+      const partnerModel: any = (this.partnerDao as any).defaultModel;
+
+      const [subscription, partner] = await Promise.all([
+        this.subscriptionService.getCurrentSubscriptionWithPlanDetails(from),
+        partnerModel.findOne({ _id: to, status: { $nin: ['removed', 'archived'] } }, '_id name user').lean()
+      ]);
+
       if(!subscription) {
         return { error: true, message: locale.controller.payment.noSubscription };
       }
 
-      const hasPendingPayment:any = await this.dao.selectOne({ from, to, status: "pending" });
-
-      // Génération d'un ID si non fourni
-      if (!item._id) {
-        item._id = coddyger.string.generateObjectId();
-      }
-      // Le discountPercentage est dans planId selon getCurrentSubscriptionWithPlanDetails
-      item.discountPercentage = subscription.planId?.discountPercentage ?? 0;
-
-      let result:any;
-      if(hasPendingPayment) {
-        await this.dao.remove({ _id: hasPendingPayment._id });
-        result = await this.dao.save(item);
-      } else {
-        result = await this.dao.save(item);
-      }
-
-      if(result.error) {
-        throw new Error(result);
-      }
-
-      const partner: any = await this.partnerService.getById(to);
       if(!partner) {
         return { error: true, message: locale.notfound("Partenaire") };
       }
 
-      // Envoyer une notification à tous les clients connectés
-      const pushNotification = await this.pushNotificationService.create({
-				title: 'Demande de paiement',
-				body:
-					'Une nouvelle demande de paiement a été initiée par ' +
-					subscription.userId.lastname +
-					' ' +
-					subscription.userId.firstname.split(' ')[0],
-				type: 'info',
-				priority: 'high',
-				data: {
-					userId: partner.user._id,
-          demand: item._id,
-          boutiqueId: to,
-					url: `/payment/${item._id}`
-				},
-				target: Events.PUSH_DEMANDE,
-				status: 'pending'
-			} as IPushNotification);
+      const discountPercentage: number = subscription.planId?.discountPercentage ?? 0;
 
-      if (pushNotification.error) {
-        console.log(pushNotification);
-        throw new Error(pushNotification);
+      let demande: any;
+      let created: boolean;
+
+      try {
+        const outcome: any = await model.findOneAndUpdate(
+          { from, to, status: 'pending' },
+          {
+            $setOnInsert: {
+              _id: item._id ?? coddyger.string.generateObjectId(),
+              from,
+              to,
+              status: 'pending',
+              discountPercentage
+            }
+          },
+          { upsert: true, new: true, includeResultMetadata: true }
+        );
+
+        demande = outcome?.value;
+        created = Boolean(outcome?.lastErrorObject?.upserted);
+      } catch (error: any) {
+
+        if (error?.code !== 11000) {
+          throw error;
+        }
+
+        demande = await model.findOne({ from, to, status: 'pending' }).lean();
+        created = false;
       }
 
-      return await this.getOne({ _id: item._id });
+      if(!demande) {
+        return { error: true, message: locale.notfound('Demande de réduction') };
+      }
+
+      if (created) {
+        await eventBus.publish(AppEvents.PAYMENT_INITIATED, {
+          paymentId: String(demande._id),
+          partnerId: String(to)
+        });
+      }
+
+      return { demande, created };
     } catch (error) {
       return { error: true, message: error };
     }
   }
 
   /**
-   * Met à jour un élément existant
-   * @param id ID de l'élément à mettre à jour
-   * @param item Nouvelles données
-   * @returns Élément mis à jour
+   * Vérifie que l'appelant est bien le propriétaire de la boutique destinataire.
+   *
+   * @param partnerId Boutique destinataire de la demande
+   * @param actorId `request.user._id` de l'appelant
+   * @returns la boutique si l'appelant en est le propriétaire, sinon un descripteur d'erreur
    */
-  async update(id: string, item: Partial<IPayment>): Promise<IPayment | IErrorObject> {
+  private async resolveOwnedPartner(partnerId: string, actorId: string): Promise<any> {
+    if (!coddyger.string.isValidObjectId(partnerId)) {
+      return { error: true, data: locale.wrongObjectId('du partenaire') };
+    }
+
+    if (!coddyger.string.isValidObjectId(actorId)) {
+      return { error: true, forbidden: true, data: locale.controller.payment.notOwner };
+    }
+
+    const partnerModel: any = (this.partnerDao as any).defaultModel;
+    const partner: any = await partnerModel
+      .findOne({ _id: partnerId, status: { $nin: ['removed', 'archived'] } }, '_id name user minOrder')
+      .lean();
+
+    if (!partner) {
+      return { error: true, data: locale.notfound('Partenaire') };
+    }
+
+    if (String(partner.user ?? '') !== String(actorId)) {
+      return { error: true, forbidden: true, data: locale.controller.payment.notOwner };
+    }
+
+    return { partner };
+  }
+
+  /**
+   * Valide le montant de facture saisi par le commerçant.
+   *
+   * Il n'était soumis à aucun contrôle : ni positivité, ni cohérence avec le minimum de commande
+   * de la boutique. Le montant alimente les statistiques de revenus et le calcul de la remise.
+   */
+  private validateAmount(amount: any, partner: any): { error: true; data: string } | null {
+    const value = Number(amount);
+
+    if (!Number.isFinite(value) || value <= 0) {
+      return { error: true, data: locale.controller.payment.invalidAmount };
+    }
+
+    const minOrder = Number(partner?.minOrder ?? 0);
+    if (Number.isFinite(minOrder) && minOrder > 0 && value < minOrder) {
+      return { error: true, data: locale.controller.payment.belowMinOrder(minOrder) };
+    }
+
+    return null;
+  }
+
+  /**
+   * Met à jour une demande de réduction : acceptation (avec montant) ou rejet par le commerçant.
+   *
+   * @param id ID de la demande
+   * @param item Nouvelles données (`status`, `amount`, `deniedReason`)
+   * @param actorId `request.user._id` de l'appelant — requis pour le contrôle de propriété
+   * @returns La demande mise à jour, ou un descripteur d'erreur (`forbidden` / `conflict`)
+   */
+  async update(id: string, item: Partial<IPayment>, actorId?: string): Promise<IPayment | IErrorObject | any> {
     try {
       if(!coddyger.string.isValidObjectId(id)) {
         return { error: true, data: locale.wrongObjectId("du paiement") };
@@ -400,19 +463,41 @@ export class PaymentService {
         return { error: true, data: locale.notfound('Demande de paiement') };
       }
 
+      const partnerId: string = String(getPayment.to?._id ?? getPayment.to ?? '');
+      const ownership: any = await this.resolveOwnedPartner(partnerId, String(actorId ?? ''));
+      if (ownership.error) {
+        return ownership;
+      }
+
+      if (getPayment.status !== 'pending') {
+        return { error: true, conflict: true, data: locale.controller.payment.alreadyProcessed };
+      }
+
       const subscription:any = await this.subscriptionService.getCurrentSubscriptionWithPlanDetails(getPayment.from);
       if(!subscription) {
         return { error: true, data: locale.controller.payment.noSubscription };
       }
 
-      const result:any = await this.dao.update({ _id: id }, item);
-      if (result.error) {
-        throw new Error(result);
-      }
-
       if (item.status === 'rejected') {
         item.deniedAt = new Date();
-        item.deniedReason = 'The payment was rejected';
+        item.deniedReason = item.deniedReason ?? 'La demande de réduction a été rejetée';
+      } else {
+        const invalidAmount = this.validateAmount(item.amount, ownership.partner);
+        if (invalidAmount) {
+          return invalidAmount;
+        }
+
+        item.amount = Number(item.amount);
+        item.completedAt = new Date();
+      }
+
+      const model: any = (this.dao as any).defaultModel;
+      const applied: any = await model
+        .findOneAndUpdate({ _id: id, status: 'pending' }, { $set: item }, { new: true })
+        .lean();
+
+      if (!applied) {
+        return { error: true, conflict: true, data: locale.controller.payment.alreadyProcessed };
       }
 
       // Send notification
@@ -423,7 +508,9 @@ export class PaymentService {
 				priority: 'high',
 				data: {
 					userId: subscription.userId._id,
-					subscription,
+					demand: id,
+					boutiqueId: partnerId,
+					status: item.status,
 					url: `/payment/${id}`
 				},
 				target: Events.USER_NOTIFICATION,
@@ -717,49 +804,45 @@ export class PaymentService {
    * @param amount Montant du paiement
    * @returns Paiement validé
    */
-  async validatePayment(partnerId: string, amount: number): Promise<any> {
+  async validatePayment(partnerId: string, amount: number, actorId?: string): Promise<any> {
     try {
-      // Vérifier si le partenaire existe
-      const partner:any = await this.partnerService.getById(partnerId);
-      if (!partner) {
-        return { error: true, data: locale.notfound('Partner') };
+      const ownership: any = await this.resolveOwnedPartner(partnerId, String(actorId ?? ''));
+      if (ownership.error) {
+        return ownership;
       }
 
-      // Récupérer le dernier paiement en attente pour ce partenaire
-      const lastPayment:any = await this.dao.selectLatestWithParams({
-        to: partnerId,
-        status: 'pending'
-      });
+      const invalidAmount = this.validateAmount(amount, ownership.partner);
+      if (invalidAmount) {
+        return invalidAmount;
+      }
+
+      const model: any = (this.dao as any).defaultModel;
+      const lastPayment: any = await model
+        .findOneAndUpdate(
+          { to: partnerId, status: 'pending' },
+          { $set: { status: 'success', amount: Number(amount), completedAt: new Date() } },
+          { sort: { createdAt: -1 }, new: true }
+        )
+        .lean();
 
       if (!lastPayment) {
-        return { error: true, data: locale.notfound('Payment') };
+        return { error: true, data: locale.notfound('Demande de réduction en attente') };
       }
 
-      // Mettre à jour le statut du paiement
-      const updatedPayment:any = await this.dao.update(
-        { _id: lastPayment._id },
-        { 
-          status: 'success',
-          completedAt: new Date()
-        }
-      );
-
-      if (updatedPayment.error) {
-        throw updatedPayment;
-      }
-
-      // Envoyer une notification au client
+      // Envoyer une notification au client.
       const notification:any = await this.pushNotificationService.create({
         title: "Paiement validé",
         body: "Votre paiement a été validé avec succès",
         type: "success",
         priority: "normal",
         data: {
-          payload: 'payment',
-          payment: lastPayment,
+          userId: lastPayment.from,
+          demand: String(lastPayment._id),
+          boutiqueId: String(partnerId),
+          status: 'success',
           url: `/payment/${lastPayment._id}`
         },
-        target: lastPayment.from,
+        target: Events.USER_NOTIFICATION,
         status: "pending"
       } as IPushNotification);
 

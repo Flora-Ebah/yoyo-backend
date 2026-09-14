@@ -25,6 +25,10 @@ const defaultRoute: any = (fastify: any, options, done) => {
     },
     method: 'POST',
     url: `${routePath}/initiate`,
+    // Dix demandes par minute et par session : large pour un usage réel (un client scanne une
+    // fois par boutique), et suffisant pour couper court à un script. Le décompte est par session
+    // et non par IP — cf. le `keyGenerator` global dans `router.ts`.
+    config: { rateLimit: { max: 10, timeWindow: '1 minute' } },
     preHandler: TokenMiddleware.verify,
     handler: (request, reply) => {
       let body: any = request.body;
@@ -70,7 +74,7 @@ const defaultRoute: any = (fastify: any, options, done) => {
         body.deniedBy = request.user._id;
       }
 
-			let Q = Controller.validate(_id, body);
+			let Q = Controller.validate(_id, body, request.user?._id);
 			return coddyger.api(reply, Q);
 		}
 	});
@@ -377,7 +381,7 @@ const defaultRoute: any = (fastify: any, options, done) => {
       let partnerId: any = request.params.partnerId;
       let amount: any = request.body.amount;
 
-      let Q = Controller.validatePayment(partnerId, amount);
+      let Q = Controller.validatePayment(partnerId, amount, request.user?._id);
       return coddyger.api(reply, Q);
     }
   });

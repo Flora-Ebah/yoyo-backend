@@ -160,7 +160,23 @@ export class PushNotificationService {
         timestamp: new Date().toISOString()
       };
 
-      const result:any = await this.sendNotification({ ...payload, event: notification.target, to: 'all' });
+      // Destinataire de la notification. `to: 'all'` était codé en dur ici : chaque notification
+      // — donc chaque demande de réduction, avec les données du client — était sérialisée et
+      // diffusée à TOUS les téléphones connectés, qui filtraient ensuite sur l'appareil. Sous un
+      // pic de scans c'est le premier poste de charge de la boucle d'événements, et il croît avec
+      // le nombre de connectés plutôt qu'avec le nombre de scanneurs.
+      //
+      // `PushService` (couche transport) se charge du repli vers une diffusion générale si le
+      // destinataire n'a rejoint aucune room — c'est là que vit l'instance Socket.IO.
+      const recipient: string | undefined = (notification.data as any)?.userId
+        ? String((notification.data as any).userId)
+        : undefined;
+
+      const result:any = await this.sendNotification({
+        ...payload,
+        event: notification.target,
+        to: recipient ?? 'all'
+      });
       if(result.success === false) {
         throw new Error(result);
       }

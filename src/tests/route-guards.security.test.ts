@@ -7,6 +7,7 @@ import clientRoute from '../api/routes/client.route';
 import mainRoute from '../api/routes/main.route';
 import otpRoute from '../api/routes/otp.route';
 import paymentMethodRoute from '../api/routes/payment-method.route';
+import paymentRoute from '../api/routes/payment.route';
 import { PAYMENT_METHOD_SECRET_PROJECTION } from '../modules/payment-method/payment-method.model';
 import profileRoute from '../api/routes/profile.route';
 import transactionRoute from '../api/routes/transaction.route';
@@ -472,6 +473,40 @@ describe('[Sécurité] Gardes des routes', () => {
 
 		it('le module expose bien les 6 routes attendues', () => {
 			expect(routes).to.have.lengthOf(6);
+		});
+	});
+
+	/**
+	 * Le plafond global est décompté par SESSION et non par IP (cf. le `keyGenerator` de
+	 * `router.ts`) : les clients d'une même boutique partagent le Wi-Fi, donc une seule IP
+	 * publique, et un décompte par IP mettait toute la boutique en 429 dès qu'une cinquantaine de
+	 * personnes scannaient. Ce plafond dédié garde l'initiation de réduction à l'abri d'un script
+	 * sans pénaliser un usage normal — un client scanne une fois par boutique.
+	 */
+	describe('Initiation de réduction (scan)', () => {
+		const routes = collectRoutes(paymentRoute);
+
+		it("l'initiation exige un jeton utilisateur", () => {
+			const route = find(routes, 'POST', '/payments/initiate');
+			expect(route, 'route POST /payments/initiate introuvable').to.not.be.undefined;
+			expect(route!.preHandler).to.equal(TokenMiddleware.verify);
+		});
+
+		it("l'initiation est plafonnée en débit", () => {
+			const route: any = find(routes, 'POST', '/payments/initiate');
+			expect(route.config?.rateLimit?.max).to.be.a('number');
+			expect(route.config.rateLimit.max).to.be.at.most(20);
+		});
+
+		it('aucune route de paiement n’est accessible sans jeton', () => {
+			const withoutToken = routes
+				.filter(route => {
+					const handlers = Array.isArray(route.preHandler) ? route.preHandler : [route.preHandler];
+					return !handlers.includes(TokenMiddleware.verify) && !handlers.includes(TokenMiddleware.verifyAdmin);
+				})
+				.map(route => `${route.method} ${route.url}`);
+
+			expect(withoutToken).to.deep.equal([]);
 		});
 	});
 });

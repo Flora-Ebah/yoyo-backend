@@ -78,7 +78,11 @@ export const locale = {
 		payment: {
 			sameClient: 'Vous ne pouvez pas vous envoyer un paiement à vous-même',
 			noSubscription: 'Aucun abonnement actif trouvé',
-			pendingPayment: 'Un paiement est déjà en cours'
+			pendingPayment: 'Un paiement est déjà en cours',
+			notOwner: "Vous n'êtes pas autorisé à traiter les demandes de cette boutique",
+			alreadyProcessed: 'Cette demande de réduction a déjà été traitée',
+			invalidAmount: 'Le montant de la facture doit être un nombre supérieur à 0',
+			belowMinOrder: (min: number) => `Le montant de la facture doit atteindre le minimum de commande de ${min} F`
 		},
 		transaction: {
 			active_subscription_error: 'Vous avez déjà un abonnement actif'

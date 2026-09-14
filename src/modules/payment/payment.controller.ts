@@ -110,22 +110,33 @@ export class PaymentController {
    * @param item Données de l'élément à créer
    * @returns Élément créé
    */
+  /**
+   * Initie une demande de réduction après le scan du QR code d'un partenaire.
+   *
+   * Distingue deux issues, parce que l'appel est idempotent (cf. `PaymentService.create`) :
+   * - `201` : la demande vient d'être créée ;
+   * - `200` avec `alreadyPending: true` : une demande était déjà en cours chez ce partenaire, on
+   *   renvoie celle-là. Ce n'est pas une erreur — le client veut sa réduction, et l'app peut
+   *   traiter ce cas comme un succès.
+   */
   initiate(item: IPayment) {
     return new Promise(async (resolve, reject) => {
       try {
-        const newItem = await this.service.create(item);
-        if (newItem.error) {
+        const result: any = await this.service.create(item);
+        if (result.error) {
           return resolve({
             status: defines.status.badRequest,
-            message: newItem.message,
-            data: newItem
+            message: result.message,
+            data: result
           });
         }
-        
+
+        const { demande, created } = result;
+
         resolve({
-          status: defines.status.requestOK,
-          message: locale.controller.successSave,
-          data: newItem
+          status: created ? defines.status.created : defines.status.requestOK,
+          message: created ? locale.controller.successSave : locale.controller.payment.pendingPayment,
+          data: created ? demande : { ...demande, alreadyPending: true }
         });
       } catch (error) {
         reject(error);
@@ -144,12 +155,20 @@ export class PaymentController {
   create(item: IPayment) {
     return new Promise(async (resolve, reject) => {
       try {
-        const newItem = await this.service.create(item);
-        
+        const result: any = await this.service.create(item);
+
+        if (result.error) {
+          return resolve({
+            status: defines.status.badRequest,
+            message: result.message,
+            data: result
+          });
+        }
+
         resolve({
           status: defines.status.created,
           message: locale.controller.successSave,
-          data: newItem
+          data: result.demande
         });
       } catch (error) {
         reject(error);
@@ -166,12 +185,18 @@ export class PaymentController {
    * @param item Nouvelles données
    * @returns Élément mis à jour
    */
-  validate(id: string, item: Partial<IPayment>) {
+  /**
+   * Traite une demande de réduction : acceptation avec montant, ou rejet motivé.
+   *
+   * @param actorId `request.user._id` — le service vérifie que l'appelant possède bien la boutique
+   *        destinataire. Sans cela, tout compte connecté pouvait valider n'importe quelle demande.
+   */
+  validate(id: string, item: Partial<IPayment>, actorId?: string) {
     return new Promise(async (resolve, reject) => {
       try {
         // Vérification de l'existence de l'élément
         const existingItem = await this.service.getById(id);
-        
+
         if (!existingItem) {
           return resolve({
             status: defines.status.notFound,
@@ -179,10 +204,18 @@ export class PaymentController {
             data: null
           });
         }
-        
+
         // Mise à jour
-        const updatedItem = await this.service.update(id, item);
-        
+        const updatedItem: any = await this.service.update(id, item, actorId);
+
+        if (updatedItem?.error) {
+          return resolve({
+            status: PaymentController.errorStatus(updatedItem),
+            message: updatedItem.data,
+            data: null
+          });
+        }
+
         resolve({
           status: defines.status.requestOK,
           message: locale.controller.done,
@@ -195,6 +228,24 @@ export class PaymentController {
       console.error(e);
       return coddyger.catchReturn(e, controllerLabel, 'update');
     });
+  }
+
+  /**
+   * Traduit un descripteur d'erreur du service en code HTTP.
+   *
+   * `forbidden` : l'appelant ne possède pas la boutique. `conflict` : la demande a déjà été
+   * traitée — rejouer la requête ne doit ni réécrire le montant ni renotifier le client.
+   */
+  private static errorStatus(result: any): number {
+    if (result?.forbidden) {
+      return defines.status.forbidden;
+    }
+
+    if (result?.conflict) {
+      return defines.status.conflict;
+    }
+
+    return defines.status.badRequest;
   }
 
   /**
@@ -350,7 +401,7 @@ export class PaymentController {
    * @param amount Montant du paiement
    * @returns Paiement validé
    */
-  validatePayment(partnerId: string, amount: number) {
+  validatePayment(partnerId: string, amount: number, actorId?: string) {
     return new Promise(async (resolve, reject) => {
       try {
         if (!coddyger.string.isValidObjectId(partnerId)) {
@@ -364,13 +415,21 @@ export class PaymentController {
         if (!amount || amount <= 0) {
           return resolve({
             status: defines.status.badRequest,
-            message: "Le montant doit être supérieur à 0",
+            message: locale.controller.payment.invalidAmount,
             data: null
           });
         }
 
-        const items = await this.service.validatePayment(partnerId, amount);
-        
+        const items: any = await this.service.validatePayment(partnerId, amount, actorId);
+
+        if (items?.error) {
+          return resolve({
+            status: PaymentController.errorStatus(items),
+            message: items.data,
+            data: null
+          });
+        }
+
         resolve({
           status: defines.status.requestOK,
           message: locale.controller.done,

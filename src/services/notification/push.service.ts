@@ -100,17 +100,34 @@ export class PushService extends NotificationService {
         ...additionalData
       };
       
-      // Si 'to' est spécifié, envoyer à des rooms spécifiques
-      if (to && to !== 'all') {
-        const rooms = Array.isArray(to) ? to : [to];
-        
+      // Adressage strict au destinataire. Les trois applications transmettent leur jeton au
+      // handshake, le serveur les fait rejoindre une room à leur identifiant (`SocketIOHelper`) :
+      // une notification ne part donc plus qu'au concerné. `to: 'all'` reste réservé aux
+      // annonces générales.
+      //
+      // Le destinataire peut être hors ligne : dans ce cas la room est vide et l'émission ne
+      // touche personne, ce qui est le comportement voulu — la notification est persistée en base
+      // et l'application la retrouvera à sa prochaine lecture. Ne PAS rebasculer en diffusion
+      // générale ici : cela renverrait les données d'un client à tous les appareils connectés.
+      const targetRooms = to && to !== 'all' ? (Array.isArray(to) ? to : [to]) : [];
+
+      if (targetRooms.length > 0) {
+        const rooms = targetRooms;
+
         // Envoyer à chaque room spécifiée
         rooms.forEach(room => {
           io.to(room).emit(eventName, notificationPayload);
-          
+
+          // Distinguer « émis vers un destinataire connecté » de « destinataire hors ligne » :
+          // sans cette trace, une notification jamais reçue par un commerçant est indiscernable
+          // d'une notification jamais émise.
+          const online = (socketHelper as any).hasRoom?.(String(room)) ?? true;
+
           LoggerService.log({
             type: LogLevel.Info,
-            content: `Notification push envoyée à la room ${room} via l'événement ${eventName}`,
+            content: online
+              ? `Notification push envoyée à la room ${room} via l'événement ${eventName}`
+              : `Destinataire ${room} hors ligne : notification conservée en base, non diffusée`,
             location: this.serviceLabel,
             method: 'send'
           });

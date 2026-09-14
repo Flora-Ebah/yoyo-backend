@@ -4,6 +4,7 @@ import { MainHelper, SocketIOHelper } from "./helpers";
 import { startCleanupCron } from './cron/cleanup-clients.cron';
 import { startSubscriptionRenewalCron } from './cron/subscription-renewal.cron';
 import { initNotificationServices } from './services/notification';
+import { initEventBus } from './events';
 import { assertSecureConfiguration } from './config/security-check';
 
 // Instance Socket.IO globale
@@ -66,8 +67,12 @@ export class Main {
       console.error('Erreur lors de l\'initialisation des services de notification:', error);
     }
 
+    // File d'événements : doit démarrer APRÈS les services de notification, dont ses
+    // consommateurs dépendent.
+    initEventBus();
+
     MainHelper.setDefaultProfile()
-    
+
     // Start cleanup cron job
     startCleanupCron();
     
