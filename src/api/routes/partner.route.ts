@@ -493,6 +493,89 @@ const defaultRoute: any = (fastify: any, options, done) => {
     }
   });
 
+  // [ADMIN] Boutiques d'un marchand donné (multi-boutiques) — pour la fiche marchand du CMS
+  // et la décision de suppression (dernière boutique ⇒ suppression du compte).
+  fastify.route({
+    schema: {
+      tags,
+      summary: "Liste des boutiques d'un marchand (administration)",
+      params: {
+        type: 'object',
+        properties: { userId: { type: 'string' } },
+        required: ['userId'],
+        additionalProperties: false
+      },
+      query: {
+        type: 'object',
+        properties: {
+          page: { type: 'number' },
+          pageSize: { type: 'number' },
+          status: { type: 'string' }
+        },
+        required: [],
+        additionalProperties: false
+      }
+    },
+    method: 'GET',
+    url: `${routePath}/by-user/:userId`,
+    preHandler: TokenMiddleware.can('read', 'pros'),
+    handler: (request, reply) => {
+      const userId: any = request.params.userId;
+      const page: any = request.query.page || 1;
+      const pageSize: any = request.query.pageSize;
+      const status: any = request.query.status;
+
+      const Q = Controller.getByUserId(userId, { page, pageSize, status });
+      return coddyger.api(reply, Q);
+    }
+  });
+
+  // [ADMIN] Créer une boutique rattachée à un marchand EXISTANT. `POST /partners` force le
+  // propriétaire = utilisateur connecté ; ici l'admin choisit le marchand cible via l'URL.
+  fastify.route({
+    schema: {
+      tags,
+      summary: 'Créer une boutique pour un marchand existant (administration)',
+      params: {
+        type: 'object',
+        properties: { userId: { type: 'string' } },
+        required: ['userId'],
+        additionalProperties: false
+      },
+      body: {
+        type: 'object',
+        properties: {
+          name: { type: 'string', minLength: 2, maxLength: 100 },
+          description: { type: 'string', maxLength: 1000 },
+          ville: { type: 'string', maxLength: 100 },
+          address: { type: 'string', maxLength: 200 },
+          phone: { type: 'string' },
+          email: { type: 'string', anyOf: [{ format: 'email' }, { maxLength: 0 }] },
+          categories: { type: 'array', items: { type: 'string' } },
+          thumbnail: { type: 'string' },
+          maxDiscount: { type: 'number', minimum: 0, maximum: 100 },
+          minOrder: { type: 'number', minimum: 0 }
+        },
+        required: ['name'],
+        additionalProperties: true
+      }
+    },
+    method: 'POST',
+    url: `${routePath}/for-user/:userId`,
+    preHandler: TokenMiddleware.can('create', 'pros'),
+    handler: (request, reply) => {
+      const body: any = request.body;
+      const admin: any = request.user;
+
+      // Le propriétaire est le marchand ciblé par l'URL ; l'admin est l'auteur de la création.
+      body.user = request.params.userId;
+      body.createdBy = admin._id;
+
+      const Q = Controller.create(body);
+      return coddyger.api(reply, Q);
+    }
+  });
+
   // Liste des partenaires ouverts
   fastify.route({
     schema: {

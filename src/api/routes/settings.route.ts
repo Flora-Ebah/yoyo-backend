@@ -44,7 +44,8 @@ const defaultRoute: any = (fastify: any, options, done) => {
         properties: {
           discountMin: { type: 'number', minimum: 0, maximum: 100 },
           discountMax: { type: 'number', minimum: 0, maximum: 100 },
-          accountDeletionGraceDays: { type: 'number', minimum: 1, maximum: 3650 }
+          accountDeletionGraceDays: { type: 'number', minimum: 1, maximum: 3650 },
+          maxBoutiquesPerMerchant: { type: 'number', minimum: 0, maximum: 1000 }
         },
         additionalProperties: false
       }

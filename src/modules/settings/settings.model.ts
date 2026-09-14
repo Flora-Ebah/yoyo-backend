@@ -10,6 +10,8 @@ const schema = new mongoose.Schema<ISettings>(
     discountMax: { type: Number, default: 50 },
     // Délai de grâce avant anonymisation d'un compte supprimé (cf. ISettings). Défaut : 30 jours.
     accountDeletionGraceDays: { type: Number, default: 30 },
+    // Nombre maximum de boutiques par marchand (cf. ISettings). 0 = illimité. Défaut : 0.
+    maxBoutiquesPerMerchant: { type: Number, default: 0 },
     status: { type: String, enum: ['active', 'inactive', 'removed'], default: 'active' }
   },
   { timestamps: true }

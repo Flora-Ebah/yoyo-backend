@@ -3,15 +3,18 @@ import { PartnerSet } from './partner.model';
 import coddyger, { IData, IErrorObject, LoggerService, LogLevel } from 'coddyger';
 import { CategoryService } from '../category/category.service';
 import { ClientSet } from '../client';
+import { SettingsService } from '../settings';
 
 export class PartnerService {
   private readonly dao: IData<IPartner>;
   private readonly categoryService: CategoryService;
+  private readonly settingsService: SettingsService;
   private readonly serviceLabel = 'PartnerService';
 
   constructor() {
     this.dao = new PartnerSet();
     this.categoryService = new CategoryService();
+    this.settingsService = new SettingsService();
   }
 
   /**
@@ -253,9 +256,23 @@ export class PartnerService {
         }
       }
 
-      const hasPartner:any = await this.dao.selectOne({ user: item.user });
-      if (hasPartner) {
-        return { error: true, data: 'Un partenaire existe déjà pour cet utilisateur' };
+      // Multi-boutiques : un marchand peut posséder plusieurs boutiques. On ne bloque plus la 2ᵉ,
+      // mais on applique la limite paramétrable depuis le CMS (0 = illimité). On compte les
+      // boutiques encore en service (hors retirées/archivées) du propriétaire.
+      const maxBoutiques = await this.settingsService.getMaxBoutiquesPerMerchant();
+      if (maxBoutiques > 0) {
+        const model: any = (this.dao as any).defaultModel;
+        const current: number = await model.countDocuments({
+          user: item.user,
+          status: { $nin: ['removed', 'archived'] }
+        });
+
+        if (current >= maxBoutiques) {
+          return {
+            error: true,
+            data: `Ce marchand a atteint la limite de ${maxBoutiques} boutique(s) autorisée(s).`
+          };
+        }
       }
 
       const latestPartner:any = await this.dao.selectLatest();

@@ -23,5 +23,11 @@ export interface ISettings {
    * Défaut : 30 jours (standard de l'industrie, plus défendable en minimisation DCP/RGPD).
    */
   accountDeletionGraceDays: number;
+  /**
+   * Nombre maximum de boutiques qu'un même marchand peut posséder. `0` = illimité.
+   * Vérifié côté serveur à la création d'une boutique (app marchand et CMS). Paramétrable par
+   * l'administrateur pour ajuster la politique sans redéploiement.
+   */
+  maxBoutiquesPerMerchant: number;
   status?: string;
 }

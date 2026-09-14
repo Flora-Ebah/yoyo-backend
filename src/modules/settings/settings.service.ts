@@ -3,10 +3,11 @@ import { ISettings } from './settings.interface';
 import { SettingsSet } from './settings.model';
 
 // Valeurs par défaut si aucun document de configuration n'existe encore en base.
-const DEFAULTS: Pick<ISettings, 'discountMin' | 'discountMax' | 'accountDeletionGraceDays'> = {
+const DEFAULTS: Pick<ISettings, 'discountMin' | 'discountMax' | 'accountDeletionGraceDays' | 'maxBoutiquesPerMerchant'> = {
   discountMin: 10,
   discountMax: 50,
-  accountDeletionGraceDays: 30
+  accountDeletionGraceDays: 30,
+  maxBoutiquesPerMerchant: 0
 };
 
 export class SettingsService {
@@ -44,6 +45,7 @@ export class SettingsService {
           discountMin: DEFAULTS.discountMin,
           discountMax: DEFAULTS.discountMax,
           accountDeletionGraceDays: DEFAULTS.accountDeletionGraceDays,
+          maxBoutiquesPerMerchant: DEFAULTS.maxBoutiquesPerMerchant,
           status: 'active'
         };
         const result: any = await this.dao.save(created);
@@ -83,6 +85,16 @@ export class SettingsService {
   }
 
   /**
+   * Nombre maximum de boutiques par marchand (0 = illimité). Lu depuis la configuration ; repli
+   * sur la valeur par défaut si le champ est absent (anciens documents) ou invalide.
+   */
+  async getMaxBoutiquesPerMerchant(): Promise<number> {
+    const s = await this.getSettings();
+    const value = Number(s.maxBoutiquesPerMerchant);
+    return Number.isFinite(value) && value >= 0 ? value : DEFAULTS.maxBoutiquesPerMerchant;
+  }
+
+  /**
    * Met à jour la configuration (remise min/max). Réservé à l'administrateur (garde côté route).
    */
   async update(data: Partial<ISettings>): Promise<ISettings> {
@@ -93,6 +105,7 @@ export class SettingsService {
       if (typeof data.discountMin !== 'undefined') next.discountMin = Number(data.discountMin);
       if (typeof data.discountMax !== 'undefined') next.discountMax = Number(data.discountMax);
       if (typeof data.accountDeletionGraceDays !== 'undefined') next.accountDeletionGraceDays = Number(data.accountDeletionGraceDays);
+      if (typeof data.maxBoutiquesPerMerchant !== 'undefined') next.maxBoutiquesPerMerchant = Number(data.maxBoutiquesPerMerchant);
 
       const result: any = await this.dao.update({ _id: current._id }, next);
       if (result && result.error) {
