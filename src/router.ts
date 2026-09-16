@@ -155,6 +155,40 @@ export default class Router {
 			]);
 		});
 
+		// Universal Links (iOS) : équivalent Apple de `assetlinks.json`. iOS télécharge ce fichier
+		// pour vérifier que l'app peut ouvrir les liens https du domaine. DOIT être servi à
+		// `/.well-known/apple-app-site-association` — sans extension, en `application/json`, en 200
+		// direct et SANS redirection, sinon iOS l'ignore silencieusement.
+		//
+		// Il n'y a pas d'empreinte de certificat ici, contrairement à Android : l'autorisation repose
+		// sur l'identifiant d'application complet `<Team ID>.<bundle id>`, que seule l'app signée par
+		// cette équipe peut revendiquer. Valeurs surchargeables par `IOS_TEAM_ID` / `IOS_BUNDLE_ID`.
+		//
+		// ⚠️ Apple met ce fichier en cache sur son CDN : une modification peut mettre jusqu'à 24 h à
+		// se propager. Pendant les tests, déclarer le domaine en `applinks:<domaine>?mode=developer`
+		// dans l'app force iOS à le relire directement.
+		this.router.get('/.well-known/apple-app-site-association', async (request, reply) => {
+			const teamId = (process.env.IOS_TEAM_ID ?? '').trim();
+			const bundleId = (process.env.IOS_BUNDLE_ID ?? '').trim();
+
+			return reply
+				.status(defines.status.requestOK)
+				.type('application/json')
+				.send({
+					applinks: {
+						apps: [],
+						details: [
+							{
+								appIDs: [`${teamId}.${bundleId}`],
+								// Seuls les liens d'activation marchand ouvrent l'app ; le reste du domaine
+								// (API, assets) doit continuer de s'ouvrir dans le navigateur.
+								components: [{ '/': '/activation*', comment: 'Activation marchand' }]
+							}
+						]
+					}
+				});
+		});
+
 		// Page de repli d'activation marchand. Le lien `/activation?token=…` est un App Link : quand
 		// l'app YoYo Pro est installée (et la vérification Android/iOS OK), le système ouvre l'app
 		// AVANT que le navigateur ne charge cette page. Sinon (app absente), le navigateur affiche
