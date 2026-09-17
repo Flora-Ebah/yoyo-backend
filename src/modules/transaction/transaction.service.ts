@@ -706,14 +706,27 @@ export class TransactionService {
         transaction.paymentUrl = 'free'; // champ requis, ne peut pas être vide
         await this.create(transaction);
 
-        if (!isScheduledRenewal) {
+        if (isScheduledRenewal && currentSubscriptionId) {
+          // Renouvellement programmé d'un plan GRATUIT : aucune passerelle de paiement à appeler.
+          // On programme directement le renouvellement (pendingRenewal), comme le ferait le retour
+          // de paiement pour un plan payant.
+          await this.subscriptionService.scheduleEarlyRenewal(
+            currentSubscriptionId,
+            (plan._id ?? planId).toString(),
+            {
+              paymentMethod: 'free',
+              transactionId,
+              metadata: { scheduledFrom: 'free-scheduled', scheduledAt: new Date().toISOString() }
+            }
+          );
+        } else if (!isScheduledRenewal) {
           await this.subscriptionService.createSubscription(userId, plan._id ?? planId);
         }
 
         const savedFree = await this.dao.selectOne({ _id: transactionId });
         return {
           success: true,
-          data: { ...savedFree, isFree: true, isExistingTransaction: false }
+          data: { ...savedFree, isFree: true, isScheduled: !!isScheduledRenewal, isExistingTransaction: false }
         };
       }
 
