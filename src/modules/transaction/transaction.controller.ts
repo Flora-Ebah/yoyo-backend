@@ -144,10 +144,24 @@ export class TransactionController {
 
         // Création ou récupération de la transaction
         const transaction:any = await this.service.createPlanTransaction(userId, planId, isScheduledRenewal, currentSubscriptionId);
+
+        // Échec MÉTIER (ex. « Abonnement actuel non trouvé ou non valide », plan invalide…) :
+        // le service renvoie { success:false, message }. Il faut le remonter tel quel avec un statut
+        // 4xx explicite — et NON le rejeter comme une erreur serveur, ce qui masquait la vraie
+        // cause derrière un 500 « Une erreur imprévue ».
+        if (transaction && transaction.success === false) {
+          return resolve({
+            status: transaction.status || defines.status.badRequest,
+            message: transaction.message || "Impossible d'initialiser la transaction.",
+            data: null
+          });
+        }
+
+        // Erreur technique inattendue (remontée telle quelle pour le catch → 500).
         if(transaction.error) {
           return reject(transaction);
         }
-        
+
         resolve({
           status: defines.status.created,
           message: "Ok",
