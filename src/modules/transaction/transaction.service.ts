@@ -651,18 +651,22 @@ export class TransactionService {
         if (!currentSubscriptionId) {
           return {
             success: false,
-            error: new Error('ID d\'abonnement actuel requis pour le renouvellement programmé'),
             message: 'ID d\'abonnement actuel requis pour le renouvellement programmé'
           };
         }
-        
-        // Vérifier que l'abonnement actuel appartient à l'utilisateur
-        const currentSubscription = await this.subscriptionService.getCurrentSubscriptionWithPlanDetails(userId);
-        
-        if (!currentSubscription || currentSubscription._id.toString() !== currentSubscriptionId) {
+
+        // Vérifier que l'abonnement fourni existe et appartient à l'utilisateur.
+        // On interroge DIRECTEMENT l'abonnement par son id (getById) plutôt que de passer par
+        // getCurrentSubscriptionWithPlanDetails : cette dernière n'accepte que l'abonnement
+        // `active` non expiré, peuple le plan et avale toute erreur interne en `null` — ce qui
+        // faisait échouer (puis planter en 500) un renouvellement pourtant légitime. Ici, seule la
+        // propriété compte : l'abonnement existe et est bien celui de l'utilisateur.
+        const currentSubscription: any = await this.subscriptionService.getById(currentSubscriptionId);
+        const ownerId = currentSubscription?.userId?._id ?? currentSubscription?.userId;
+
+        if (!currentSubscription || String(ownerId) !== String(userId)) {
           return {
             success: false,
-            error: new Error('Abonnement actuel non trouvé ou non valide'),
             message: 'Abonnement actuel non trouvé ou non valide'
           };
         }
