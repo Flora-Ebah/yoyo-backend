@@ -63,10 +63,21 @@ export class BoutiqueManagerService {
     //    pour qu'il puisse se connecter normalement dans yoyo-pro avec téléphone + code.
     const last: any = await this.clientService.selectLatest();
     const managerId = coddyger.string.generateObjectId();
+
+    // Le modèle Client exige firstname/lastname/email non vides. Le gérant se connecte par téléphone,
+    // mais on doit remplir ces champs : on découpe le nom, et on génère un email de service unique
+    // (basé sur l'id) — il n'est pas utilisé pour se connecter.
+    const cleanName = this.clientService.formatName(String(name).trim()) || 'Gérant';
+    const parts = cleanName.split(' ').filter(Boolean);
+    const firstname = parts[0] || 'Gérant';
+    const lastname = parts.length > 1 ? parts.slice(1).join(' ') : firstname;
+    const serviceEmail = `gerant.${String(managerId).toLowerCase()}@gerant.yoyolacarte.com`;
+
     const managerClient: any = {
       _id: managerId,
-      firstname: this.clientService.formatName(String(name).trim()) || 'Gérant',
-      lastname: '',
+      firstname,
+      lastname,
+      email: serviceEmail,
       contact: formattedPhone,
       password: await coddyger.string.encryptPassword(accessCode),
       slug: coddyger.buildSlug('CLT', last ? last.slug : null),
