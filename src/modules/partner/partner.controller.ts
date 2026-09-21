@@ -8,6 +8,7 @@ import { ICommercial, IOnboardPayload, PartnerOnboardingService } from './partne
 import { ClientSet } from '../client/client.model';
 import { AdminSet } from '../admin/admin.model';
 import { EnrolmentService } from '../enrolment/enrolment.service';
+import { BoutiqueManagerService } from '../boutique-manager/boutique-manager.service';
 
 const controllerLabel: string = 'PartnerController';
 
@@ -15,11 +16,41 @@ export class PartnerController {
   private readonly service: PartnerService;
   private readonly onboardingService: PartnerOnboardingService;
   private readonly enrolmentService: EnrolmentService;
+  private readonly bmService: BoutiqueManagerService;
 
   constructor() {
     this.service = new PartnerService();
     this.onboardingService = new PartnerOnboardingService();
     this.enrolmentService = new EnrolmentService();
+    this.bmService = new BoutiqueManagerService();
+  }
+
+  /**
+   * Boutiques ACCESSIBLES par l'utilisateur connecté dans yoyo-pro :
+   *   - celles qu'il POSSÈDE (propriétaire), plus
+   *   - celles qu'il GÈRE (gérant, via un lien actif boutique-manager).
+   * Fusionne sans doublon. Utilisé par `GET /partners/me`.
+   */
+  getAccessibleByUserId(userId: string, payloads: { page?: number; pageSize?: number; status?: string }) {
+    return new Promise(async (resolve, reject) => {
+      try {
+        const owned: any = await this.service.getByUserId(userId, payloads);
+        const rows: any[] = Array.isArray(owned?.rows) ? [...owned.rows] : [];
+
+        const managedIds = await this.bmService.getManagedBoutiqueIds(userId);
+        if (managedIds.length > 0) {
+          const managed = await this.service.getByIds(managedIds);
+          const seen = new Set(rows.map(r => String(r._id)));
+          for (const m of managed) {
+            if (!seen.has(String((m as any)._id))) rows.push(m);
+          }
+        }
+
+        resolve({ status: defines.status.requestOK, message: owned?.data ?? null, data: rows });
+      } catch (error) {
+        reject(error);
+      }
+    }).catch((e: IErrorObject) => coddyger.catchReturn(e, controllerLabel, 'getAccessibleByUserId'));
   }
 
   /**

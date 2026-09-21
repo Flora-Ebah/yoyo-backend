@@ -358,6 +358,22 @@ export class PartnerService {
    * @param payloads Paramètres de pagination et filtres
    * @returns Liste des partenaires
    */
+  /**
+   * Récupère plusieurs boutiques par leurs ids (hors retirées/archivées).
+   * Sert à résoudre les boutiques GÉRÉES par un gérant dans `/partners/me`.
+   */
+  async getByIds(ids: string[]): Promise<IPartner[]> {
+    try {
+      if (!ids || ids.length === 0) return [];
+      const rows: any = await this.dao.selectHug({ _id: { $in: ids }, status: { $nin: ['removed', 'archived'] } });
+      if (rows?.error) throw rows;
+      return Array.isArray(rows) ? rows : [];
+    } catch (error) {
+      LoggerService.log({ type: LogLevel.Error, content: error, location: this.serviceLabel, method: 'getByIds' });
+      return [];
+    }
+  }
+
   async getByUserId(userId: string, payloads: { page?: number; pageSize?: number; status?: string }): Promise<any> {
     try {
       let page: number = payloads.page ?? 1;

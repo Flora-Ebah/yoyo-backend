@@ -488,7 +488,8 @@ const defaultRoute: any = (fastify: any, options, done) => {
       let status: any = request.query.status;
       let user: any = request.user;
 
-      let Q = Controller.getByUserId(user._id, { page, pageSize, status });
+      // Boutiques POSSÉDÉES + GÉRÉES (gérant) : un gérant voit ainsi sa boutique dans yoyo-pro.
+      let Q = Controller.getAccessibleByUserId(user._id, { page, pageSize, status });
       return coddyger.api(reply, Q);
     }
   });
