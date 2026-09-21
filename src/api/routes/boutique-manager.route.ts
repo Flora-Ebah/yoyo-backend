@@ -87,6 +87,39 @@ const defaultRoute: any = (fastify: any, options, done) => {
     }
   });
 
+  // [ADMIN] Inviter un gérant pour un partenaire donné — depuis la fiche partenaire du CMS.
+  fastify.route({
+    schema: {
+      tags,
+      summary: 'Inviter un gérant pour un partenaire (administration)',
+      params: {
+        type: 'object',
+        properties: { ownerId: { type: 'string' } },
+        required: ['ownerId'],
+        additionalProperties: false
+      },
+      body: {
+        type: 'object',
+        properties: {
+          boutiqueId: { type: 'string' },
+          name: { type: 'string', minLength: 2, maxLength: 80 },
+          phone: { type: 'string' }
+        },
+        required: ['boutiqueId', 'name', 'phone'],
+        additionalProperties: false
+      }
+    },
+    method: 'POST',
+    url: `${routePath}/for-owner/:ownerId`,
+    preHandler: TokenMiddleware.can('create', 'pros'),
+    handler: (request, reply) => {
+      const ownerId: any = request.params.ownerId;
+      const body: any = request.body;
+      const Q = Controller.invite(ownerId, { boutiqueId: body.boutiqueId, name: body.name, phone: body.phone });
+      return coddyger.api(reply, Q);
+    }
+  });
+
   // [ADMIN] Gérants d'un propriétaire donné — pour la fiche partenaire du CMS.
   fastify.route({
     schema: {
