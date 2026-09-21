@@ -153,6 +153,12 @@ export class BoutiqueManagerService {
     return { success: true, data: null };
   }
 
+  /** Nombre total de gérants actifs (pour les cartes de stats admin). */
+  async countActive(): Promise<number> {
+    const rows: any = await this.dao.selectHug({ status: 'active' });
+    return Array.isArray(rows) ? rows.length : 0;
+  }
+
   /**
    * Boutiques (ids) qu'un compte client peut gérer en tant que GÉRANT (liens actifs).
    * Utilisé pour la résolution des boutiques accessibles dans yoyo-pro.

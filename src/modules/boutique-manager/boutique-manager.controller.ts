@@ -53,6 +53,17 @@ export class BoutiqueManagerController {
     }).catch((e: IErrorObject) => coddyger.catchReturn(e, controllerLabel, 'listMine'));
   }
 
+  count() {
+    return new Promise(async (resolve, reject) => {
+      try {
+        const total = await this.service.countActive();
+        resolve({ status: defines.status.requestOK, message: 'Ok', data: { total } });
+      } catch (error) {
+        reject(error);
+      }
+    }).catch((e: IErrorObject) => coddyger.catchReturn(e, controllerLabel, 'count'));
+  }
+
   listByBoutique(boutiqueId: string) {
     return new Promise(async (resolve, reject) => {
       try {

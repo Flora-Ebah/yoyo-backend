@@ -120,6 +120,18 @@ const defaultRoute: any = (fastify: any, options, done) => {
     }
   });
 
+  // [ADMIN] Nombre total de gérants actifs (carte de stats).
+  fastify.route({
+    schema: { tags, summary: 'Nombre total de gérants actifs (administration)' },
+    method: 'GET',
+    url: `${routePath}/count`,
+    preHandler: TokenMiddleware.can('read', 'pros'),
+    handler: (request, reply) => {
+      const Q = Controller.count();
+      return coddyger.api(reply, Q);
+    }
+  });
+
   // [ADMIN] Gérants d'un propriétaire donné — pour la fiche partenaire du CMS.
   fastify.route({
     schema: {
