@@ -42,6 +42,17 @@ export class BoutiqueManagerController {
     }).catch((e: IErrorObject) => coddyger.catchReturn(e, controllerLabel, 'listByOwner'));
   }
 
+  listMine(managerId: string) {
+    return new Promise(async (resolve, reject) => {
+      try {
+        const rows = await this.service.listByManager(managerId);
+        resolve({ status: defines.status.requestOK, message: 'Ok', data: rows });
+      } catch (error) {
+        reject(error);
+      }
+    }).catch((e: IErrorObject) => coddyger.catchReturn(e, controllerLabel, 'listMine'));
+  }
+
   listByBoutique(boutiqueId: string) {
     return new Promise(async (resolve, reject) => {
       try {

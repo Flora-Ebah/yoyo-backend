@@ -51,6 +51,19 @@ const defaultRoute: any = (fastify: any, options, done) => {
     }
   });
 
+  // [GÉRANT] Les boutiques que JE gère (mode gérant dans yoyo-pro). Vide = je ne suis pas gérant.
+  fastify.route({
+    schema: { tags, summary: 'Boutiques que je gère (gérant connecté)' },
+    method: 'GET',
+    url: `${routePath}/mine`,
+    preHandler: TokenMiddleware.verify,
+    handler: (request, reply) => {
+      const user: any = request.user;
+      const Q = Controller.listMine(user._id);
+      return coddyger.api(reply, Q);
+    }
+  });
+
   // [PROPRIÉTAIRE] Retirer un gérant.
   fastify.route({
     schema: {

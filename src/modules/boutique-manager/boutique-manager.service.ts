@@ -114,6 +114,15 @@ export class BoutiqueManagerService {
     return Array.isArray(rows) ? rows : [];
   }
 
+  /**
+   * Liens où le compte connecté est le GÉRANT (les boutiques qu'il gère). Sert à l'app yoyo-pro à
+   * détecter le mode « gérant » (vue réduite à une seule boutique).
+   */
+  async listByManager(managerClientId: string): Promise<any[]> {
+    const rows: any = await this.dao.selectHug({ manager: managerClientId, status: 'active' });
+    return Array.isArray(rows) ? rows : [];
+  }
+
   /** Gérants d'une boutique donnée. */
   async listByBoutique(boutiqueId: string): Promise<any[]> {
     const rows: any = await this.dao.selectHug({ boutique: boutiqueId, status: { $nin: ['removed'] } });
