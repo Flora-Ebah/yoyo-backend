@@ -20,6 +20,9 @@ const schema = new mongoose.Schema<ITransaction>({
   paymentUrl: { type: String, required: true },
   paymentToken: { type: String },
   notifyToken: { type: String },
+  // Jeton aléatoire transporté dans `return_url` / `cancel_url` : il identifie la transaction
+  // sur la page de retour publique sans exposer son `_id` (devinable) ni le `notifyToken`.
+  returnToken: { type: String },
   txnId: { type: String },
   isScheduledRenewal: { type: Boolean, default: false },
   currentSubscriptionId: { type: Schema.Types.ObjectId, ref: 'Subscription' },
@@ -34,6 +37,7 @@ schema.index({ paymentStatus: 1 });
 schema.index({ paymentMethod: 1 });
 schema.index({ paymentId: 1 });
 schema.index({ paymentUrl: 1 });
+schema.index({ returnToken: 1 });
 
 export class TransactionSet extends MongoDbDao<ITransaction & Document> implements IData<ITransaction & Document> {
   defaultModel = model;

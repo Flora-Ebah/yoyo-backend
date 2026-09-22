@@ -15,6 +15,7 @@ export interface ITransaction {
   paymentUrl?: string;
   paymentToken?: string;
   notifyToken?: string;
+  returnToken?: string;
   txnId?: string;
   isScheduledRenewal?: boolean;
   currentSubscriptionId?: string;

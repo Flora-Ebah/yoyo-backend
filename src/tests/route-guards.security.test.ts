@@ -95,9 +95,31 @@ describe('[Sécurité] Gardes des routes', () => {
 	describe('F-01 — Transactions', () => {
 		const routes = collectRoutes(transactionRoute);
 
+		// `payment-return` est la seule exception admise : c'est le navigateur du client qui y
+		// arrive, redirigé par Orange Money, donc sans jeton d'authentification ni IP
+		// prestataire. Elle est sans garde parce qu'elle n'accorde aucun droit — elle affiche
+		// un statut qu'elle fait revalider par Orange Money (cf. le test suivant).
+		// Toute AUTRE route non gardée qui apparaîtrait ici est une régression.
 		it('aucune route de transaction n\'est laissée sans garde', () => {
 			const unguarded = routes.filter(route => !route.preHandler);
-			expect(unguarded.map(r => `${r.method} ${r.url}`)).to.deep.equal([]);
+			expect(unguarded.map(r => `${r.method} ${r.url}`))
+				.to.deep.equal(['GET /transactions/payment-return']);
+		});
+
+		it('payment-return ne déduit jamais le statut de son URL', () => {
+			const route = find(routes, 'GET', '/transactions/payment-return');
+			expect(route, 'route payment-return introuvable').to.not.be.undefined;
+
+			// La page est publique : elle doit être limitée en débit, puisque chaque affichage
+			// déclenche un appel sortant vers Orange Money.
+			expect(route!.config?.rateLimit, 'payment-return doit être limitée en débit')
+				.to.not.be.undefined;
+
+			// Aucun paramètre d'URL ne porte de statut : le seul identifiant accepté est le
+			// jeton opaque `t`, et `cancel` ne pilote que le libellé affiché.
+			const properties = Object.keys(route!.schema?.query?.properties ?? {});
+			expect(properties).to.not.include('status');
+			expect(properties).to.include('t');
 		});
 
 		it('les webhooks non authentifiés ont été supprimés', () => {

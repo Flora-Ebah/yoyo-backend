@@ -1,3 +1,4 @@
+import crypto from 'crypto';
 import { ITransaction } from './transaction.interface';
 import { TransactionSet } from './transaction.model';
 import { PlanSet } from '../plan';
@@ -335,6 +336,24 @@ export class TransactionService {
   }
 
   /**
+   * Construit l'URL de retour navigateur transmise à Orange Money.
+   *
+   * `return_url` et `cancel_url` pointent sur la même route : seul le paramètre `cancel`
+   * les distingue, ce qui permet d'afficher le bon message sans dupliquer la page.
+   *
+   * @param returnToken Jeton aléatoire identifiant la transaction
+   * @param cancelled Vrai pour l'URL d'annulation
+   * @returns L'URL absolue à transmettre au prestataire
+   */
+  private buildReturnUrl(returnToken: string, cancelled: boolean): string {
+    const base = (process.env.OM_RETURN_URL ?? '').trim().replace(/\/+$/, '');
+    const separator = base.includes('?') ? '&' : '?';
+    const suffix = cancelled ? '&cancel=1' : '';
+
+    return `${base}${separator}t=${encodeURIComponent(returnToken)}${suffix}`;
+  }
+
+  /**
    * Vérifie le statut d'un paiement
    * @param transactionId ID de la transaction
    * @returns Statut du paiement
@@ -389,7 +408,23 @@ export class TransactionService {
       return { found: false };
     }
 
-    // Idempotence : Orange Money peut rejouer une notification déjà traitée.
+    return this.settleTransaction(transaction, 'settleNotification');
+  }
+
+  /**
+   * [SÉCURITÉ F-01] Résout le statut réel d'une transaction auprès d'Orange Money et l'applique.
+   *
+   * Cœur partagé par le webhook (`settleNotification`) et par la page de retour navigateur
+   * (`settleByReturnToken`) : quel que soit le déclencheur, le statut vient du prestataire,
+   * jamais de l'appelant, et le montant est contrôlé avant toute activation d'abonnement.
+   *
+   * @param transaction Transaction déjà résolue en base
+   * @param method Nom de la méthode appelante, pour la journalisation
+   * @returns La transaction telle qu'établie après vérification
+   */
+  private async settleTransaction(transaction: any, method: string): Promise<any> {
+    // Idempotence : Orange Money peut rejouer une notification déjà traitée, et la page de
+    // retour peut être rechargée autant de fois que l'utilisateur le souhaite.
     if (transaction.paymentStatus === 'success') {
       return { found: true, transaction, alreadySettled: true };
     }
@@ -408,10 +443,10 @@ export class TransactionService {
       if (Number(response.amount) !== Number(transaction.amount)) {
         LoggerService.log({
           type: LogLevel.Error,
-          content: `Notification rejetée pour la transaction ${transaction._id} : montant divergent ` +
+          content: `Règlement rejeté pour la transaction ${transaction._id} : montant divergent ` +
             `(prestataire ${response.amount} / attendu ${transaction.amount})`,
           location: this.serviceLabel,
-          method: 'settleNotification'
+          method
         });
         return { found: true, transaction, amountMismatch: true };
       }
@@ -422,7 +457,7 @@ export class TransactionService {
         type: LogLevel.Error,
         content: `Statut prestataire illisible pour la transaction ${transaction._id}`,
         location: this.serviceLabel,
-        method: 'settleNotification'
+        method
       });
       return { found: true, transaction, unreadableStatus: true };
     }
@@ -433,6 +468,32 @@ export class TransactionService {
     );
 
     return { found: true, transaction: settled, providerStatus };
+  }
+
+  /**
+   * Résout une transaction depuis le jeton porté par `return_url` / `cancel_url`.
+   *
+   * La redirection navigateur n'est qu'un signal d'affichage : elle ne prouve rien, et
+   * l'utilisateur peut ne jamais y revenir. Elle sert donc de filet au webhook — si la
+   * notification serveur a été perdue, ce chemin établit quand même le statut réel.
+   *
+   * @param returnToken Jeton aléatoire transmis dans l'URL de retour
+   * @returns La transaction telle qu'établie après vérification
+   */
+  async settleByReturnToken(returnToken: string): Promise<any> {
+    const transaction: any = await this.getOne({ returnToken });
+
+    if (!transaction) {
+      LoggerService.log({
+        type: LogLevel.Warn,
+        content: `Retour de paiement ignoré : returnToken inconnu`,
+        location: this.serviceLabel,
+        method: 'settleByReturnToken'
+      });
+      return { found: false };
+    }
+
+    return this.settleTransaction(transaction, 'settleByReturnToken');
   }
 
   /**
@@ -600,10 +661,18 @@ export class TransactionService {
    */
   private async processPaymentInitiation(transaction: ITransaction, plan: any): Promise<Result<ITransaction>> {
     try {
+      // Orange Money ne renvoie aucun identifiant sur `return_url` : c'est à nous de le
+      // transporter dans l'URL. On y met un jeton aléatoire plutôt que l'`_id` de la
+      // transaction, qui est partiellement devinable (horodatage + compteur d'ObjectId).
+      const returnToken = crypto.randomBytes(16).toString('hex');
+      transaction.returnToken = returnToken;
+
       const paymentDetails: any = await this.initiatePayment({
         orderId: transaction._id!.toString(),
         amount: plan.price,
         reference: transaction._id!.toString(),
+        returnUrl: this.buildReturnUrl(returnToken, false),
+        cancelUrl: this.buildReturnUrl(returnToken, true),
       });
 
       if (!paymentDetails || !paymentDetails.payment_url) {

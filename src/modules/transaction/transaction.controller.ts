@@ -4,8 +4,14 @@ import { TransactionService } from './transaction.service';
 import { ITransaction } from './transaction.interface';
 import { NotificationHelper } from '../../helpers/notification.helper';
 import { NotificationCategory } from '../../services/notification';
+import { PaymentReturnState } from './payment-return.view';
 
 const controllerLabel: string = 'TransactionController';
+
+// Nombre de rechargements automatiques de la page de retour avant d'inviter le client à
+// rouvrir l'application. 12 tentatives à 5 s couvrent la minute que met Orange Money à
+// trancher dans la quasi-totalité des cas.
+const MAX_RETURN_REFRESH: number = 12;
 
 export class TransactionController {
   private readonly service: TransactionService;
@@ -424,6 +430,73 @@ export class TransactionController {
       console.error(e);
       return coddyger.catchReturn(e, controllerLabel, 'paymentNotify');
     });
+  }
+
+  /**
+   * Résout l'état à afficher sur la page de retour navigateur.
+   *
+   * Contrairement aux autres méthodes du contrôleur, celle-ci ne suit pas le contrat
+   * `{ status, message, data }` : elle alimente un gabarit HTML et ne doit jamais échouer,
+   * sous peine d'afficher une erreur brute à un client qui vient peut-être de payer.
+   *
+   * @param token Jeton porté par `return_url` / `cancel_url`
+   * @param cancelled Vrai si le prestataire a redirigé vers `cancel_url`
+   * @param retry Numéro de la tentative de rafraîchissement automatique
+   * @returns L'état à rendre
+   */
+  async paymentReturn(token: string, cancelled: boolean, retry: number): Promise<PaymentReturnState> {
+    if (!token) {
+      return { outcome: 'invalid' };
+    }
+
+    try {
+      // Le statut est établi auprès d'Orange Money, jamais déduit de l'URL : un client peut
+      // fabriquer `cancel=1`, et Orange redirige parfois sur `cancel_url` un paiement abouti.
+      const result: any = await this.service.settleByReturnToken(token);
+
+      if (!result.found) {
+        return { outcome: 'invalid' };
+      }
+
+      const transaction: any = result.transaction ?? {};
+      const details = {
+        amount: transaction.amount,
+        currency: transaction.currency,
+        reference: transaction._id ? String(transaction._id) : undefined
+      };
+
+      if (result.alreadySettled || transaction.paymentStatus === 'success') {
+        return { outcome: 'success', ...details };
+      }
+
+      if (transaction.paymentStatus === 'failed' || transaction.paymentStatus === 'expired') {
+        return { outcome: cancelled ? 'cancelled' : 'failed', ...details };
+      }
+
+      if (cancelled) {
+        return { outcome: 'cancelled', ...details };
+      }
+
+      // Montant divergent ou statut illisible : on n'annonce surtout pas un échec au client,
+      // le débit a pu aboutir. L'incident est déjà journalisé côté service.
+      return {
+        outcome: 'pending',
+        ...details,
+        refreshUrl: retry < MAX_RETURN_REFRESH
+          ? `payment-return?t=${encodeURIComponent(token)}&r=${retry + 1}`
+          : undefined
+      };
+    } catch (error) {
+      console.error(error);
+
+      // Orange Money injoignable : même raisonnement, on laisse la page se rafraîchir.
+      return {
+        outcome: 'pending',
+        refreshUrl: retry < MAX_RETURN_REFRESH
+          ? `payment-return?t=${encodeURIComponent(token)}&r=${retry + 1}`
+          : undefined
+      };
+    }
   }
 
   /**

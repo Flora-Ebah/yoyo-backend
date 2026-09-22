@@ -1,6 +1,7 @@
 import coddyger from 'coddyger';
 import { TransactionController } from '../../modules/transaction/transaction.controller';
 import { TokenMiddleware, PaymentNotifyMiddleware } from '../middleware';
+import { renderPaymentReturnPage } from '../../modules/transaction/payment-return.view';
 
 const routePath = '/transactions';
 const Controller: TransactionController = new TransactionController();
@@ -360,6 +361,58 @@ const defaultRoute: any = (fastify: any, options, done) => {
 
       let Q = Controller.paymentNotify(body);
       return coddyger.api(reply, Q);
+    }
+  });
+
+  // Page de retour navigateur après un paiement Orange Money (`return_url` / `cancel_url`).
+  //
+  // [SÉCURITÉ F-01] Cette route est publique par nature : c'est le navigateur du client qui y
+  // arrive, sans jeton d'authentification. Elle n'accorde donc aucun droit et n'affiche rien
+  // de nominatif — seulement le statut, le montant et la référence de la transaction désignée
+  // par un jeton aléatoire. Comme `payment-notify`, elle ne croit pas ce qu'on lui envoie :
+  // le statut est revérifié auprès d'Orange Money par le service.
+  fastify.route({
+    schema: {
+      tags,
+      summary: 'Page de confirmation de paiement',
+      description: "Page HTML affichée au client après sa saisie sur Orange Money. " +
+        "Le statut affiché est revalidé auprès du prestataire à chaque affichage.",
+      query: {
+        type: 'object',
+        properties: {
+          t: { type: 'string' },
+          cancel: { type: 'string' },
+          r: { type: 'string' }
+        },
+        required: [],
+        // Orange Money peut ajouter ses propres paramètres à la redirection : les rejeter
+        // renverrait une erreur de validation au client au lieu de sa page de confirmation.
+        additionalProperties: true
+      }
+    },
+    method: 'GET',
+    url: `${routePath}/payment-return`,
+    config: {
+      rateLimit: {
+        max: 60,
+        timeWindow: '1 minute'
+      }
+    },
+    handler: async (request, reply) => {
+      const query: any = request.query ?? {};
+      const token: string = (query.t ?? '').toString();
+      const cancelled: boolean = ['1', 'true', 'yes'].includes((query.cancel ?? '').toString().toLowerCase());
+      const retry: number = Number.parseInt((query.r ?? '0').toString(), 10) || 0;
+
+      const state = await Controller.paymentReturn(token, cancelled, retry);
+
+      // `no-store` : le statut évolue entre deux affichages, une page en cache afficherait
+      // indéfiniment « en cours de confirmation ».
+      return reply
+        .code(200)
+        .type('text/html; charset=utf-8')
+        .header('Cache-Control', 'no-store')
+        .send(renderPaymentReturnPage(state));
     }
   });
 
