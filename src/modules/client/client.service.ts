@@ -56,7 +56,12 @@ export class ClientService {
 			let status: any = payloads.status ?? '';
 
 			// Filtre Type (boutiques vs utilisateurs de l'app), injecté dans tous les cas de requête.
-			const typeFilter: any = typeof payloads.isPartner === 'boolean' ? { isPartner: payloads.isPartner } : {};
+			// On EXCLUT toujours les comptes GÉRANT (isManager) : ce ne sont ni des clients de l'app
+			// ni des partenaires — ils appartiennent à une boutique et ne doivent pas polluer la liste.
+			const typeFilter: any = {
+				isManager: { $ne: true },
+				...(typeof payloads.isPartner === 'boolean' ? { isPartner: payloads.isPartner } : {})
+			};
 
 			let data: any | IErrorObject = {};
 
@@ -247,7 +252,8 @@ export class ClientService {
 	async getStats(): Promise<any> {
 		try {
 			const model: any = (this.dao as any).defaultModel;
-			const base: any = { status: { $nin: ['removed', 'archived', 'anonymized'] } };
+			// Exclut aussi les comptes GÉRANT des statistiques (ce ne sont pas des utilisateurs de l'app).
+			const base: any = { status: { $nin: ['removed', 'archived', 'anonymized'] }, isManager: { $ne: true } };
 
 			const [total, active, inactive, suspended, pending, kycVerified, partners] = await Promise.all([
 				model.countDocuments(base),

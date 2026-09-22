@@ -82,6 +82,7 @@ export class BoutiqueManagerService {
       password: await coddyger.string.encryptPassword(accessCode),
       slug: coddyger.buildSlug('CLT', last ? last.slug : null),
       isPartner: false,
+      isManager: true,
       status: 'active'
     };
 

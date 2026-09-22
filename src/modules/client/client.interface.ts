@@ -25,6 +25,7 @@ export interface IClient {
   notificationPreferences?: INotificationPreferences;
   status?: string;
   isPartner?: boolean;
+  isManager?: boolean;
   /** Le marchand n'a pas encore défini son mot de passe (compte créé par un commercial). */
   mustChangePassword?: boolean;
   /** Admin (commercial) auteur de la création à distance. Posé depuis le jeton, jamais du corps. */

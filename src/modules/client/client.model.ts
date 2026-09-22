@@ -55,6 +55,9 @@ const schema = new mongoose.Schema<IClient>({
     default: 'pending'
   },
   isPartner: { type: Boolean, default: false },
+  // Compte GÉRANT (créé par un partenaire pour gérer une boutique) : ce n'est ni un client de
+  // l'app ni un partenaire — il ne doit pas apparaître dans la liste « Utilisateurs » du CMS.
+  isManager: { type: Boolean, default: false },
   // Onboarding à distance : le compte est créé par un commercial avec un mot de passe aléatoire
   // jamais communiqué. Le marchand définit le sien via le lien d'activation.
   mustChangePassword: { type: Boolean, default: false },
