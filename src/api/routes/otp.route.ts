@@ -234,7 +234,7 @@ const defaultRoute: any = (fastify: any, options, done) => {
 	});
 
 	// Envoi de l'OTP d'activation marchand (parcours « je définis mon code depuis l'app, sans le
-	// lien e-mail »). OTP valable 5 min. Atteignable sans compte connecté (attesté App Check).
+	// lien e-mail »). OTP valable 10 min. Atteignable sans compte connecté (attesté App Check).
 	fastify.route({
 		schema: {
 			tags,

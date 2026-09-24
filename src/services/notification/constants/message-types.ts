@@ -17,7 +17,7 @@ export class MessageTypes {
     ACCOUNT_VERIFICATION: 'account_verification',
     PASSWORD_RESET: 'password_reset',
     // OTP d'activation marchand : permet de définir son code depuis n'importe quel appareil,
-    // sans le lien e-mail (le compte est en attente d'activation). Validité courte (5 min).
+    // sans le lien e-mail (le compte est en attente d'activation). Validité courte (10 min).
     MERCHANT_ACTIVATION_OTP: 'merchant_activation_otp',
     LOGIN_VERIFICATION: 'login_verification',
     TWO_FACTOR_AUTH: 'two_factor_auth',
@@ -93,7 +93,7 @@ export class MessageTypes {
         <p>Bonjour <strong>${name || 'cher partenaire'}</strong></p>
         <p>Pour activer votre compte marchand et définir votre code de sécurité, saisissez ce code dans l'application :</p>
         ${codeBox(code)}
-        ${infoBox([{ label: 'Validité du code', value: '5 minutes · usage unique' }])}
+        ${infoBox([{ label: 'Validité du code', value: '10 minutes · usage unique' }])}
         ${securityNote("Vous n'êtes pas à l'origine de cette demande ? Ignorez cet e-mail, aucune action ne sera engagée.")}
         <p>À très vite,<br>L'équipe YoYo</p>
       `
@@ -117,7 +117,7 @@ export class MessageTypes {
         <p>Bonjour <strong>${name || 'cher utilisateur'}</strong></p>
         <p>Une connexion à votre compte a été demandée. Saisissez ce code pour confirmer que c'est bien vous :</p>
         ${codeBox(code)}
-        ${infoBox([{ label: 'Validité du code', value: '10 minutes · usage unique' }])}
+        ${infoBox([{ label: 'Validité du code', value: '5 minutes · usage unique' }])}
         ${securityNote("Vous n'êtes pas à l'origine de cette connexion ? Sécurisez votre compte en changeant votre mot de passe.")}
         <p>À très vite,<br>L'équipe YoYo</p>
       `
@@ -143,7 +143,7 @@ export class MessageTypes {
         ${codeBox(code)}
         ${infoBox([
           { label: 'Montant', value: details?.amount ? details.amount + ' ' + (details.currency || '') : undefined },
-          { label: 'Validité du code', value: '10 minutes · usage unique' }
+          { label: 'Validité du code', value: '3 minutes · usage unique' }
         ])}
         ${securityNote("Vous n'avez pas initié cette transaction ? Contactez notre service client immédiatement.")}
         <p>À très vite,<br>L'équipe YoYo</p>
@@ -541,7 +541,7 @@ export class MessageTypes {
       `[YoYo] Votre code de réinitialisation de mot de passe est: ${code}. Ne le partagez avec personne.`,
 
     [MessageTypes.TYPES.MERCHANT_ACTIVATION_OTP]: (code: string) =>
-      `[YoYo] Votre code d'activation est: ${code} (valable 5 min). Ne le partagez avec personne.`,
+      `[YoYo] Votre code d'activation est: ${code} (valable 10 min). Ne le partagez avec personne.`,
     
     [MessageTypes.TYPES.LOGIN_VERIFICATION]: (code: string) => 
       `[YoYo] Votre code de connexion est: ${code}. Ne le partagez avec personne.`,
@@ -658,7 +658,9 @@ export class MessageTypes {
       cooldownMinutes: 2
     },
     [MessageTypes.TYPES.MERCHANT_ACTIVATION_OTP]: {
-      expiryMinutes: 5,
+      // 10 min, aligné sur le compte à rebours de l'écran `verify-otp` de yoyo-pro (600 s) : à 5 min,
+      // l'app affichait encore le code comme valide alors que le serveur le refusait déjà.
+      expiryMinutes: 10,
       maxAttempts: 3,
       cooldownMinutes: 1
     },
