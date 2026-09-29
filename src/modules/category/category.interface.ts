@@ -9,6 +9,8 @@ export interface ICategory {
   parent?: any;
   icon?: string;
   color?: string;
+  /** Image « héro » de la catégorie (#9) : bannière cliquable côté client → marchands de la catégorie. */
+  heroImage?: string;
   /**
    * Rang d'affichage dans les listes de choix (app Client, app Partenaire).
    * L'ordre des catégories est éditorial : sans ce champ, le tri par défaut du DAO
