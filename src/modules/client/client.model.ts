@@ -76,6 +76,9 @@ const schema = new mongoose.Schema<IClient>({
 	freeMonthsGranted: { type: Number, default: 0 },
 	referralCredited: { type: Boolean, default: false },
 	influencerCode: { type: String },
+	// Push proximité (#1).
+	lastLocation: { lat: { type: Number }, lng: { type: Number }, at: { type: Date } },
+	lastProximityPushAt: { type: Date },
 },
 { timestamps: true });
 

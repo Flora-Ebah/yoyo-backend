@@ -50,6 +50,10 @@ export interface IClient {
   referralCredited?: boolean;
   /** Parrainage — code influenceur (#17) saisi à l'inscription (distinct du parrainage utilisateur). */
   influencerCode?: string;
+  /** Push proximité (#1) — dernière position connue remontée par l'app (background). */
+  lastLocation?: { lat: number; lng: number; at?: Date };
+  /** Push proximité (#1) — dernier envoi de notif de proximité (anti-spam). */
+  lastProximityPushAt?: Date;
 }
 
 export interface IRegister {
