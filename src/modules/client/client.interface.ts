@@ -38,6 +38,18 @@ export interface IClient {
   anonymizedAt?: Date;
   /** Réactivation d'un compte supprimé avant la fin du délai de grâce (relance le délai). */
   reactivatedAt?: Date;
+  /** Parrainage (#6/#7) — code de parrainage propre à l'utilisateur (unique). */
+  referralCode?: string;
+  /** Parrainage — client qui a parrainé celui-ci (résolu depuis le code saisi à l'inscription). */
+  referredBy?: any;
+  /** Parrainage — nombre de filleuls VALIDÉS (inscrits ET abonnés payants). */
+  referredCount?: number;
+  /** Parrainage — nombre de mois gratuits déjà crédités au parrain. */
+  freeMonthsGranted?: number;
+  /** Parrainage — vrai une fois que ce filleul a été comptabilisé chez son parrain (idempotence). */
+  referralCredited?: boolean;
+  /** Parrainage — code influenceur (#17) saisi à l'inscription (distinct du parrainage utilisateur). */
+  influencerCode?: string;
 }
 
 export interface IRegister {

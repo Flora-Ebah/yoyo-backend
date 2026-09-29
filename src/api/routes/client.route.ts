@@ -28,7 +28,11 @@ const defaultRoute: any = (fastify: any, options, done) => {
           isPartner: { type: 'boolean', default: false },
           // Matricule de l'agent (interne) rattaché à l'inscription, saisi depuis yoyo-pro.
           // Facultatif : s'il est fourni, il doit correspondre à un agent existant (sinon erreur).
-          agentMatricule: { type: 'string' }
+          agentMatricule: { type: 'string' },
+          // Parrainage (#6/#7) : code du parrain (facultatif).
+          referralCode: { type: 'string' },
+          // Attribution influenceur (#17) : code influenceur (facultatif).
+          influencerCode: { type: 'string' }
         },
         required: ['email', 'password', 'contact', 'country'],
         additionalProperties: false
@@ -46,6 +50,22 @@ const defaultRoute: any = (fastify: any, options, done) => {
       // [C-01] `body.user` valait `request.user._id`, lu sur le jeton public — dont la charge utile
       // n'a jamais porté de `_id`. Le champ arrivait donc toujours à `undefined` : on le retire.
       let Q = Controller.register(body);
+      return coddyger.api(reply, Q);
+    }
+  });
+
+  // Parrainage (#6/#7) : infos du client connecté (code, nb de filleuls validés, mois offerts).
+  fastify.route({
+    schema: {
+      tags,
+      summary: 'Infos de parrainage du client connecté'
+    },
+    method: 'GET',
+    url: `${routePath}/me/referral`,
+    preHandler: TokenMiddleware.verify,
+    handler: (request, reply) => {
+      const user: any = request.user;
+      let Q = Controller.getReferral(user._id);
       return coddyger.api(reply, Q);
     }
   });

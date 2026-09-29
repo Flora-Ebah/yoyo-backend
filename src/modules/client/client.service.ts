@@ -159,6 +159,13 @@ export class ClientService {
 			// Ajout du statut par défaut si non fourni
 			item.status ??= 'active';
 
+			// Parrainage (#6/#7) : chaque client reçoit un code de parrainage unique à la création.
+			if (!item.referralCode) {
+				item.referralCode = await this.generateUniqueReferralCode();
+			}
+			item.referredCount ??= 0;
+			item.freeMonthsGranted ??= 0;
+
 			return await this.dao.save(item);
 		} catch (error) {
 			LoggerService.log({
@@ -168,6 +175,75 @@ export class ClientService {
 				method: 'create'
 			});
 			throw error;
+		}
+	}
+
+	// ===================== Parrainage (#6/#7) =====================
+
+	/** Génère un code de parrainage unique (6 caractères alphanumériques majuscules). */
+	async generateUniqueReferralCode(): Promise<string> {
+		const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // sans I,O,0,1 (lisibilité)
+		for (let attempt = 0; attempt < 10; attempt++) {
+			let code = '';
+			for (let i = 0; i < 6; i++) code += alphabet[Math.floor(Math.random() * alphabet.length)];
+			const existing: any = await this.dao.selectOne({ referralCode: code });
+			if (!existing) return code;
+		}
+		// Repli extrêmement improbable : suffixe temporel pour garantir l'unicité.
+		return 'R' + Date.now().toString(36).toUpperCase().slice(-6);
+	}
+
+	/** Résout un code de parrainage en client parrain (ou null). Ignore un code vide/inconnu. */
+	async resolveReferrer(code?: string): Promise<any | null> {
+		if (!code || !code.trim()) return null;
+		const referrer: any = await this.dao.selectOne({
+			referralCode: code.trim().toUpperCase(),
+			status: { $nin: ['removed', 'archived', 'anonymized'] }
+		});
+		return referrer && !referrer.error ? referrer : null;
+	}
+
+	/** Infos de parrainage d'un client (pour l'écran « Parrainage »). */
+	async getReferralInfo(clientId: string): Promise<any> {
+		const client: any = await this.dao.selectOne({ _id: clientId });
+		if (!client || client.error) return { error: true };
+		return {
+			referralCode: client.referralCode ?? null,
+			referredCount: client.referredCount ?? 0,
+			freeMonthsGranted: client.freeMonthsGranted ?? 0
+		};
+	}
+
+	/**
+	 * Crédite le parrain quand un filleul devient abonné PAYANT (#7).
+	 * À APPELER depuis le flux d'activation d'abonnement payant (voir subscription/transaction).
+	 * Règle : chaque filleul validé incrémente `referredCount` du parrain ; l'offre « 3000 premiers »
+	 * accorde 1 mois offert tous les 3 filleuls validés (plafonnée côté logique métier).
+	 * ⚠️ À TESTER contre la base avant mise en prod (crédit non exécuté ici, méthode utilitaire).
+	 */
+	async creditReferrerForPaidReferral(referredClientId: string): Promise<void> {
+		try {
+			const referred: any = await this.dao.selectOne({ _id: referredClientId });
+			// Garde-fou d'IDEMPOTENCE : pas de parrain, ou filleul déjà comptabilisé → on ne fait rien.
+			// Indispensable car ce point peut être atteint à chaque abonnement (y compris renouvellements).
+			if (!referred || referred.error || !referred.referredBy || referred.referralCredited) return;
+
+			const referrer: any = await this.dao.selectOne({ _id: referred.referredBy });
+			if (!referrer || referrer.error) return;
+
+			const newCount = (referrer.referredCount ?? 0) + 1;
+			const update: any = { referredCount: newCount };
+
+			// 1 mois offert tous les 3 filleuls validés.
+			if (newCount % 3 === 0) {
+				update.freeMonthsGranted = (referrer.freeMonthsGranted ?? 0) + 1;
+			}
+
+			await this.dao.update({ _id: referrer._id }, update);
+			// On marque le filleul comme comptabilisé pour ne jamais le recompter (renouvellements).
+			await this.dao.update({ _id: referred._id }, { referralCredited: true });
+		} catch (error) {
+			LoggerService.log({ type: LogLevel.Error, content: error, location: this.serviceLabel, method: 'creditReferrerForPaidReferral' });
 		}
 	}
 

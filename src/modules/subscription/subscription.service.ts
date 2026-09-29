@@ -280,6 +280,16 @@ export class SubscriptionService {
           };
         }
         
+        // Parrainage (#6/#7) : si cet abonné a été parrainé, on comptabilise le filleul chez son
+        // parrain (crédit d'1 mois tous les 3 filleuls). Idempotent (une seule fois par filleul,
+        // renouvellements ignorés) et best-effort : un échec n'empêche jamais la création de l'abo.
+        try {
+          const { ClientService } = require('../client/client.service');
+          await new ClientService().creditReferrerForPaidReferral(userId);
+        } catch (referralError) {
+          LoggerService.log({ type: LogLevel.Error, content: referralError, location: this.serviceLabel, method: 'createSubscription:referral' });
+        }
+
         // Journaliser la création
         LoggerService.log({
           type: LogLevel.Info,

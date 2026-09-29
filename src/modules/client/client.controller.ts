@@ -78,6 +78,18 @@ export class ClientController {
    * @param item Données de l'élément à créer
    * @returns Élément créé
    */
+  // Parrainage (#6/#7) : infos du client connecté (code, nb de filleuls validés, mois offerts).
+  getReferral(userId: string) {
+    return new Promise(async (resolve, reject) => {
+      try {
+        const data = await this.service.getReferralInfo(userId);
+        resolve({ status: defines.status.requestOK, message: 'OK', data });
+      } catch (error) {
+        reject(error);
+      }
+    }).catch((e: IErrorObject) => coddyger.catchReturn(e, controllerLabel, 'getReferral'));
+  }
+
   register(item: IRegister) {
     return new Promise(async (resolve, reject) => {
       try {
@@ -130,6 +142,24 @@ export class ClientController {
             });
           }
           formattedItem.createdBy = agent._id;
+        }
+
+        // Parrainage (#6/#7) : code du parrain saisi à l'inscription (facultatif). On résout le
+        // parrain et on mémorise le lien (`referredBy`) ; le crédit (mois offert) intervient
+        // plus tard, quand le filleul devient abonné payant.
+        const sponsorCode = (item as any).referralCode;
+        if (sponsorCode && String(sponsorCode).trim()) {
+          const referrer: any = await this.service.resolveReferrer(String(sponsorCode));
+          if (referrer) formattedItem.referredBy = referrer._id;
+        }
+        // Le code saisi (celui du parrain) ne doit jamais devenir le code propre du nouveau
+        // client : on le retire pour que `create()` en génère un neuf et unique.
+        delete formattedItem.referralCode;
+
+        // Attribution influenceur (#17) : code saisi à l'inscription (facultatif), mémorisé tel quel.
+        const infCode = (item as any).influencerCode;
+        if (infCode && String(infCode).trim()) {
+          formattedItem.influencerCode = String(infCode).trim().toUpperCase();
         }
 
         // Détails du dernier compte enregistré pour le slug

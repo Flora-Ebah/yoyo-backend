@@ -69,6 +69,13 @@ const schema = new mongoose.Schema<IClient>({
 	// Anonymisation DCP/RGPD (cf. IClient).
 	anonymizedAt: { type: Date },
 	reactivatedAt: { type: Date },
+	// Parrainage (#6/#7) + attribution influenceur (#17).
+	referralCode: { type: String, index: true },
+	referredBy: { type: mongoose.Schema.Types.ObjectId, ref: 'Client' },
+	referredCount: { type: Number, default: 0 },
+	freeMonthsGranted: { type: Number, default: 0 },
+	referralCredited: { type: Boolean, default: false },
+	influencerCode: { type: String },
 },
 { timestamps: true });
 
