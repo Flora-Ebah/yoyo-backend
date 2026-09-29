@@ -36,5 +36,15 @@ export interface ISettings {
    * L'app applique la couleur du plus grand `threshold` ≤ `maxDiscount` du marchand.
    */
   discountColors?: { threshold: number; color: string }[];
+  /**
+   * Abo « mise en avant » (#2) : prix et durée de la sponsorisation d'une boutique, configurables
+   * au BO. Le marchand souscrit depuis l'app Pro ; l'admin peut aussi activer `partner.isSponsored`.
+   */
+  sponsorPlan?: { price: number; durationDays: number };
+  /**
+   * Push par proximité (#1) : rayon de déclenchement (m), intervalle anti-spam (h) et cible.
+   * `target` : 'all' = tous les partenaires, 'sponsored' = uniquement les sponsorisés.
+   */
+  proximityPush?: { radiusMeters: number; minIntervalHours: number; target: 'all' | 'sponsored' };
   status?: string;
 }

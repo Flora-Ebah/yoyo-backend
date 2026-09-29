@@ -57,6 +57,23 @@ const defaultRoute: any = (fastify: any, options, done) => {
               required: ['threshold', 'color'],
               additionalProperties: false
             }
+          },
+          sponsorPlan: {
+            type: 'object',
+            properties: {
+              price: { type: 'number', minimum: 0 },
+              durationDays: { type: 'number', minimum: 0 }
+            },
+            additionalProperties: false
+          },
+          proximityPush: {
+            type: 'object',
+            properties: {
+              radiusMeters: { type: 'number', minimum: 0 },
+              minIntervalHours: { type: 'number', minimum: 0 },
+              target: { type: 'string', enum: ['all', 'sponsored'] }
+            },
+            additionalProperties: false
           }
         },
         additionalProperties: false

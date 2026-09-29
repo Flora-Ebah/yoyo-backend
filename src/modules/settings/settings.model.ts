@@ -14,6 +14,9 @@ const schema = new mongoose.Schema<ISettings>(
     maxBoutiquesPerMerchant: { type: Number, default: 0 },
     // Mapping pourcentage → couleur (cf. ISettings, #3), éditable par l'admin.
     discountColors: [{ threshold: { type: Number }, color: { type: String }, _id: false }],
+    // Abo « mise en avant » (#2) et push proximité (#1), configurables au BO.
+    sponsorPlan: { price: { type: Number }, durationDays: { type: Number } },
+    proximityPush: { radiusMeters: { type: Number }, minIntervalHours: { type: Number }, target: { type: String, enum: ['all', 'sponsored'] } },
     status: { type: String, enum: ['active', 'inactive', 'removed'], default: 'active' }
   },
   { timestamps: true }

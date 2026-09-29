@@ -119,6 +119,20 @@ export class SettingsService {
           .filter((c: any) => c && typeof c.threshold === 'number' && typeof c.color === 'string')
           .map((c: any) => ({ threshold: Number(c.threshold), color: String(c.color) }));
       }
+      if (typeof data.sponsorPlan !== 'undefined' && data.sponsorPlan) {
+        next.sponsorPlan = {
+          price: Number((data.sponsorPlan as any).price) || 0,
+          durationDays: Number((data.sponsorPlan as any).durationDays) || 0
+        };
+      }
+      if (typeof data.proximityPush !== 'undefined' && data.proximityPush) {
+        const p: any = data.proximityPush;
+        next.proximityPush = {
+          radiusMeters: Number(p.radiusMeters) || 0,
+          minIntervalHours: Number(p.minIntervalHours) || 0,
+          target: p.target === 'sponsored' ? 'sponsored' : 'all'
+        };
+      }
 
       const result: any = await this.dao.update({ _id: current._id }, next);
       if (result && result.error) {
