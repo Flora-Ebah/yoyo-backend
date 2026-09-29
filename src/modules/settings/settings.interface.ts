@@ -29,5 +29,12 @@ export interface ISettings {
    * l'administrateur pour ajuster la politique sans redéploiement.
    */
   maxBoutiquesPerMerchant: number;
+  /**
+   * Correspondance pourcentage de réduction → couleur d'affichage (#3). Éditable par l'admin,
+   * lue par l'app client pour colorer les remises. Aucune couleur codée en dur côté app :
+   * ex. [{ threshold: 10, color: '#4CAF50' }, { threshold: 15, color: '#FF9800' }, { threshold: 20, color: '#F44336' }].
+   * L'app applique la couleur du plus grand `threshold` ≤ `maxDiscount` du marchand.
+   */
+  discountColors?: { threshold: number; color: string }[];
   status?: string;
 }

@@ -3,11 +3,18 @@ import { ISettings } from './settings.interface';
 import { SettingsSet } from './settings.model';
 
 // Valeurs par défaut si aucun document de configuration n'existe encore en base.
-const DEFAULTS: Pick<ISettings, 'discountMin' | 'discountMax' | 'accountDeletionGraceDays' | 'maxBoutiquesPerMerchant'> = {
+const DEFAULTS: Pick<ISettings, 'discountMin' | 'discountMax' | 'accountDeletionGraceDays' | 'maxBoutiquesPerMerchant' | 'discountColors'> = {
   discountMin: 10,
   discountMax: 50,
   accountDeletionGraceDays: 30,
-  maxBoutiquesPerMerchant: 0
+  maxBoutiquesPerMerchant: 0,
+  // Valeur par défaut modifiable par l'admin (#3). Le client applique la couleur du plus grand
+  // seuil ≤ maxDiscount du marchand.
+  discountColors: [
+    { threshold: 10, color: '#2E7D32' },
+    { threshold: 15, color: '#EF6C00' },
+    { threshold: 20, color: '#C62828' }
+  ]
 };
 
 export class SettingsService {
@@ -46,6 +53,7 @@ export class SettingsService {
           discountMax: DEFAULTS.discountMax,
           accountDeletionGraceDays: DEFAULTS.accountDeletionGraceDays,
           maxBoutiquesPerMerchant: DEFAULTS.maxBoutiquesPerMerchant,
+          discountColors: DEFAULTS.discountColors,
           status: 'active'
         };
         const result: any = await this.dao.save(created);
@@ -106,6 +114,11 @@ export class SettingsService {
       if (typeof data.discountMax !== 'undefined') next.discountMax = Number(data.discountMax);
       if (typeof data.accountDeletionGraceDays !== 'undefined') next.accountDeletionGraceDays = Number(data.accountDeletionGraceDays);
       if (typeof data.maxBoutiquesPerMerchant !== 'undefined') next.maxBoutiquesPerMerchant = Number(data.maxBoutiquesPerMerchant);
+      if (typeof data.discountColors !== 'undefined' && Array.isArray(data.discountColors)) {
+        next.discountColors = data.discountColors
+          .filter((c: any) => c && typeof c.threshold === 'number' && typeof c.color === 'string')
+          .map((c: any) => ({ threshold: Number(c.threshold), color: String(c.color) }));
+      }
 
       const result: any = await this.dao.update({ _id: current._id }, next);
       if (result && result.error) {

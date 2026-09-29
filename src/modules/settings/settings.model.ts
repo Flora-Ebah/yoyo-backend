@@ -12,6 +12,8 @@ const schema = new mongoose.Schema<ISettings>(
     accountDeletionGraceDays: { type: Number, default: 30 },
     // Nombre maximum de boutiques par marchand (cf. ISettings). 0 = illimité. Défaut : 0.
     maxBoutiquesPerMerchant: { type: Number, default: 0 },
+    // Mapping pourcentage → couleur (cf. ISettings, #3), éditable par l'admin.
+    discountColors: [{ threshold: { type: Number }, color: { type: String }, _id: false }],
     status: { type: String, enum: ['active', 'inactive', 'removed'], default: 'active' }
   },
   { timestamps: true }
