@@ -130,7 +130,7 @@ export class PartnerService {
    * Récupère tous les éléments
    * @returns Liste des éléments
    */
-  async getAll(payloads: { page?: number; pageSize?: number; query?: string; status?: string; category?: string; createdBy?: string }): Promise<any> {
+  async getAll(payloads: { page?: number; pageSize?: number; query?: string; status?: string; category?: string; createdBy?: string; sort?: string }): Promise<any> {
     try {
       let page: number = payloads.page ?? 1;
 			let pageSize: number = payloads.pageSize ?? 10;
@@ -141,6 +141,13 @@ export class PartnerService {
 
       let data: any | IErrorObject = {};
 
+			// Tri optionnel du marketplace : `discount_desc` remonte les plus fortes réductions en tête
+			// (les boutiques qui offrent le plus gros pourcentage d'abord). Piloté par le paramètre de
+			// requête, pas figé — la valeur par défaut du DAO (createdAt) s'applique sinon.
+			const sortOpts: any = payloads.sort === 'discount_desc'
+				? { sort: 'maxDiscount', orderBy: 'desc' }
+				: {};
+
 			// Filtre d'attribution (vue commerciale) : il se cumule avec les critères ci-dessous
 			// plutôt que de constituer une branche de plus.
 			const base: any = {};
@@ -149,11 +156,11 @@ export class PartnerService {
 			}
 
       if (!coddyger.string.isEmpty(category) && coddyger.string.isValidObjectId(category)) {
-				data = await this.dao.select({ params: { ...base, categories:category }, page, pageSize });
+				data = await this.dao.select({ params: { ...base, categories:category }, page, pageSize, ...sortOpts });
 			} else if (coddyger.string.isEmpty(query) && coddyger.string.isEmpty(status)) {
-				data = await this.dao.select({ params: { ...base }, page, pageSize });
+				data = await this.dao.select({ params: { ...base }, page, pageSize, ...sortOpts });
 			} else if (!coddyger.string.isEmpty(status)) {
-				data = await this.dao.select({ params: { ...base, status }, page, pageSize });
+				data = await this.dao.select({ params: { ...base, status }, page, pageSize, ...sortOpts });
 			} else {
 				data = await this.dao.select({
 					params: {
@@ -169,7 +176,8 @@ export class PartnerService {
 						]
 					},
 					page,
-					pageSize
+					pageSize,
+					...sortOpts
 				});
 			}
 

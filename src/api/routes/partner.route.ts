@@ -275,6 +275,11 @@ const defaultRoute: any = (fastify: any, options, done) => {
           createdBy: {
             type: 'string',
             description: "Filtre d'attribution. `me` restreint aux boutiques enrôlées par l'appelant."
+          },
+          sort: {
+            type: 'string',
+            enum: ['discount_desc'],
+            description: "Tri du marketplace. `discount_desc` = plus fortes réductions d'abord."
           }
         },
         required: [],
@@ -291,6 +296,7 @@ const defaultRoute: any = (fastify: any, options, done) => {
       let query: any = request.query.q;
       let category: any = request.query.category;
       let createdBy: any = request.query.createdBy;
+      let sort: any = request.query.sort;
       const user: any = request.user;
 
       // `createdBy=me` est résolu ici, à partir du jeton : le client ne choisit pas l'identité
@@ -299,7 +305,7 @@ const defaultRoute: any = (fastify: any, options, done) => {
         createdBy = user?._id;
       }
 
-      let Q = Controller.getAll({ page, pageSize, status, query, category, createdBy });
+      let Q = Controller.getAll({ page, pageSize, status, query, category, createdBy, sort });
       return coddyger.api(reply, Q);
     }
   });
