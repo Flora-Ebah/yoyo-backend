@@ -26,6 +26,14 @@ export interface IPartner {
   longitude?: number;
   phone?: string;
   email?: string;
+  /** Réseaux sociaux du marchand (saisis côté Pro ou Admin, affichés côté client). */
+  socials?: {
+    facebook?: string;
+    instagram?: string;
+    tiktok?: string;
+    whatsapp?: string;
+    website?: string;
+  };
   categories?: any[];
   thumbnail?: string;
   photos?: string[];

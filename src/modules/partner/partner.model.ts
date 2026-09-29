@@ -32,6 +32,13 @@ const schema = new mongoose.Schema<IPartner>({
   longitude: { type: Number },
   phone: { type: String },
   email: { type: String },
+  socials: {
+    facebook: { type: String },
+    instagram: { type: String },
+    tiktok: { type: String },
+    whatsapp: { type: String },
+    website: { type: String }
+  },
   categories: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Category' }],
   thumbnail: { type: String },
   photos: [{ type: String }],
