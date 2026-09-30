@@ -37,6 +37,9 @@ export interface IPartner {
   categories?: any[];
   thumbnail?: string;
   photos?: string[];
+  /** Vidéo de présentation facultative (clé de stockage) et son image d'aperçu, extraite par le serveur. */
+  video?: string;
+  videoPoster?: string;
   maxDiscount?: number;
   minOrder?: number;
   isSponsored?: boolean;

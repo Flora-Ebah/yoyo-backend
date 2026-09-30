@@ -74,6 +74,15 @@ const defaultRoute: any = (fastify: any, options, done) => {
               target: { type: 'string', enum: ['all', 'sponsored'] }
             },
             additionalProperties: false
+          },
+          media: {
+            type: 'object',
+            properties: {
+              maxVideoSeconds: { type: 'number', minimum: 1, maximum: 600 },
+              // ≤ au plafond de réception de `POST /upload` (main.route.ts)
+              maxVideoSizeMb: { type: 'number', minimum: 1, maximum: 200 }
+            },
+            additionalProperties: false
           }
         },
         additionalProperties: false

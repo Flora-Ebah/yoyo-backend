@@ -1,16 +1,16 @@
 import coddyger from 'coddyger';
 import { MainController } from '../../modules/main';
-import { TokenMiddleware, uploadPath } from '../middleware';
+import { TokenMiddleware } from '../middleware';
 import { FileUpload } from '../../helpers';
-import path from 'path';
-import fs from 'fs';
+import { sendStoredFile } from '../../helpers/file-upload.helper';
 
 const Controller: MainController = new MainController();
 const tags: string[] = ['Gestion des connexions'];
 
 // Create a FileUpload instance with appropriate options
-const maxSizeTmp: any = process.env.ALLOWED_FILE_SIZE! ?? 5;
-const maxSize: number = Number(maxSizeTmp) * 1024 * 1024;
+// parseFloat tolère un commentaire en fin de ligne (`10 # Mo`) ; valeur absente ou invalide → 5 Mo.
+const maxSizeTmp: number = Number.parseFloat(process.env.ALLOWED_FILE_SIZE ?? '') || 5;
+const maxSize: number = maxSizeTmp * 1024 * 1024;
 const allowedExtensions: string[] = process.env.ALLOWED_FILE_TYPES
 	? process.env.ALLOWED_FILE_TYPES.split(',')
 	: [
@@ -20,16 +20,22 @@ const allowedExtensions: string[] = process.env.ALLOWED_FILE_TYPES
 	'.jpg',
 	'.jpeg',
 	'.png',
+	'.webp',
 	'.mp3',
 	'.mp4',
+	'.mov',
 	'.txt',
 	'.xls',
 	'.xlsx'
 ];
 
-// Create a FileUpload instance with appropriate options
+// Plafond technique de réception (multer). Les limites réelles sont appliquées après réception,
+// par type : `maxSize` pour les images et documents, `settings.media` (réglé au BO) pour les vidéos.
+// Il doit rester ≥ au maximum accepté par `PUT /settings` pour `media.maxVideoSizeMb`.
+const RECEIVE_CEILING_BYTES = 200 * 1024 * 1024;
+
 const fileUpload = new FileUpload({
-	maxSize,
+	maxSize: Math.max(maxSize, RECEIVE_CEILING_BYTES),
 	allowedExtensions
 });
 
@@ -110,7 +116,7 @@ Réponse :
 		handler: (request, reply) => {
 			const files = request.files;
 
-			let Q = Controller.upload(files);
+			let Q = Controller.upload(files, { maxImageBytes: maxSize });
 			return coddyger.api(reply, Q);
 		}
 	});
@@ -133,21 +139,7 @@ Réponse :
 		method: 'GET',
 		url: `/serve/:filename`,
 		preHandler: [TokenMiddleware.verify],
-		handler: async (request, reply) => {
-			const filename = request.params.filename;
-			const filePath = path.join(uploadPath, filename);
-
-			// Vérifier si le fichier existe
-			try {
-				await fs.promises.access(filePath);
-				return reply.sendFile(filename, uploadPath);
-			} catch (error) {
-				return reply.code(404).send({
-					message: 'Fichier introuvable',
-					data: null
-				});
-			}
-		}
+		handler: async (request, reply) => sendStoredFile(reply, request.params.filename)
 	});
 
 	// Envoyer un message via Socket.IO

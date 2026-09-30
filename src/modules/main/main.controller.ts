@@ -5,6 +5,9 @@ import { NotificationCategory, notificationManager, NotificationType } from '../
 import { MainService } from './main.service';
 import fs from 'fs/promises';
 import { ClientService } from '../client/client.service';
+import { SettingsService } from '../settings/settings.service';
+import { storage } from '../../services/storage/storage.service';
+import { DURATION_TOLERANCE_SECONDS, VideoError, extractPoster, probeVideo } from '../../helpers/video.helper';
 const controllerLabel: string = 'MainController';
 
 export class MainController {
@@ -57,8 +60,13 @@ export class MainController {
 		});
 	}
 
-	// Function to upload a file
-	upload(items: any[]) {
+	/**
+	 * Enregistre les fichiers reçus. Tous sont contrôlés AVANT le premier enregistrement : un refus
+	 * ne laisse ni temporaire ni objet orphelin dans le stockage.
+	 * Vidéos : poids et durée réelle (ffprobe) comparés aux limites réglées au BO, puis extraction
+	 * d'une image d'aperçu, renvoyée dans `poster`.
+	 */
+	upload(items: any[], options: { maxImageBytes: number }) {
 		return new Promise(async (resolve, reject) => {
 			if (!items || items.length === 0) {
 				resolve({
@@ -66,27 +74,62 @@ export class MainController {
 					message: locale.exist('Fichier requis'),
 					data: null
 				});
-			} else {
-				let files: Array<any> = [];
+				return;
+			}
 
-				console.log(items);
-				// Upload files
-				for (let file of items) {
-					if (!file) {
-						resolve({ status: defines.status.badRequest, message: locale.controller.uploadFailed, data: null });
-						return;
-					} else if (file.size > 500000000) {
-						resolve({ status: defines.status.badRequest, message: locale.controller.uploadTooLarge, data: null });
-						return;
+			// Un refus ou un échec en cours de route ne doit laisser aucun temporaire multer.
+			const discardAll = () => Promise.all(items.map((item) => FileUpload.discard(item)));
+			const refuse = async (message: string) => {
+				await discardAll();
+				resolve({ status: defines.status.badRequest, message, data: null });
+			};
+
+			try {
+				const limits = await new SettingsService().getMediaLimits();
+				const checked: Array<{ file: any; contentType: string; duration?: number }> = [];
+
+				for (const file of items) {
+					if (!file) return refuse(locale.controller.uploadFailed);
+
+					const contentType = FileUpload.contentTypeOf(file);
+					if (!FileUpload.isVideo(contentType)) {
+						if (file.size > options.maxImageBytes) return refuse(locale.controller.uploadTooLarge);
+						checked.push({ file, contentType });
+						continue;
 					}
 
-					const save: any = await FileUpload.save(file);
-					if (save.error) reject(save);
+					if (file.size > limits.maxVideoSizeMb * 1024 * 1024) {
+						return refuse(`Vidéo trop lourde (maximum ${limits.maxVideoSizeMb} Mo)`);
+					}
+					const { duration } = await probeVideo(file.path);
+					if (duration > limits.maxVideoSeconds + DURATION_TOLERANCE_SECONDS) {
+						return refuse(`Vidéo trop longue : ${Math.round(duration)} s (maximum ${limits.maxVideoSeconds} s)`);
+					}
+					checked.push({ file, contentType, duration });
+				}
+
+				const files: Array<any> = [];
+				for (const { file, contentType, duration } of checked) {
+					let poster: string | undefined;
+					if (duration !== undefined) {
+						const posterTemp = `${file.path}-poster.jpg`;
+						try {
+							await extractPoster(file.path, posterTemp, duration);
+							poster = `${file.filename}-poster.jpg`;
+							await storage.put(posterTemp, poster, 'image/jpeg');
+						} finally {
+							await fs.rm(posterTemp, { force: true });
+						}
+					}
+
+					const save: any = await FileUpload.save(file, contentType);
+					if (save.error) throw save;
 
 					files.push({
 						filename: save.filename,
 						originalname: file.originalname,
-						size: file.size
+						size: file.size,
+						...(duration !== undefined && { poster, duration: Math.round(duration * 10) / 10 })
 					});
 				}
 
@@ -95,6 +138,13 @@ export class MainController {
 					message: locale.controller.successSave,
 					data: files
 				});
+			} catch (error: any) {
+				await discardAll();
+				if (error instanceof VideoError) {
+					resolve({ status: defines.status.badRequest, message: error.message, data: null });
+				} else {
+					reject(error);
+				}
 			}
 		}).catch((e: IErrorObject) => {
 			return coddyger.catchReturn(e, controllerLabel, 'upload');

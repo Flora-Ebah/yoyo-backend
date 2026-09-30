@@ -10,6 +10,7 @@ import crypto from 'crypto';
 import coddyger, { defines, env } from 'coddyger';
 import { swaggerConfig, swaggerUiConfig, isSwaggerEnabled } from './config/swagger.config';
 import { FileUpload } from './api/middleware';
+import { sendStoredFile } from './helpers/file-upload.helper';
 import { getSocketIO } from './main';
 
 const packageJsonPath = path.join(__dirname, '.', '..', 'package.json');
@@ -94,11 +95,25 @@ export default class Router {
 	}
 
 	private routes(): void {
+		// `serve: false` : on garde seulement le décorateur `reply.sendFile` (utilisé par
+		// `sendStoredFile`) ; la route `/file/` est déclarée à la main pour pouvoir rediriger vers S3.
 		this.router.register(require('@fastify/static'), {
 			root: FileUpload.uploadPath,
-			prefix: prefix + '/file/'
-			// constraints: { host: 'example.com' } // optional: default {}
+			serve: false
 		});
+		// Fichiers publics (images, vidéos des boutiques…) : disque local s'il y est encore, sinon
+		// redirection vers une URL S3 signée. Les pièces KYC (`kyc/…`) n'y sont jamais accessibles.
+		// Limite relevée : une image n'envoie pas d'en-tête Authorization, donc le décompte se fait par
+		// IP — partagée par tout le Wi-Fi d'une boutique — et un écran Marketplace en charge une vingtaine.
+		// La signature d'URL est un calcul local, sans appel réseau : le coût par requête reste faible.
+		this.router.get(
+			`${prefix}/file/:filename`,
+			{ config: { rateLimit: { max: 600, timeWindow: '1 minute' } } },
+			async (request: FastifyRequest, reply: FastifyReply) => {
+				const { filename } = request.params as { filename: string };
+				return sendStoredFile(reply, filename);
+			}
+		);
 		// Assets publics des e-mails (logo, favicon…) : fichiers versionnés dans le dépôt
 		// (`src/public/mail-template/images/`), servis en lecture seule. C'est la cible de
 		// `MAIL_ASSETS_URL` (voir `email-theme.ts` → `logoSrc`), qui vaut donc `<host>${prefix}/assets`.

@@ -55,6 +55,8 @@ const defaultRoute: any = (fastify: any, options, done) => {
               type: 'string',
             }
           },
+          video: { type: 'string', maxLength: 255 },
+          videoPoster: { type: 'string', maxLength: 255 },
           maxDiscount: { type: 'number', minimum: 0, maximum: 100 },
           minOrder: { type: 'number', minimum: 0 },
           status: { 
@@ -155,6 +157,8 @@ const defaultRoute: any = (fastify: any, options, done) => {
               type: 'string',
             }
           },
+          video: { type: 'string', maxLength: 255 },
+          videoPoster: { type: 'string', maxLength: 255 },
           maxDiscount: { type: 'number', minimum: 0, maximum: 100 },
           minOrder: { type: 'number', minimum: 0 },
           status: { 
@@ -560,6 +564,9 @@ const defaultRoute: any = (fastify: any, options, done) => {
           email: { type: 'string', anyOf: [{ format: 'email' }, { maxLength: 0 }] },
           categories: { type: 'array', items: { type: 'string' } },
           thumbnail: { type: 'string' },
+          photos: { type: 'array', items: { type: 'string' } },
+          video: { type: 'string', maxLength: 255 },
+          videoPoster: { type: 'string', maxLength: 255 },
           maxDiscount: { type: 'number', minimum: 0, maximum: 100 },
           minOrder: { type: 'number', minimum: 0 }
         },

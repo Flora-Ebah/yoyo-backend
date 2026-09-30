@@ -42,6 +42,9 @@ const schema = new mongoose.Schema<IPartner>({
   categories: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Category' }],
   thumbnail: { type: String },
   photos: [{ type: String }],
+  // Vidéo de présentation facultative + image d'aperçu (voir POST /upload). Chaîne vide = retirée.
+  video: { type: String },
+  videoPoster: { type: String },
   maxDiscount: { type: Number },
   minOrder: { type: Number },
   isSponsored: { type: Boolean, default: false },

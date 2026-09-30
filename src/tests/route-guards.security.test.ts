@@ -8,6 +8,7 @@ import mainRoute from '../api/routes/main.route';
 import otpRoute from '../api/routes/otp.route';
 import paymentMethodRoute from '../api/routes/payment-method.route';
 import paymentRoute from '../api/routes/payment.route';
+import { verifyDocumentLink } from '../modules/certification/certification-files';
 import { PAYMENT_METHOD_SECRET_PROJECTION } from '../modules/payment-method/payment-method.model';
 import profileRoute from '../api/routes/profile.route';
 import transactionRoute from '../api/routes/transaction.route';
@@ -54,7 +55,8 @@ describe('[Sécurité] Gardes des routes', () => {
 			['GET', '/certification/details/:id'],
 			['DELETE', '/certification/remove/:id'],
 			['DELETE', '/certification/erase/:id'],
-			['PUT', '/certification/restore/:id']
+			['PUT', '/certification/restore/:id'],
+			['GET', '/certification/:id/files']
 		];
 
 		moderationRoutes.forEach(([method, url]) => {
@@ -80,6 +82,14 @@ describe('[Sécurité] Gardes des routes', () => {
 				expect(route, `route ${method} ${url} introuvable`).to.not.be.undefined;
 				expect(route!.preHandler).to.equal(TokenMiddleware.verify);
 			});
+		});
+
+		// Les pièces s'ouvrent dans un <img> ou un nouvel onglet, sans en-tête Authorization :
+		// l'autorisation est un jeton signé de 5 min, émis par la route admin ci-dessus.
+		it('GET /certification/kyc-file/:token exige un lien signé', () => {
+			const route = find(routes, 'GET', '/certification/kyc-file/:token');
+			expect(route, 'route kyc-file introuvable').to.not.be.undefined;
+			expect(route!.preHandler).to.equal(verifyDocumentLink);
 		});
 
 		it('aucune route de certification n\'est laissée sans garde', () => {

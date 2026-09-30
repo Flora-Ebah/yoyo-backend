@@ -15,6 +15,10 @@ RUN yarn build
 FROM ${NODE_IMAGE}
 WORKDIR /usr/src/app
 
+# ffmpeg (fournit aussi ffprobe) : mesure la durée réelle des vidéos envoyées et en extrait
+# l'image d'aperçu. Contrôle côté serveur : la limite ne dépend pas de la bonne foi de l'app.
+RUN apk add --no-cache ffmpeg
+
 # Create non-root user and set up directories
 RUN addgroup -S appgroup && \
     adduser -S appuser -G appgroup && \
@@ -35,7 +39,7 @@ RUN apk add --no-cache make gcc g++ python3 linux-headers musl-dev && \
 COPY --from=builder /usr/src/app/build ./build
 
 # Copy seeder scripts (plain JS, no build step needed)
-COPY seed.js load-env.js ./
+COPY seed.js load-env.js migrate-uploads-to-s3.js ./
 COPY seeders/ ./seeders/
 
 # Fichiers de données requis par les seeders (référentiel de catégories, etc.)

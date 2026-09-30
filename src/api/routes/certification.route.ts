@@ -1,6 +1,7 @@
 import coddyger from 'coddyger';
 import { CertificationController } from '../../modules/certification';
 import { TokenMiddleware } from '../middleware';
+import { sendDocumentFile, verifyDocumentLink } from '../../modules/certification/certification-files';
 
 const routePath = '/certification';
 const Controller: CertificationController = new CertificationController();
@@ -225,6 +226,46 @@ const defaultRoute: any = (fastify: any, options, done) => {
 			let Q = Controller.selectOne(_id);
 			return coddyger.api(reply, Q);
 		}
+	});
+
+	// Pièces d'un dossier : liens de consultation signés (5 min), administrateurs seulement.
+	fastify.route({
+		schema: {
+			tags,
+			summary: "Liens de consultation des pièces d'un dossier",
+			params: {
+				type: 'object',
+				properties: { id: { type: 'string' } },
+				required: ['id'],
+				additionalProperties: false
+			}
+		},
+		method: 'GET',
+		url: `${routePath}/:id/files`,
+		preHandler: TokenMiddleware.verifyAdmin,
+		handler: (request, reply) => {
+			const Q = Controller.documentFiles(request.params.id);
+			return coddyger.api(reply, Q);
+		}
+	});
+
+	// Consultation d'une pièce. Pas d'en-tête Authorization possible depuis un <img> ou un nouvel
+	// onglet : l'autorisation est portée par le jeton signé, émis uniquement par la route ci-dessus.
+	fastify.route({
+		schema: {
+			tags,
+			summary: "Consulter une pièce d'un dossier (lien signé)",
+			params: {
+				type: 'object',
+				properties: { token: { type: 'string', maxLength: 1024 } },
+				required: ['token'],
+				additionalProperties: false
+			}
+		},
+		method: 'GET',
+		url: `${routePath}/kyc-file/:token`,
+		preHandler: verifyDocumentLink,
+		handler: (request: any, reply) => sendDocumentFile(reply, request.kycKey)
 	});
 
 	// Document by user

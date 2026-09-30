@@ -1,7 +1,9 @@
 import coddyger, { IData, IErrorObject, defines } from 'coddyger';
 import { locale } from '../../public';
 import { ICertification, CertificationSet } from './';
+import mime from 'mime-types';
 import { CertificationService } from './certification.service';
+import { KYC_LINK_TTL, deleteDocumentFiles, documentLink } from './certification-files';
 // import { ClientService, ClientSet, IClient } from '../client';
 
 const controllerLabel: string = 'CertificationController';
@@ -159,9 +161,12 @@ export class CertificationController {
 				} else if (isData === false) {
 					resolve({ status: defines.status.notFound, message: locale.notfound('Enregistrement'), data: null });
 				} else {
+					// Destruction définitive : les pièces stockées partent avec le dossier.
+					const toErase: any = erase ? await this.dao.selectOne({ _id }) : null;
 					const remove: any = erase
 						? await this.dao.remove({ _id })
 						: await this.dao.update({ _id }, { status: 'removed' });
+					if (toErase && !remove.error) await deleteDocumentFiles(toErase.documentFile);
 
 					if (remove.error) {
 						reject(remove);
@@ -335,6 +340,35 @@ export class CertificationController {
 			}
 		}).catch((e: IErrorObject) => {
 			return coddyger.catchReturn(e, controllerLabel, 'selectOne');
+		});
+	}
+
+	// Liens de consultation signés (courte durée) des pièces d'un dossier — administrateurs seulement.
+	documentFiles(payload: string) {
+		return new Promise(async (resolve) => {
+			if (!coddyger.string.isValidObjectId(payload)) {
+				resolve({ status: defines.status.badRequest, message: locale.controller.wrongObjectId, data: null });
+				return;
+			}
+
+			const item: any = await this.dao.selectOne({ _id: payload });
+			if (!item) {
+				resolve({ status: defines.status.notFound, message: locale.notfound('Enregistrement'), data: null });
+				return;
+			}
+
+			resolve({
+				status: defines.status.requestOK,
+				message: 'OK',
+				data: (item.documentFile ?? []).map((name: string) => ({
+					name,
+					mimeType: mime.lookup(name) || 'application/octet-stream',
+					url: documentLink(name),
+					expiresIn: KYC_LINK_TTL
+				}))
+			});
+		}).catch((e: IErrorObject) => {
+			return coddyger.catchReturn(e, controllerLabel, 'documentFiles');
 		});
 	}
 

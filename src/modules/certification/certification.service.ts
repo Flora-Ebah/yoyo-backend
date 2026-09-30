@@ -5,6 +5,7 @@ import { locale } from '../../public';
 import { notificationManager , NotificationCategory , NotificationType } from '../../services/notification';
 import { MessageHelper } from '../../helpers/message.helper';
 import { NotificationHelper } from '../../helpers/notification.helper';
+import { KycFileError, secureDocumentFile } from './certification-files';
 
 
 
@@ -32,6 +33,18 @@ export class CertificationService {
 					error: true,
 					message: 'Type de document invalide'
 				};
+			}
+
+			// Pièces KYC : une pièce ne sert qu'à un dossier, puis quitte la zone publique pour `kyc/`.
+			const files: string[] = certification.documentFile ?? [];
+			if (await dao.exist({ documentFile: { $in: files } })) {
+				return { error: true, message: 'Un de ces fichiers est déjà rattaché à un autre dossier' };
+			}
+			try {
+				for (const name of files) await secureDocumentFile(name);
+			} catch (error: any) {
+				if (error instanceof KycFileError) return { error: true, message: error.message };
+				throw error;
 			}
 
 			// Générer l'ID et le slug
