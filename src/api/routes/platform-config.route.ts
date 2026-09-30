@@ -1,9 +1,9 @@
 import coddyger from 'coddyger';
-import { SettingsController } from '../../modules/settings/settings.controller';
+import { PlatformConfigController } from '../../modules/platform-config/platform-config.controller';
 import { TokenMiddleware, AppCheckMiddleware } from '../middleware';
 
 const routePath = '/platform-config';
-const Controller: SettingsController = new SettingsController();
+const Controller: PlatformConfigController = new PlatformConfigController();
 const tags: string[] = ['Paramètres plateforme (#3/#2/#1)'];
 
 /**
