@@ -24,7 +24,7 @@ export class InfluencerClientsController {
       try {
         const inf: any = await this.influencerDao.selectOne({ _id: id, status: { $nin: ['removed', 'archived'] } });
         if (!inf || inf.error) {
-          resolve({ status: defines.status.requestNotFound, message: 'Influenceur introuvable.', data: [] });
+          resolve({ status: defines.status.notFound, message: 'Influenceur introuvable.', data: [] });
           return;
         }
 
