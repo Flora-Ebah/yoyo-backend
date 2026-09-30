@@ -144,8 +144,6 @@ export class SettingsService {
       // Rafraîchir le cache pour que la prochaine lecture reflète la mise à jour.
       const updated = { ...current, ...next } as ISettings;
       SettingsService.cache = updated;
-      // [DEBUG TEMPORAIRE] pour diagnostiquer la persistance des couleurs sur dev.
-      (updated as any).__debug = { receivedKeys: Object.keys(data || {}), nextKeys: Object.keys(next || {}) };
       return updated;
     } catch (error) {
       LoggerService.log({ type: LogLevel.Error, content: error, location: this.serviceLabel, method: 'update' });
