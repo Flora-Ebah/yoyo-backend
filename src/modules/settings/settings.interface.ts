@@ -46,10 +46,5 @@ export interface ISettings {
    * `target` : 'all' = tous les partenaires, 'sponsored' = uniquement les sponsorisés.
    */
   proximityPush?: { radiusMeters: number; minIntervalHours: number; target: 'all' | 'sponsored' };
-  /**
-   * Vidéo de présentation d'une boutique : durée maximale (s) et poids maximal (Mo). Contrôlés par
-   * le serveur à l'envoi (`ffprobe`), lus par l'app Pro pour guider le marchand avant l'envoi.
-   */
-  media?: { maxVideoSeconds: number; maxVideoSizeMb: number };
   status?: string;
 }

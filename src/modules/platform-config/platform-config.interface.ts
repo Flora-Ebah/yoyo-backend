@@ -9,5 +9,10 @@ export interface IPlatformConfig {
   discountColors?: { threshold: number; color: string }[];
   sponsorPlan?: { price: number; durationDays: number };
   proximityPush?: { radiusMeters: number; minIntervalHours: number; target: 'all' | 'sponsored' };
+  /**
+   * Vidéo de présentation d'une boutique : durée (s) et poids (Mo) maximum. Contrôlés par le
+   * serveur à l'envoi (`ffprobe`, `POST /upload`), lus par l'app Pro pour guider le marchand.
+   */
+  media?: { maxVideoSeconds: number; maxVideoSizeMb: number };
   status?: string;
 }

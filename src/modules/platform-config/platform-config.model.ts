@@ -11,6 +11,8 @@ const schema = new mongoose.Schema<IPlatformConfig>({
     minIntervalHours: { type: Number },
     target: { type: String, enum: ['all', 'sponsored'] }
   },
+  // Limites de la vidéo de présentation d'une boutique (cf. IPlatformConfig).
+  media: { maxVideoSeconds: { type: Number }, maxVideoSizeMb: { type: Number } },
   status: { type: String, enum: ['active', 'inactive', 'removed'], default: 'active' }
 },
 { timestamps: true, minimize: false });

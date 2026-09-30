@@ -5,7 +5,7 @@ import { NotificationCategory, notificationManager, NotificationType } from '../
 import { MainService } from './main.service';
 import fs from 'fs/promises';
 import { ClientService } from '../client/client.service';
-import { SettingsService } from '../settings/settings.service';
+import { PlatformConfigService } from '../platform-config/platform-config.service';
 import { storage } from '../../services/storage/storage.service';
 import { DURATION_TOLERANCE_SECONDS, VideoError, extractPoster, probeVideo } from '../../helpers/video.helper';
 const controllerLabel: string = 'MainController';
@@ -85,7 +85,7 @@ export class MainController {
 			};
 
 			try {
-				const limits = await new SettingsService().getMediaLimits();
+				const limits = await new PlatformConfigService().getMediaLimits();
 				const checked: Array<{ file: any; contentType: string; duration?: number }> = [];
 
 				for (const file of items) {

@@ -14,7 +14,7 @@ const tags: string[] = ['Paramètres plateforme (#3/#2/#1)'];
  * strippés). Un nouveau fichier de route se déploie correctement, ce qui débloque l'écriture.
  *
  * - Lecture : `GET /platform-config` (apps + BO) — renvoie toute la configuration.
- * - Écriture : `PUT /platform-config` (admin) — accepte discountColors / sponsorPlan / proximityPush
+ * - Écriture : `PUT /platform-config` (admin) — accepte discountColors / sponsorPlan / proximityPush / media
  *   (et les bornes de remise), et délègue au même `SettingsController.update`.
  */
 const defaultRoute: any = (fastify: any, options, done) => {
@@ -61,6 +61,15 @@ const defaultRoute: any = (fastify: any, options, done) => {
               radiusMeters: { type: 'number', minimum: 0 },
               minIntervalHours: { type: 'number', minimum: 0 },
               target: { type: 'string', enum: ['all', 'sponsored'] }
+            },
+            additionalProperties: false
+          },
+          media: {
+            type: 'object',
+            properties: {
+              maxVideoSeconds: { type: 'number', minimum: 1, maximum: 600 },
+              // ≤ au plafond de réception de `POST /upload` (main.route.ts)
+              maxVideoSizeMb: { type: 'number', minimum: 1, maximum: 200 }
             },
             additionalProperties: false
           }

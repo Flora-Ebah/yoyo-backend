@@ -17,8 +17,6 @@ const schema = new mongoose.Schema<ISettings>(
     // Abo « mise en avant » (#2) et push proximité (#1), configurables au BO.
     sponsorPlan: { price: { type: Number }, durationDays: { type: Number } },
     proximityPush: { radiusMeters: { type: Number }, minIntervalHours: { type: Number }, target: { type: String, enum: ['all', 'sponsored'] } },
-    // Limites de la vidéo de présentation d'une boutique (cf. ISettings).
-    media: { maxVideoSeconds: { type: Number, default: 20 }, maxVideoSizeMb: { type: Number, default: 50 } },
     status: { type: String, enum: ['active', 'inactive', 'removed'], default: 'active' }
   },
   { timestamps: true }
