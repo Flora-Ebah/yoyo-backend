@@ -130,7 +130,9 @@ export class SettingsService {
   }
 
   /**
-   * Met à jour la configuration (remise min/max). Réservé à l'administrateur (garde côté route).
+   * Met à jour la configuration (remise min/max, couleurs %, sponsor, push proximité).
+   * Réservé à l'administrateur (garde côté route).
+   * (Rebuild forcé — busting du cache Docker `COPY src/` sur dev.)
    */
   async update(data: Partial<ISettings>): Promise<ISettings> {
     try {
