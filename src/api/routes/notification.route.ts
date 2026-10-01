@@ -34,8 +34,10 @@ const defaultRoute: any = (fastify: any, options, done) => {
       let pageSize: any = request.query.pageSize;
       let status: any = request.query.status;
       let query: any = request.query.q;
+      let from: any = request.query.from;
+      let to: any = request.query.to;
 
-      let Q = Controller.getAll({ page, pageSize, query, status });
+      let Q = Controller.getAll({ page, pageSize, query, status, from, to });
       return coddyger.api(reply, Q);
     }
   });
