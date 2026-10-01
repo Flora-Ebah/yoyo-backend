@@ -21,6 +21,18 @@ export class BoutiqueSponsorController {
     }).catch((e: IErrorObject) => coddyger.catchReturn(e, controllerLabel, 'sponsor'));
   }
 
+  list(payloads: { page?: number; pageSize?: number; status?: string }) {
+    return new Promise(async (resolve, reject) => {
+      try {
+        const result: any = await this.service.list(payloads);
+        // Convention backend : métadonnées de pagination dans message, lignes dans data.
+        resolve({ status: defines.status.requestOK, message: result, data: result?.rows ?? [] });
+      } catch (error) {
+        reject(error);
+      }
+    }).catch((e: IErrorObject) => coddyger.catchReturn(e, controllerLabel, 'list'));
+  }
+
   byBoutique(boutiqueId: string) {
     return new Promise(async (resolve, reject) => {
       try {

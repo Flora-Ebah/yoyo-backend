@@ -66,6 +66,13 @@ export class BoutiqueSponsorService {
     return active;
   }
 
+  /** Liste paginée de toutes les sponsorisations (admin). */
+  async list(payloads: { page?: number; pageSize?: number; status?: string }): Promise<any> {
+    const params: any = {};
+    if (payloads.status) params.status = payloads.status;
+    return this.dao.select({ params, page: payloads.page ?? 1, pageSize: payloads.pageSize ?? 50 });
+  }
+
   /** Retire la mise en avant (annule les sponsorisations actives). */
   async cancel(boutiqueId: string): Promise<{ cancelled: number }> {
     const list: any = await this.dao.selectHug({ boutiqueId, status: 'active' });

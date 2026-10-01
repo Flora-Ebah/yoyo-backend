@@ -36,6 +36,29 @@ const defaultRoute: any = (fastify: any, options, done) => {
     }
   });
 
+  // Liste de toutes les sponsorisations (admin)
+  fastify.route({
+    schema: {
+      tags,
+      summary: 'Lister les mises en avant',
+      query: {
+        type: 'object',
+        properties: {
+          page: { type: 'number' },
+          pageSize: { type: 'number' },
+          status: { type: 'string' }
+        },
+        additionalProperties: false
+      }
+    },
+    method: 'GET',
+    url: `${routePath}`,
+    preHandler: TokenMiddleware.verifyAdmin,
+    handler: (request, reply) => coddyger.api(reply, Controller.list({
+      page: request.query.page, pageSize: request.query.pageSize, status: request.query.status
+    }))
+  });
+
   // Sponsorisation active d'une boutique (admin)
   fastify.route({
     schema: { tags, summary: 'Mise en avant active d’une boutique' },
