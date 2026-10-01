@@ -50,7 +50,7 @@ const defaultRoute: any = (fastify: any, options, done) => {
       summary: 'Lister les avis (modération)',
       query: {
         type: 'object',
-        properties: { page: { type: 'number' }, pageSize: { type: 'number' }, status: { type: 'string' } },
+        properties: { page: { type: 'number' }, pageSize: { type: 'number' }, status: { type: 'string' }, from: { type: 'string' }, to: { type: 'string' } },
         additionalProperties: false
       }
     },
@@ -61,7 +61,9 @@ const defaultRoute: any = (fastify: any, options, done) => {
       const page: any = request.query.page || 1;
       const pageSize: any = request.query.pageSize || 20;
       const status: any = request.query.status;
-      return coddyger.api(reply, Controller.getAll({ page, pageSize, status }));
+      const from: any = request.query.from;
+      const to: any = request.query.to;
+      return coddyger.api(reply, Controller.getAll({ page, pageSize, status, from, to }));
     }
   });
 

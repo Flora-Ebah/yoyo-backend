@@ -1,4 +1,5 @@
 import coddyger from 'coddyger';
+import { dateRangeFilter } from '../../shared/date-filter';
 import { ReviewSet } from './review.model';
 import { IReview } from './review.interface';
 
@@ -47,8 +48,8 @@ export class ReviewService {
   }
 
   /** Liste paginée (modération admin). */
-  async getAll(payloads: { page?: number; pageSize?: number; status?: string }): Promise<any> {
-    const params: any = {};
+  async getAll(payloads: { page?: number; pageSize?: number; status?: string; from?: string; to?: string }): Promise<any> {
+    const params: any = { ...dateRangeFilter(payloads.from, payloads.to) };
     if (payloads.status && !coddyger.string.isEmpty(payloads.status)) params.status = payloads.status;
     return this.dao.select({ params, page: payloads.page ?? 1, pageSize: payloads.pageSize ?? 20 });
   }

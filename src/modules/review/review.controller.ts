@@ -40,7 +40,7 @@ export class ReviewController {
     }).catch((e: IErrorObject) => coddyger.catchReturn(e, controllerLabel, 'summary'));
   }
 
-  getAll(payloads: { page?: number; pageSize?: number; status?: string }) {
+  getAll(payloads: { page?: number; pageSize?: number; status?: string; from?: string; to?: string }) {
     return new Promise(async (resolve, reject) => {
       try {
         const items = await this.service.getAll(payloads);
