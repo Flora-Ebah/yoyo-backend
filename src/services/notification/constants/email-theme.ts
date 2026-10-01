@@ -53,10 +53,14 @@ export function logoSrc(): string {
 	return `${base}/${LOGO_FILENAME}`;
 }
 
-// Même police que le back-office admin (`@core/theme` → Plus Jakarta Sans). Repli système pour
-// les clients de messagerie qui ne chargent pas la webfont.
-const FONT_STACK =
-	"'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif";
+// Design system YoYo : titres en Sora, corps en Outfit (webfonts chargées dans le <head> via
+// Google Fonts). Beaucoup de clients de messagerie ignorent les webfonts : le repli web-safe est
+// volontairement robuste (Arial / Helvetica) pour rester propre partout.
+const FONT_HEADING = "'Sora', Arial, Helvetica, sans-serif";
+const FONT_BODY = "'Outfit', Arial, Helvetica, sans-serif";
+// Compat : la plupart des usages génériques (corps de texte, pied, encarts, boutons) s'appuient sur
+// la police de corps. Les titres utilisent explicitement `FONT_HEADING`.
+const FONT_STACK = FONT_BODY;
 
 /**
  * Bouton d'action principal, en `<table>` pour rester cliquable sur toute sa surface sous Outlook
@@ -190,7 +194,7 @@ export function codeBox(code: string): string {
       <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin: 8px 0 24px;">
         <tr>
           <td align="center" bgcolor="${BRAND.surfaceTinted}" style="mso-line-height-rule: exactly; padding: 20px; background-color: ${BRAND.surfaceTinted}; border: 1px solid ${BRAND.primaryLight}; border-radius: 6px;">
-            <div style="font-family: ${FONT_STACK}; font-size: 30px; font-weight: 700; letter-spacing: 8px; color: ${BRAND.primary};">${code}</div>
+            <div style="font-family: ${FONT_HEADING}; font-size: 30px; font-weight: 700; letter-spacing: 8px; color: ${BRAND.primary};">${code}</div>
           </td>
         </tr>
       </table>`;
@@ -236,7 +240,7 @@ export function wrapEmail(
     <xml><o:officedocumentsettings><o:pixelsperinch>96</o:pixelsperinch></o:officedocumentsettings></xml>
   <![endif]-->
   <title>${label}</title>
-  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" media="screen">
+  <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700;800&family=Outfit:wght@400;500;600&display=swap" rel="stylesheet" media="screen">
   <style>
     /* Typographie du contenu : ignoree par quelques clients, sans consequence — la structure et
        les couleurs porteuses de sens restent en style en ligne. */
@@ -245,7 +249,7 @@ export function wrapEmail(
     table { border-collapse: collapse !important; }
     .hover-underline:hover { text-decoration: underline !important; }
     .yoyo-content h2 {
-      margin: 0 0 18px; font-family: ${FONT_STACK};
+      margin: 0 0 18px; font-family: ${FONT_HEADING};
       font-size: 22px; line-height: 30px; font-weight: 700; color: ${BRAND.text};
       /* Titre principal centre. Double en style en ligne sur chaque titre des templates : une
          partie des clients (Gmail via un compte IMAP tiers, messages transferes) supprime cette
@@ -253,7 +257,7 @@ export function wrapEmail(
       text-align: center;
     }
     .yoyo-content h3 {
-      margin: 26px 0 10px; font-family: ${FONT_STACK};
+      margin: 26px 0 10px; font-family: ${FONT_HEADING};
       font-size: 17px; line-height: 24px; font-weight: 600; color: ${BRAND.text};
     }
     .yoyo-content p {
@@ -314,7 +318,7 @@ export function wrapEmail(
                                     </div>
                                   </td>
                                   <td style="mso-line-height-rule: exactly; vertical-align: middle;">
-                                    <div style="font-family: ${FONT_STACK}; font-size: 20px; line-height: 26px; font-weight: 800; color: #FFFFFF;">${options.hero}</div>
+                                    <div style="font-family: ${FONT_HEADING}; font-size: 20px; line-height: 26px; font-weight: 800; color: #FFFFFF;">${options.hero}</div>
                                   </td>
                                 </tr>
                               </table>
@@ -325,7 +329,7 @@ export function wrapEmail(
                           <td class="yoyo-content sm-px-24" style="mso-line-height-rule: exactly; background-color: ${BRAND.surface}; padding: 36px 40px; text-align: left; font-family: ${FONT_STACK}; font-size: 16px; line-height: 26px; color: ${BRAND.textBody};">
                             ${
                               options?.title && !options?.hero
-                                ? `<p style="margin: 0 0 10px; font-family: ${FONT_STACK}; font-size: 12px; font-weight: 700; letter-spacing: 1.4px; text-transform: uppercase; color: ${BRAND.primary}; text-align: center;">${options.title}</p>`
+                                ? `<p style="margin: 0 0 10px; font-family: ${FONT_HEADING}; font-size: 12px; font-weight: 700; letter-spacing: 1.4px; text-transform: uppercase; color: ${BRAND.primary}; text-align: center;">${options.title}</p>`
                                 : ''
                             }
                             ${content}
