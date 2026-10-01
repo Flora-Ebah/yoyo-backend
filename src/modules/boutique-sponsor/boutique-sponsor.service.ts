@@ -3,6 +3,7 @@ import { dateRangeFilter } from '../../shared/date-filter';
 import { BoutiqueSponsorSet } from './boutique-sponsor.model';
 import { IBoutiqueSponsor } from './boutique-sponsor.interface';
 import { PlatformConfigService } from '../platform-config/platform-config.service';
+import { SponsorPlanService } from '../sponsor-plan/sponsor-plan.service';
 import { PartnerSet } from '../partner/partner.model';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -10,25 +11,46 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 export class BoutiqueSponsorService {
   private readonly dao: BoutiqueSponsorSet;
   private readonly config: PlatformConfigService;
+  private readonly sponsorPlans: SponsorPlanService;
   private readonly partners: PartnerSet;
 
   constructor() {
     this.dao = new BoutiqueSponsorSet();
     this.config = new PlatformConfigService();
+    this.sponsorPlans = new SponsorPlanService();
     this.partners = new PartnerSet();
   }
 
-  /** Met une boutique en avant selon l'abonnement courant (prix + durée de `sponsorPlan`). */
-  async sponsor(boutiqueId: string, adminId?: string): Promise<IBoutiqueSponsor> {
-    const cfg: any = await this.config.get();
-    const plan = cfg?.sponsorPlan || {};
-    const durationDays = Number(plan.durationDays) > 0 ? Number(plan.durationDays) : 30;
-    const price = Number(plan.price) >= 0 ? Number(plan.price) : 0;
+  /**
+   * Met une boutique en avant.
+   * - Si `sponsorPlanId` est fourni : applique le prix + la durée de cette **formule** (module sponsor-plan).
+   * - Sinon : repli sur la config unique `platformConfig.sponsorPlan` (rétrocompatibilité).
+   */
+  async sponsor(boutiqueId: string, adminId?: string, sponsorPlanId?: string): Promise<IBoutiqueSponsor> {
+    let price = 0;
+    let durationDays = 30;
+    let appliedPlanId: string | undefined;
+
+    if (sponsorPlanId) {
+      const formula: any = await this.sponsorPlans.getById(sponsorPlanId);
+      if (!formula) {
+        throw { error: true, message: 'Formule de mise en avant introuvable.' };
+      }
+      price = Number(formula.price) >= 0 ? Number(formula.price) : 0;
+      durationDays = Number(formula.durationDays) > 0 ? Number(formula.durationDays) : 30;
+      appliedPlanId = String(formula._id);
+    } else {
+      const cfg: any = await this.config.get();
+      const plan = cfg?.sponsorPlan || {};
+      durationDays = Number(plan.durationDays) > 0 ? Number(plan.durationDays) : 30;
+      price = Number(plan.price) >= 0 ? Number(plan.price) : 0;
+    }
 
     const now = new Date();
     const record: IBoutiqueSponsor = {
       _id: coddyger.string.generateObjectId(),
       boutiqueId,
+      sponsorPlanId: appliedPlanId,
       startDate: now,
       endDate: new Date(now.getTime() + durationDays * DAY_MS),
       price,

@@ -10,10 +10,10 @@ export class BoutiqueSponsorController {
     this.service = new BoutiqueSponsorService();
   }
 
-  sponsor(boutiqueId: string, adminId?: string) {
+  sponsor(boutiqueId: string, adminId?: string, sponsorPlanId?: string) {
     return new Promise(async (resolve, reject) => {
       try {
-        const data = await this.service.sponsor(boutiqueId, adminId);
+        const data = await this.service.sponsor(boutiqueId, adminId, sponsorPlanId);
         resolve({ status: defines.status.requestOK, message: 'Boutique mise en avant.', data });
       } catch (error) {
         reject(error);

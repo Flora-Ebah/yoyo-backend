@@ -26,6 +26,12 @@ const schema = new mongoose.Schema<ITransaction>({
   txnId: { type: String },
   isScheduledRenewal: { type: Boolean, default: false },
   currentSubscriptionId: { type: Schema.Types.ObjectId, ref: 'Subscription' },
+  // Nature de la transaction : 'subscription' (achat de plan client, défaut historique) ou
+  // 'boutique-sponsor' (mise en avant d'une boutique par son marchand, flux self-service payant).
+  kind: { type: String, enum: ['subscription', 'boutique-sponsor'], default: 'subscription' },
+  // Métadonnées de mise en avant (uniquement pour kind === 'boutique-sponsor').
+  boutiqueId: { type: String },
+  sponsorPlanId: { type: String },
 },
 { timestamps: true });
 

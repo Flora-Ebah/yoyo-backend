@@ -5,6 +5,7 @@ import { IBoutiqueSponsor } from './boutique-sponsor.interface';
 const schema = new mongoose.Schema<IBoutiqueSponsor>({
   _id: Schema.Types.ObjectId,
   boutiqueId: { type: String, index: true },
+  sponsorPlanId: { type: String },
   startDate: { type: Date },
   endDate: { type: Date },
   price: { type: Number },

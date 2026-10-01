@@ -6,6 +6,7 @@
 export interface IBoutiqueSponsor {
   _id?: string;
   boutiqueId: string;       // id de la boutique (module partner)
+  sponsorPlanId?: string;   // formule de mise en avant appliquée (module sponsor-plan), si choisie
   startDate: Date;
   endDate: Date;
   price?: number;           // prix appliqué (copié depuis sponsorPlan au moment de la création)

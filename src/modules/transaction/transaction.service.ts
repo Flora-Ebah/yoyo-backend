@@ -822,6 +822,115 @@ export class TransactionService {
   }
 
   /**
+   * [MISE EN AVANT] Crée une transaction de sponsorisation de boutique (flux marchand self-service).
+   *
+   * Réutilise intégralement l'infrastructure de paiement des abonnements : même prestataire
+   * (Orange Money via PaymentHelper), mêmes `return_url` / `cancel_url` / `notif_url` globaux,
+   * donc mêmes routes de retour (`/transactions/payment-return`) et de notification
+   * (`/transactions/payment-notify`), qui re-vérifient le statut auprès du prestataire avant toute
+   * activation. L'activation (mise en avant) est branchée dans `updateTransactionStatus` via `kind`.
+   *
+   * SÉCURITÉ : le montant n'est JAMAIS lu du client. Le prix et la durée proviennent de la formule
+   * (base). L'appartenance de la boutique au marchand est contrôlée en amont (sponsor-checkout).
+   *
+   * @param merchantId Marchand connecté (devient `user` de la transaction, pour le contrôle de propriété)
+   * @param boutiqueId Boutique à mettre en avant
+   * @param formula Formule de mise en avant (module sponsor-plan) déjà résolue en base
+   * @returns { success, data } avec l'URL de paiement, ou { success:false, message }
+   */
+  async createSponsorTransaction(merchantId: string, boutiqueId: string, formula: any): Promise<any> {
+    try {
+      const price = Number(formula?.price) > 0 ? Number(formula.price) : 0;
+      const currency = process.env.OM_CURRENCY || 'OUV';
+
+      const transactionIdResult = this.generateTransactionId();
+      if (!transactionIdResult.success) {
+        return transactionIdResult;
+      }
+      const transactionId = transactionIdResult.data;
+
+      const transaction: ITransaction = {
+        _id: transactionId,
+        user: merchantId,
+        amount: price,
+        currency,
+        status: 'active',
+        paymentMethod: 'orange-money',
+        paymentStatus: 'pending',
+        paymentDate: new Date(),
+        paymentId: transactionId.toString(),
+        paymentUrl: '',
+        kind: 'boutique-sponsor',
+        boutiqueId: String(boutiqueId),
+        sponsorPlanId: String(formula._id)
+      };
+
+      // Formule gratuite (prix <= 0) : aucun paiement à initier, on active directement.
+      if (price <= 0) {
+        transaction.paymentMethod = 'free';
+        transaction.paymentStatus = 'success';
+        transaction.paymentUrl = 'free'; // champ requis, ne peut pas être vide
+        await this.create(transaction);
+        await this.activateBoutiqueSponsor(transaction, transactionId);
+
+        const savedFree = await this.dao.selectOne({ _id: transactionId });
+        return { success: true, data: { ...savedFree, isFree: true } };
+      }
+
+      // Paiement payant : on réutilise l'initiation Orange Money des abonnements
+      // (jeton de retour aléatoire, return/cancel url, pay_token, notif_token).
+      const paymentResult = await this.processPaymentInitiation(transaction, { price });
+      if (!paymentResult.success) {
+        return paymentResult;
+      }
+
+      await this.create(paymentResult.data);
+      const saved = await this.dao.selectOne({ _id: transactionId });
+      return { success: true, data: saved };
+    } catch (error) {
+      console.log(error);
+      return { success: false, error: error instanceof Error ? error : new Error(String(error)) };
+    }
+  }
+
+  /**
+   * [MISE EN AVANT] Active la mise en avant d'une boutique à partir d'une transaction réglée.
+   *
+   * Délègue au `BoutiqueSponsorService.sponsor` existant (lit prix/durée depuis la formule et pose
+   * `isSponsored`). Chargé paresseusement pour éviter tout couplage à l'import. Les erreurs sont
+   * journalisées mais non propagées : la transaction est bel et bien payée, on ne renvoie pas
+   * d'échec au prestataire qui rejouerait la notification.
+   *
+   * @param transaction Transaction de sponsorisation (porte boutiqueId / sponsorPlanId / user)
+   * @param transactionId ID de la transaction
+   */
+  private async activateBoutiqueSponsor(transaction: any, transactionId: string): Promise<void> {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const { BoutiqueSponsorService } = require('../boutique-sponsor/boutique-sponsor.service');
+      const sponsorService = new BoutiqueSponsorService();
+      await sponsorService.sponsor(
+        String(transaction.boutiqueId),
+        String(transaction.user),
+        transaction.sponsorPlanId ? String(transaction.sponsorPlanId) : undefined
+      );
+      LoggerService.log({
+        type: LogLevel.Info,
+        content: `Mise en avant activée pour la boutique ${transaction.boutiqueId} (transaction ${transactionId})`,
+        location: this.serviceLabel,
+        method: 'activateBoutiqueSponsor'
+      });
+    } catch (error) {
+      LoggerService.log({
+        type: LogLevel.Error,
+        content: `Échec d'activation de la mise en avant pour la transaction ${transactionId}: ${error}`,
+        location: this.serviceLabel,
+        method: 'activateBoutiqueSponsor'
+      });
+    }
+  }
+
+  /**
    * Met à jour le statut d'une transaction après notification de paiement
    * @param transactionId ID de la transaction
    * @param paymentStatus Statut du paiement
@@ -844,6 +953,17 @@ export class TransactionService {
       });
 
       if(paymentStatus === 'success') {
+        // [MISE EN AVANT] Transaction de sponsorisation boutique (flux marchand self-service).
+        // On ne crée PAS d'abonnement client : on active la mise en avant de la boutique.
+        // Idempotence : n'activer que si la transaction n'était pas DÉJÀ réglée (statut lu avant
+        // mise à jour) — un rejeu de notification / retour navigateur ne double-active donc pas.
+        if (transaction.kind === 'boutique-sponsor') {
+          if (transaction.paymentStatus !== 'success') {
+            await this.activateBoutiqueSponsor(transaction, transactionId);
+          }
+          return updatedTransaction;
+        }
+
         // Vérifier si c'est un renouvellement programmé
         if (transaction.isScheduledRenewal && transaction.currentSubscriptionId) {
           // Programmer le renouvellement au lieu de créer un nouvel abonnement

@@ -22,7 +22,7 @@ const defaultRoute: any = (fastify: any, options, done) => {
       summary: 'Mettre une boutique en avant (selon l’abonnement)',
       body: {
         type: 'object',
-        properties: { boutiqueId: { type: 'string' } },
+        properties: { boutiqueId: { type: 'string' }, sponsorPlanId: { type: 'string' } },
         required: ['boutiqueId'],
         additionalProperties: false
       }
@@ -32,7 +32,8 @@ const defaultRoute: any = (fastify: any, options, done) => {
     preHandler: TokenMiddleware.verifyAdmin,
     handler: (request, reply) => {
       const admin: any = request.user;
-      return coddyger.api(reply, Controller.sponsor(String(request.body.boutiqueId), admin?._id));
+      const body: any = request.body;
+      return coddyger.api(reply, Controller.sponsor(String(body.boutiqueId), admin?._id, body.sponsorPlanId));
     }
   });
 
