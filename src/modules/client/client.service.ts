@@ -1,4 +1,5 @@
 import { MessageHelper } from '../../helpers';
+import { dateRangeFilter } from '../../shared/date-filter';
 import { PartnerService } from '../partner';
 import { SettingsService } from '../settings';
 import { AnonymizationLogService } from '../anonymization-log';
@@ -48,7 +49,7 @@ export class ClientService {
 	 * Récupère tous les éléments
 	 * @returns Liste des éléments
 	 */
-	async getAll(payloads: { page?: number; pageSize?: number; query?: string; status?: string; isPartner?: boolean }): Promise<any> {
+	async getAll(payloads: { page?: number; pageSize?: number; query?: string; status?: string; isPartner?: boolean; from?: string; to?: string }): Promise<any> {
 		try {
 			let page: number = payloads.page ?? 1;
 			let pageSize: number = payloads.pageSize ?? 10;
@@ -58,9 +59,11 @@ export class ClientService {
 			// Filtre Type (boutiques vs utilisateurs de l'app), injecté dans tous les cas de requête.
 			// On EXCLUT toujours les comptes GÉRANT (isManager) : ce ne sont ni des clients de l'app
 			// ni des partenaires — ils appartiennent à une boutique et ne doivent pas polluer la liste.
+			// Filtre Période (createdAt) fusionné dans tous les cas.
 			const typeFilter: any = {
 				isManager: { $ne: true },
-				...(typeof payloads.isPartner === 'boolean' ? { isPartner: payloads.isPartner } : {})
+				...(typeof payloads.isPartner === 'boolean' ? { isPartner: payloads.isPartner } : {}),
+				...dateRangeFilter(payloads.from, payloads.to)
 			};
 
 			let data: any | IErrorObject = {};

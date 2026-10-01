@@ -1,4 +1,5 @@
 import coddyger from 'coddyger';
+import { dateRangeFilter } from '../../shared/date-filter';
 import { BoutiqueSponsorSet } from './boutique-sponsor.model';
 import { IBoutiqueSponsor } from './boutique-sponsor.interface';
 import { PlatformConfigService } from '../platform-config/platform-config.service';
@@ -67,8 +68,8 @@ export class BoutiqueSponsorService {
   }
 
   /** Liste paginée de toutes les sponsorisations (admin). */
-  async list(payloads: { page?: number; pageSize?: number; status?: string }): Promise<any> {
-    const params: any = {};
+  async list(payloads: { page?: number; pageSize?: number; status?: string; from?: string; to?: string }): Promise<any> {
+    const params: any = { ...dateRangeFilter(payloads.from, payloads.to) };
     if (payloads.status) params.status = payloads.status;
     return this.dao.select({ params, page: payloads.page ?? 1, pageSize: payloads.pageSize ?? 50 });
   }

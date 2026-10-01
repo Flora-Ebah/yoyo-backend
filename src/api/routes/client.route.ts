@@ -340,7 +340,10 @@ const defaultRoute: any = (fastify: any, options, done) => {
           status: { type: 'string' },
           q: { type: 'string' },
           // Filtre Type : 'true' = boutiques (marchands), 'false' = utilisateurs de l'app.
-          isPartner: { type: 'string', enum: ['true', 'false'] }
+          isPartner: { type: 'string', enum: ['true', 'false'] },
+          // Filtre Période (createdAt), format ISO yyyy-MM-dd.
+          from: { type: 'string' },
+          to: { type: 'string' }
         },
         required: [],
         additionalProperties: false
@@ -354,10 +357,12 @@ const defaultRoute: any = (fastify: any, options, done) => {
       let pageSize: any = request.query.pageSize;
       let status: any = request.query.status;
       let query: any = request.query.q;
+      let from: any = request.query.from;
+      let to: any = request.query.to;
       let isPartner: any =
         request.query.isPartner === 'true' ? true : request.query.isPartner === 'false' ? false : undefined;
 
-      let Q = Controller.getAll({ page, pageSize, status, query, isPartner });
+      let Q = Controller.getAll({ page, pageSize, status, query, isPartner, from, to });
       return coddyger.api(reply, Q);
     }
   });

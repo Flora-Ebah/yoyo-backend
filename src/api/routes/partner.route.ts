@@ -284,7 +284,9 @@ const defaultRoute: any = (fastify: any, options, done) => {
             type: 'string',
             enum: ['discount_desc'],
             description: "Tri du marketplace. `discount_desc` = plus fortes réductions d'abord."
-          }
+          },
+          from: { type: 'string' },
+          to: { type: 'string' }
         },
         required: [],
         additionalProperties: false
@@ -301,6 +303,8 @@ const defaultRoute: any = (fastify: any, options, done) => {
       let category: any = request.query.category;
       let createdBy: any = request.query.createdBy;
       let sort: any = request.query.sort;
+      let from: any = request.query.from;
+      let to: any = request.query.to;
       const user: any = request.user;
 
       // `createdBy=me` est résolu ici, à partir du jeton : le client ne choisit pas l'identité
@@ -309,7 +313,7 @@ const defaultRoute: any = (fastify: any, options, done) => {
         createdBy = user?._id;
       }
 
-      let Q = Controller.getAll({ page, pageSize, status, query, category, createdBy, sort });
+      let Q = Controller.getAll({ page, pageSize, status, query, category, createdBy, sort, from, to });
       return coddyger.api(reply, Q);
     }
   });

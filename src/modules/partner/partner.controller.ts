@@ -192,7 +192,7 @@ export class PartnerController {
    * Récupère tous les éléments
    * @returns Liste des éléments
    */
-  getAll(payloads: { page?: number; pageSize?: number; query?: string; status?: string; category?: string; createdBy?: string; sort?: string }) {
+  getAll(payloads: { page?: number; pageSize?: number; query?: string; status?: string; category?: string; createdBy?: string; sort?: string; from?: string; to?: string }) {
     return new Promise(async (resolve, reject) => {
       try {
         const items = await this.service.getAll(payloads);

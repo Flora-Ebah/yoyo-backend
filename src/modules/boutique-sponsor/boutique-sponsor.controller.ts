@@ -21,7 +21,7 @@ export class BoutiqueSponsorController {
     }).catch((e: IErrorObject) => coddyger.catchReturn(e, controllerLabel, 'sponsor'));
   }
 
-  list(payloads: { page?: number; pageSize?: number; status?: string }) {
+  list(payloads: { page?: number; pageSize?: number; status?: string; from?: string; to?: string }) {
     return new Promise(async (resolve, reject) => {
       try {
         const result: any = await this.service.list(payloads);

@@ -1,5 +1,6 @@
 import coddyger, { IData, IErrorObject, defines } from 'coddyger';
 import { locale } from '../../public';
+import { dateRangeFilter } from '../../shared/date-filter';
 import { ISubscription, SubscriptionSet } from './';
 import { SubscriptionService } from './subscription.service';
 import { IPlan, PlanSet } from '../plan';
@@ -248,11 +249,11 @@ export class SubscriptionController {
    * @param status Statut des abonnements à récupérer
    * @returns Liste des abonnements
    */
-  list(page: number = 1, pageSize: number = 10, status?: string) {
+  list(page: number = 1, pageSize: number = 10, status?: string, from?: string, to?: string) {
     return new Promise(async (resolve, reject) => {
       try {
-        const params: any = {};
-        
+        const params: any = { ...dateRangeFilter(from, to) };
+
         if (status) {
           params.status = status;
         }

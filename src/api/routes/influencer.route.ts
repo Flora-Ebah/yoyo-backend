@@ -23,7 +23,9 @@ const defaultRoute: any = (fastify: any, options, done) => {
           page: { type: 'number' },
           pageSize: { type: 'number' },
           q: { type: 'string' },
-          status: { type: 'string' }
+          status: { type: 'string' },
+          from: { type: 'string' },
+          to: { type: 'string' }
         },
         additionalProperties: false
       }
@@ -36,7 +38,9 @@ const defaultRoute: any = (fastify: any, options, done) => {
       const pageSize: any = request.query.pageSize || 20;
       const query: any = request.query.q;
       const status: any = request.query.status;
-      const Q = Controller.getAll({ page, pageSize, query, status });
+      const from: any = request.query.from;
+      const to: any = request.query.to;
+      const Q = Controller.getAll({ page, pageSize, query, status, from, to });
       return coddyger.api(reply, Q);
     }
   });

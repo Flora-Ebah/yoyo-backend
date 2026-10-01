@@ -46,7 +46,9 @@ const defaultRoute: any = (fastify: any, options, done) => {
         properties: {
           page: { type: 'number' },
           pageSize: { type: 'number' },
-          status: { type: 'string' }
+          status: { type: 'string' },
+          from: { type: 'string' },
+          to: { type: 'string' }
         },
         additionalProperties: false
       }
@@ -55,7 +57,8 @@ const defaultRoute: any = (fastify: any, options, done) => {
     url: `${routePath}`,
     preHandler: TokenMiddleware.verifyAdmin,
     handler: (request, reply) => coddyger.api(reply, Controller.list({
-      page: request.query.page, pageSize: request.query.pageSize, status: request.query.status
+      page: request.query.page, pageSize: request.query.pageSize, status: request.query.status,
+      from: request.query.from, to: request.query.to
     }))
   });
 

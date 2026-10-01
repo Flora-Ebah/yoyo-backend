@@ -2,6 +2,7 @@ import coddyger, { IErrorObject } from 'coddyger';
 import { InfluencerSet } from './influencer.model';
 import { IInfluencer } from './influencer.interface';
 import { ClientSet } from '../client/client.model';
+import { dateRangeFilter } from '../../shared/date-filter';
 
 export class InfluencerService {
   private readonly dao: InfluencerSet;
@@ -10,11 +11,11 @@ export class InfluencerService {
     this.dao = new InfluencerSet();
   }
 
-  async getAll(payloads: { page?: number; pageSize?: number; query?: string; status?: string }): Promise<any> {
+  async getAll(payloads: { page?: number; pageSize?: number; query?: string; status?: string; from?: string; to?: string }): Promise<any> {
     const page = payloads.page ?? 1;
     const pageSize = payloads.pageSize ?? 10;
     const query = payloads.query ?? '';
-    const params: any = {};
+    const params: any = { ...dateRangeFilter(payloads.from, payloads.to) };
     if (query && !coddyger.string.isEmpty(query)) {
       params.$or = [
         { name: { $regex: query, $options: 'i' } },

@@ -1,4 +1,5 @@
 import { IPartner, IOpeningHours } from './partner.interface';
+import { dateRangeFilter } from '../../shared/date-filter';
 import { PartnerSet } from './partner.model';
 import coddyger, { IData, IErrorObject, LoggerService, LogLevel } from 'coddyger';
 import { CategoryService } from '../category/category.service';
@@ -130,7 +131,7 @@ export class PartnerService {
    * Récupère tous les éléments
    * @returns Liste des éléments
    */
-  async getAll(payloads: { page?: number; pageSize?: number; query?: string; status?: string; category?: string; createdBy?: string; sort?: string }): Promise<any> {
+  async getAll(payloads: { page?: number; pageSize?: number; query?: string; status?: string; category?: string; createdBy?: string; sort?: string; from?: string; to?: string }): Promise<any> {
     try {
       let page: number = payloads.page ?? 1;
 			let pageSize: number = payloads.pageSize ?? 10;
@@ -150,7 +151,7 @@ export class PartnerService {
 
 			// Filtre d'attribution (vue commerciale) : il se cumule avec les critères ci-dessous
 			// plutôt que de constituer une branche de plus.
-			const base: any = {};
+			const base: any = { ...dateRangeFilter(payloads.from, payloads.to) };
 			if (!coddyger.string.isEmpty(createdBy) && coddyger.string.isValidObjectId(createdBy)) {
 				base.createdBy = createdBy;
 			}

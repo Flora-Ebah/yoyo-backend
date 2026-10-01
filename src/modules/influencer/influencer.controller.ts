@@ -11,7 +11,7 @@ export class InfluencerController {
     this.service = new InfluencerService();
   }
 
-  getAll(payloads: { page?: number; pageSize?: number; query?: string; status?: string }) {
+  getAll(payloads: { page?: number; pageSize?: number; query?: string; status?: string; from?: string; to?: string }) {
     return new Promise(async (resolve, reject) => {
       try {
         const items = await this.service.getAll(payloads);

@@ -140,10 +140,12 @@ const defaultRoute: any = (fastify: any, options, done) => {
         properties: {
           page: { type: 'number' },
           pageSize: { type: 'number' },
-          status: { 
+          status: {
             type: 'string',
             enum: ['active', 'expired', 'cancelled', 'pending', 'trial']
-          }
+          },
+          from: { type: 'string' },
+          to: { type: 'string' }
         },
         additionalProperties: false
       }
@@ -155,8 +157,10 @@ const defaultRoute: any = (fastify: any, options, done) => {
       const page = request.query.page || 1;
       const pageSize = request.query.pageSize || 10;
       const status = request.query.status;
+      const from = request.query.from;
+      const to = request.query.to;
 
-      let Q = Controller.list(page, pageSize, status);
+      let Q = Controller.list(page, pageSize, status, from, to);
       return coddyger.api(reply, Q);
     }
   });
