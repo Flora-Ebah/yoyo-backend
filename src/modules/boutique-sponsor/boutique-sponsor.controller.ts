@@ -33,9 +33,22 @@ export class BoutiqueSponsorController {
     }).catch((e: IErrorObject) => coddyger.catchReturn(e, controllerLabel, 'list'));
   }
 
-  byBoutique(boutiqueId: string) {
+  /**
+   * Mise en avant active d'une boutique.
+   *
+   * Accessible à l'administrateur ET au marchand propriétaire de la boutique (self-service).
+   * [GARDE DE PROPRIÉTÉ] Un marchand non-admin ne peut lire que SA propre boutique : sinon on
+   * renvoie 404 (anti-IDOR, on masque l'existence de la boutique d'autrui).
+   */
+  byBoutique(boutiqueId: string, requester?: { _id: string; isAdmin?: boolean }) {
     return new Promise(async (resolve, reject) => {
       try {
+        if (requester && !requester.isAdmin) {
+          const owned = await this.service.isOwnedBy(boutiqueId, String(requester._id));
+          if (!owned) {
+            return resolve({ status: defines.status.notFound, message: 'Boutique introuvable.', data: null });
+          }
+        }
         const data = await this.service.activeForBoutique(boutiqueId);
         resolve({ status: defines.status.requestOK, message: 'OK', data });
       } catch (error) {

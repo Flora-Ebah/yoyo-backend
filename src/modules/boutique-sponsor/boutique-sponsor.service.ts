@@ -68,6 +68,22 @@ export class BoutiqueSponsorService {
   }
 
   /**
+   * [GARDE DE PROPRIÉTÉ] Indique si la boutique `boutiqueId` appartient au marchand `userId`.
+   *
+   * Réutilisable par toute route partenaire (verify) pour garantir qu'un marchand ne lit/pilote
+   * JAMAIS la boutique d'un autre. La propriété se lit sur le champ `partner.user` (réf. Client),
+   * peuplé en `{ _id, ... }` par `PartnerSet`. Retourne `false` si la boutique est introuvable,
+   * supprimée ou sans propriétaire (anti-IDOR : l'appelant renverra alors 404/403).
+   */
+  async isOwnedBy(boutiqueId: string, userId: string): Promise<boolean> {
+    if (!coddyger.string.isValidObjectId(boutiqueId) || !userId) return false;
+    const boutique: any = await this.partners.selectOne({ _id: boutiqueId, status: { $nin: ['removed'] } });
+    if (!boutique) return false;
+    const ownerId = boutique.user?._id ?? boutique.user;
+    return !!ownerId && String(ownerId) === String(userId);
+  }
+
+  /**
    * Sponsorisation active d'une boutique (sinon null). Expire paresseusement les
    * enregistrements dépassés et aligne `isSponsored` en conséquence.
    */

@@ -63,13 +63,16 @@ const defaultRoute: any = (fastify: any, options, done) => {
     }))
   });
 
-  // Sponsorisation active d'une boutique (admin)
+  // Sponsorisation active d'une boutique (admin OU marchand propriétaire — self-service).
+  // preHandler `verify` (tout utilisateur connecté) + GARDE DE PROPRIÉTÉ dans le contrôleur :
+  // un marchand ne peut lire que SA boutique ; l'admin garde l'accès à toutes.
   fastify.route({
     schema: { tags, summary: 'Mise en avant active d’une boutique' },
     method: 'GET',
     url: `${routePath}/by-boutique/:boutiqueId`,
-    preHandler: TokenMiddleware.verifyAdmin,
-    handler: (request, reply) => coddyger.api(reply, Controller.byBoutique(String(request.params.boutiqueId)))
+    preHandler: TokenMiddleware.verify,
+    handler: (request, reply) =>
+      coddyger.api(reply, Controller.byBoutique(String(request.params.boutiqueId), request.user))
   });
 
   // Retirer la mise en avant (admin)
