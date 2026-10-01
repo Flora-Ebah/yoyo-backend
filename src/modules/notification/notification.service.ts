@@ -1,4 +1,5 @@
 import { INotification } from './notification.interface';
+import { dateRangeFilter } from '../../shared/date-filter';
 import { NotificationSet } from './notification.model';
 import coddyger, { IData, IErrorObject, LoggerService, LogLevel } from 'coddyger';
 import { NotificationManager, NotificationType, NotificationCategory } from '../../services/notification';
@@ -17,22 +18,24 @@ export class NotificationService {
 	 * Récupère tous les éléments
 	 * @returns Liste des éléments
 	 */
-	async getAll(payloads: { page?: number; pageSize?: number; query?: string; status?: string }): Promise<any> {
+	async getAll(payloads: { page?: number; pageSize?: number; query?: string; status?: string; from?: string; to?: string }): Promise<any> {
 		try {
 			let page: number = payloads.page ?? 1;
 			let pageSize: number = payloads.pageSize ?? 10;
 			let query: string = payloads.query ?? '';
 			let status: any = payloads.status ?? '';
+			const dateF: any = dateRangeFilter(payloads.from, payloads.to);
 
 			let data: any | IErrorObject = {};
 
 			if (coddyger.string.isEmpty(query) && coddyger.string.isEmpty(status)) {
-				data = await this.dao.select({ params: {}, page, pageSize });
+				data = await this.dao.select({ params: { ...dateF }, page, pageSize });
 			} else if (!coddyger.string.isEmpty(status)) {
-				data = await this.dao.select({ params: { status }, page, pageSize });
+				data = await this.dao.select({ params: { ...dateF, status }, page, pageSize });
 			} else {
 				data = await this.dao.select({
 					params: {
+						...dateF,
 						$or: [{ slug: { $regex: query || '', $options: 'i' } }, { title: { $regex: query || '', $options: 'i' } }]
 					},
 					page,

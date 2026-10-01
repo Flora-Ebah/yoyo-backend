@@ -17,7 +17,7 @@ export class NotificationController {
    * Récupère toutes les notifications
    * @param payloads Paramètres de pagination et de filtrage
    */
-  getAll(payloads: { page?: number; pageSize?: number; query?: string; status?: string }) {
+  getAll(payloads: { page?: number; pageSize?: number; query?: string; status?: string; from?: string; to?: string }) {
     return new Promise(async (resolve, reject) => {
       try {
         const items = await this.service.getAll(payloads);

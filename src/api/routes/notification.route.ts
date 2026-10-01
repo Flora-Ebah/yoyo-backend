@@ -18,7 +18,9 @@ const defaultRoute: any = (fastify: any, options, done) => {
           page: { type: 'number' },
           pageSize: { type: 'number' },
           status: { type: 'string' },
-          q: { type: 'string' }
+          q: { type: 'string' },
+          from: { type: 'string' },
+          to: { type: 'string' }
         },
         required: [],
         additionalProperties: false
