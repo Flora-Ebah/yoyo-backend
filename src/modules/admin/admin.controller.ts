@@ -1,5 +1,6 @@
 import coddyger, { IData, IErrorObject, defines, env } from 'coddyger';
 import { locale } from '../../public';
+import { dateRangeFilter } from '../../shared/date-filter';
 import { IAdmin, AdminSet } from './';
 import { IProfile, ProfileSet } from '../profile';
 import { TokenMiddleware } from '../../api/middleware';
@@ -436,6 +437,8 @@ export class AdminController {
 		sortBy?: string;
 		orderBy?: string;
 		status?: string;
+		from?: string;
+		to?: string;
 	}) {
 		return new Promise(async (resolve, reject) => {
 			const page: number = payloads.page ?? 1;
@@ -444,18 +447,20 @@ export class AdminController {
 			const status: any = payloads.status!;
 			const sortBy: string = payloads.sortBy ?? '';
 			const orderBy: string = payloads.orderBy ?? '';
+			const dateF: any = dateRangeFilter(payloads.from, payloads.to);
 
 			let data: any | IErrorObject = {};
 
 			if (coddyger.string.isEmpty(query) && coddyger.string.isEmpty(status)) {
-				data = await this.dao.select({ params: {}, page, pageSize });
+				data = await this.dao.select({ params: { ...dateF }, page, pageSize });
 			} else if (!coddyger.string.isEmpty(sortBy) || !coddyger.string.isEmpty(orderBy)) {
-				data = await this.dao.select({ params: {}, page, pageSize, sort: sortBy, orderBy });
+				data = await this.dao.select({ params: { ...dateF }, page, pageSize, sort: sortBy, orderBy });
 			} else if (!coddyger.string.isEmpty(status)) {
-				data = await this.dao.select({ params: { status }, page, pageSize, sort: sortBy, orderBy });
+				data = await this.dao.select({ params: { ...dateF, status }, page, pageSize, sort: sortBy, orderBy });
 			} else {
 				data = await this.dao.select({
 					params: {
+						...dateF,
 						$or: [
 							{ slug: { $regex: query || '', $options: 'i' } },
 							{ email: { $regex: query || '', $options: 'i' } },
