@@ -36,6 +36,7 @@ const schema = new mongoose.Schema<IPartner>({
     facebook: { type: String },
     instagram: { type: String },
     tiktok: { type: String },
+    twitter: { type: String },
     whatsapp: { type: String },
     website: { type: String }
   },

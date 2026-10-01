@@ -31,6 +31,7 @@ export interface IPartner {
     facebook?: string;
     instagram?: string;
     tiktok?: string;
+    twitter?: string;
     whatsapp?: string;
     website?: string;
   };
