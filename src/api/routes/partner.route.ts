@@ -545,6 +545,30 @@ const defaultRoute: any = (fastify: any, options, done) => {
     }
   });
 
+  // [ADMIN] Boutiques qu'un utilisateur GÈRE en tant que GÉRANT ACTIF (hors celles qu'il possède).
+  // Équivalent « gérées » de `GET /partners/me`, interrogeable pour un userId arbitraire.
+  fastify.route({
+    schema: {
+      tags,
+      summary: "Boutiques gérées (gérant) par un utilisateur (administration)",
+      params: {
+        type: 'object',
+        properties: { userId: { type: 'string' } },
+        required: ['userId'],
+        additionalProperties: false
+      }
+    },
+    method: 'GET',
+    url: `${routePath}/managed-by/:userId`,
+    preHandler: TokenMiddleware.verifyAdmin,
+    handler: (request, reply) => {
+      const userId: any = request.params.userId;
+
+      const Q = Controller.getManagedByUserId(userId);
+      return coddyger.api(reply, Q);
+    }
+  });
+
   // [ADMIN] Créer une boutique rattachée à un marchand EXISTANT. `POST /partners` force le
   // propriétaire = utilisateur connecté ; ici l'admin choisit le marchand cible via l'URL.
   fastify.route({

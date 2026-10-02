@@ -411,6 +411,56 @@ export class PartnerController {
   }
 
   /**
+   * [ADMIN] Boutiques qu'un utilisateur (client) GÈRE en tant que GÉRANT ACTIF
+   * (lien actif dans boutique-manager), à l'exclusion de celles qu'il POSSÈDE.
+   *
+   * Pendant « admin » de `GET /partners/me` : résout les ids gérés via
+   * `BoutiqueManagerService.getManagedBoutiqueIds`, puis les objets Partner publics
+   * via `PartnerService.getByIds` (qui exclut déjà removed/archived).
+   * Trié par nom pour un ordre cohérent. Aucune boutique ⇒ `data: []`.
+   */
+  getManagedByUserId(userId: string) {
+    return new Promise(async (resolve, reject) => {
+      try {
+        if (!coddyger.string.isValidObjectId(userId)) {
+          return resolve({
+            status: defines.status.badRequest,
+            message: locale.wrongObjectId("de l'utilisateur"),
+            data: null
+          });
+        }
+
+        const managedIds = await this.bmService.getManagedBoutiqueIds(userId);
+        if (!managedIds || managedIds.length === 0) {
+          return resolve({
+            status: defines.status.requestOK,
+            message: 'Aucune boutique gérée.',
+            data: []
+          });
+        }
+
+        const managed = await this.service.getByIds(managedIds);
+
+        // On ne montre QUE les boutiques gérées : on exclut celles que l'user possède déjà.
+        const rows = managed
+          .filter((m: any) => String(m.user) !== String(userId))
+          .sort((a: any, b: any) => String(a?.name ?? '').localeCompare(String(b?.name ?? '')));
+
+        resolve({
+          status: defines.status.requestOK,
+          message: 'Boutiques gérées récupérées avec succès.',
+          data: rows
+        });
+      } catch (error) {
+        reject(error);
+      }
+    }).catch((e: IErrorObject) => {
+      console.error(e);
+      return coddyger.catchReturn(e, controllerLabel, 'getManagedByUserId');
+    });
+  }
+
+  /**
    * Récupère les partenaires ouverts à la date actuelle
    * @param payloads Paramètres de pagination et filtres
    * @returns Liste des partenaires ouverts
