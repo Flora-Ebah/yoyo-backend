@@ -98,6 +98,87 @@ export class PartnerEngagementController {
     }).catch((e: IErrorObject) => coddyger.catchReturn(e, controllerLabel, 'addComment'));
   }
 
+  /* ---------------------------------------------------------------------------------------------- */
+  /* ADMIN — modération de l'engagement d'une boutique (TokenMiddleware.verifyAdmin)                 */
+  /* ---------------------------------------------------------------------------------------------- */
+
+  /** GET /admin/engagement/:boutiqueId/summary. */
+  adminSummary(boutiqueId: string) {
+    return new Promise(async (resolve, reject) => {
+      try {
+        if (!coddyger.string.isValidObjectId(boutiqueId)) {
+          return resolve({ status: defines.status.badRequest, message: 'Identifiant de boutique invalide.', data: null });
+        }
+        if (!(await this.service.partnerExists(boutiqueId))) {
+          return resolve({ status: defines.status.notFound, message: 'Boutique introuvable.', data: null });
+        }
+        const data = await this.service.getEngagementSummary(boutiqueId);
+        resolve({ status: defines.status.requestOK, message: 'OK', data });
+      } catch (error) {
+        reject(error);
+      }
+    }).catch((e: IErrorObject) => coddyger.catchReturn(e, controllerLabel, 'adminSummary'));
+  }
+
+  /** GET /admin/engagement/:boutiqueId/comments. */
+  adminListComments(boutiqueId: string, page: number, limit: number, status?: string) {
+    return new Promise(async (resolve, reject) => {
+      try {
+        if (!coddyger.string.isValidObjectId(boutiqueId)) {
+          return resolve({ status: defines.status.badRequest, message: 'Identifiant de boutique invalide.', data: null });
+        }
+        if (!(await this.service.partnerExists(boutiqueId))) {
+          return resolve({ status: defines.status.notFound, message: 'Boutique introuvable.', data: null });
+        }
+        const safePage = Math.max(1, Number(page) || 1);
+        const safeLimit = Math.min(100, Math.max(1, Number(limit) || 20));
+        const includeRemoved = String(status || '').toLowerCase() === 'all';
+        const data = await this.service.getCommentsForAdmin(boutiqueId, safePage, safeLimit, includeRemoved);
+        resolve({ status: defines.status.requestOK, message: 'OK', data });
+      } catch (error) {
+        reject(error);
+      }
+    }).catch((e: IErrorObject) => coddyger.catchReturn(e, controllerLabel, 'adminListComments'));
+  }
+
+  /** DELETE /admin/engagement/comments/:commentId — suppression logique. */
+  adminRemoveComment(commentId: string) {
+    return new Promise(async (resolve, reject) => {
+      try {
+        if (!coddyger.string.isValidObjectId(commentId)) {
+          return resolve({ status: defines.status.badRequest, message: 'Identifiant de commentaire invalide.', data: null });
+        }
+        const data = await this.service.removeComment(commentId);
+        if (!data) {
+          return resolve({ status: defines.status.notFound, message: 'Commentaire introuvable.', data: null });
+        }
+        resolve({ status: defines.status.requestOK, message: 'Commentaire supprimé.', data });
+      } catch (error) {
+        reject(error);
+      }
+    }).catch((e: IErrorObject) => coddyger.catchReturn(e, controllerLabel, 'adminRemoveComment'));
+  }
+
+  /** GET /admin/engagement/:boutiqueId/likers. */
+  adminListLikers(boutiqueId: string, page: number, limit: number) {
+    return new Promise(async (resolve, reject) => {
+      try {
+        if (!coddyger.string.isValidObjectId(boutiqueId)) {
+          return resolve({ status: defines.status.badRequest, message: 'Identifiant de boutique invalide.', data: null });
+        }
+        if (!(await this.service.partnerExists(boutiqueId))) {
+          return resolve({ status: defines.status.notFound, message: 'Boutique introuvable.', data: null });
+        }
+        const safePage = Math.max(1, Number(page) || 1);
+        const safeLimit = Math.min(100, Math.max(1, Number(limit) || 20));
+        const data = await this.service.getLikers(boutiqueId, safePage, safeLimit);
+        resolve({ status: defines.status.requestOK, message: 'OK', data });
+      } catch (error) {
+        reject(error);
+      }
+    }).catch((e: IErrorObject) => coddyger.catchReturn(e, controllerLabel, 'adminListLikers'));
+  }
+
   /** POST /partners/:id/share. */
   share(partnerId: string) {
     return new Promise(async (resolve, reject) => {

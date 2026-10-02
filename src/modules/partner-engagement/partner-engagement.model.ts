@@ -31,6 +31,22 @@ export class PartnerLikeSet extends MongoDbDao<IPartnerLike & Document> implemen
   count(params: object): Promise<number | any> {
     return Promise.resolve(this.defaultModel.countDocuments(params)).catch((e: any) => ({ error: true, data: e }));
   }
+
+  /** Liste paginée des clients ayant liké une boutique (récents d'abord), auteur peuplé. */
+  listLikersByPartner(partnerId: string, page: number, limit: number): Promise<any> {
+    return new Promise(async (resolve, reject) => {
+      const startIndex = (page - 1) * limit;
+      const params = { partnerId };
+      const [rows, total] = await Promise.all([
+        this.defaultModel.find(params)
+          .sort({ createdAt: -1 }).skip(startIndex).limit(limit)
+          .populate('userId', '_id firstname lastname avatar')
+          .lean(),
+        this.defaultModel.countDocuments(params)
+      ]);
+      resolve({ rows, total });
+    }).catch((e: any) => ({ error: true, data: e }));
+  }
 }
 
 /* ------------------------------------------------------------------------------------------------ */
@@ -66,6 +82,26 @@ export class PartnerCommentSet extends MongoDbDao<IPartnerComment & Document> im
     return new Promise(async (resolve, reject) => {
       const startIndex = (page - 1) * limit;
       const params = { partnerId, status: 'active' };
+      const [rows, total] = await Promise.all([
+        this.defaultModel.find(params)
+          .sort({ createdAt: -1 }).skip(startIndex).limit(limit)
+          .populate('userId', '_id firstname lastname avatar')
+          .lean(),
+        this.defaultModel.countDocuments(params)
+      ]);
+      resolve({ rows, total });
+    }).catch((e: any) => ({ error: true, data: e }));
+  }
+
+  /**
+   * Liste paginée des commentaires d'une boutique pour la MODÉRATION (récents d'abord),
+   * auteur peuplé. `includeRemoved=true` renvoie aussi les commentaires supprimés
+   * (status 'removed') ; sinon seuls les 'active' sont renvoyés.
+   */
+  listByPartnerForAdmin(partnerId: string, page: number, limit: number, includeRemoved: boolean): Promise<any> {
+    return new Promise(async (resolve, reject) => {
+      const startIndex = (page - 1) * limit;
+      const params: any = includeRemoved ? { partnerId } : { partnerId, status: 'active' };
       const [rows, total] = await Promise.all([
         this.defaultModel.find(params)
           .sort({ createdAt: -1 }).skip(startIndex).limit(limit)

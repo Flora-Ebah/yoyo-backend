@@ -92,6 +92,67 @@ export class PartnerEngagementService {
     return { shareCount: Number(res?.shareCount) || 0 };
   }
 
+  /** Compteurs d'engagement d'une boutique pour l'ADMIN (sans l'état `liked`). */
+  async getEngagementSummary(partnerId: string): Promise<any> {
+    const [likeCount, commentCount, stats] = await Promise.all([
+      this.likeDao.count({ partnerId }),
+      this.commentDao.count({ partnerId, status: 'active' }),
+      this.statsDao.selectOne({ partnerId })
+    ]);
+    const shareCount: number = stats && !stats.error && stats.shareCount ? stats.shareCount : 0;
+    return {
+      likeCount: Number(likeCount) || 0,
+      commentCount: Number(commentCount) || 0,
+      shareCount
+    };
+  }
+
+  /**
+   * Liste paginée des commentaires pour la MODÉRATION (récents d'abord), avec `status`.
+   * Par défaut ne liste que les commentaires actifs ; `includeRemoved=true` inclut aussi
+   * les commentaires supprimés logiquement.
+   */
+  async getCommentsForAdmin(partnerId: string, page: number, limit: number, includeRemoved: boolean): Promise<any> {
+    const res: any = await this.commentDao.listByPartnerForAdmin(partnerId, page, limit, includeRemoved);
+    if (res && res.error) throw res;
+    const items = (res.rows || []).map((r: any) => this.formatCommentForAdmin(r));
+    return { items, total: res.total, page, limit };
+  }
+
+  /**
+   * Suppression LOGIQUE d'un commentaire (status 'removed', convention projet).
+   * Renvoie `null` si le commentaire est introuvable.
+   */
+  async removeComment(commentId: string): Promise<any> {
+    const existing: any = await this.commentDao.selectOne({ _id: commentId });
+    if (!existing || existing.error || !existing._id) return null;
+    const res: any = await this.commentDao.update({ _id: commentId }, { status: 'removed' });
+    if (res && res.error) throw res;
+    return { _id: commentId };
+  }
+
+  /** Liste paginée des clients ayant liké une boutique (récents d'abord). */
+  async getLikers(partnerId: string, page: number, limit: number): Promise<any> {
+    const res: any = await this.likeDao.listLikersByPartner(partnerId, page, limit);
+    if (res && res.error) throw res;
+    const items = (res.rows || []).map((r: any) => {
+      const author = r?.userId || {};
+      const name = [author.firstname, author.lastname].filter(Boolean).join(' ').trim();
+      return {
+        _id: author._id ?? r?.userId ?? null,
+        name,
+        avatar: author.avatar ?? null,
+        createdAt: r?.createdAt
+      };
+    });
+    return { items, total: res.total, page, limit };
+  }
+
+  /** Projection modération d'un commentaire : { _id, author, text, createdAt, status }. */
+  private formatCommentForAdmin(doc: any): any {
+    return { ...this.formatComment(doc), status: doc?.status ?? 'active' };
+  }
+
   /** Projection publique d'un commentaire : { _id, author, text, createdAt }. */
   private formatComment(doc: any): any {
     const author = doc?.userId || {};
