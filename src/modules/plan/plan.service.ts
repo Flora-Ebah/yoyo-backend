@@ -23,22 +23,26 @@ export class PlanService {
 
       let data: any | IErrorObject = {};
 
-      if (coddyger.string.isEmpty(query) && coddyger.string.isEmpty(status)) {
-				data = await this.dao.select({ params: {}, page, pageSize });
-			} else if (!coddyger.string.isEmpty(status)) {
-				data = await this.dao.select({ params: { status }, page, pageSize });
-			} else {
-				data = await this.dao.select({
-					params: {
-						$or: [
-							{ slug: { $regex: query || '', $options: 'i' } },
-							{ title: { $regex: query || '', $options: 'i' } },
-						]
-					},
-					page,
-					pageSize
-				});
+			// Toujours exclure les plans supprimés/archivés de la liste, sinon un plan
+			// soft-deleté (status='removed') reste affiché — avec un badge « ACTIF » basé
+			// sur isActive — et toute nouvelle tentative de suppression renvoie un 404
+			// « plan introuvable » (getById, lui, filtre bien les 'removed').
+			const params: any = { status: { $nin: ['removed', 'archived'] } };
+
+			// Un filtre de statut explicite choisi dans le back-office prime sur le défaut.
+			if (!coddyger.string.isEmpty(status)) {
+				params.status = status;
 			}
+
+			// Recherche texte éventuelle, combinée au filtre ci-dessus.
+			if (!coddyger.string.isEmpty(query)) {
+				params.$or = [
+					{ slug: { $regex: query, $options: 'i' } },
+					{ title: { $regex: query, $options: 'i' } },
+				];
+			}
+
+			data = await this.dao.select({ params, page, pageSize });
 
 			if (data.error) {
 				throw data;
@@ -144,8 +148,14 @@ export class PlanService {
   async update(id: string, item: Partial<IPlan>): Promise<IPlan | null> {
     try {
       const result:any = await this.dao.update({ _id: id }, item);
-      if (result.error) {
-        throw new Error(result);
+      // Ne lever que sur une vraie erreur DAO ({ error: true }), avec un message string
+      // (et pas `new Error(objet)` qui produisait "[object Object]" → 500 opaque).
+      if (result?.error === true) {
+        const message =
+          typeof result?.message === 'string'
+            ? result.message
+            : `Échec de la mise à jour du plan ${id}`;
+        throw new Error(message);
       }
       return this.getById(id);
     } catch (error) {
@@ -166,7 +176,9 @@ export class PlanService {
    */
   async delete(id: string): Promise<void> {
     try {
-      const result:any = await this.dao.update({ _id: id }, { status: 'removed' });
+      // On désactive aussi le plan (isActive:false) en plus du statut 'removed' :
+      // le badge et les listes basées sur isActive restent cohérents avec la suppression.
+      const result:any = await this.dao.update({ _id: id }, { status: 'removed', isActive: false });
       // On ne considère une vraie erreur QUE si le DAO renvoie { error: true }.
       // modifiedCount: 0 (plan déjà 'removed' / inchangé) n'est PAS une erreur :
       // la suppression logique est idempotente.
