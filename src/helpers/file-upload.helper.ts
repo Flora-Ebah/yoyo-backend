@@ -107,6 +107,14 @@ export class FileUpload {
 export const sendStoredFile = async (reply: any, key: string): Promise<any> => {
   const notFound = () => reply.code(404).send({ message: 'Fichier introuvable', data: null });
 
+  // Les médias publics sont embarqués (<img>/<video>) depuis l'admin web, une AUTRE origine.
+  // Helmet pose globalement `Cross-Origin-Resource-Policy: same-origin` (hook onRequest), ce qui
+  // fait bloquer le média par le navigateur : net::ERR_BLOCKED_BY_RESPONSE.NotSameOrigin.
+  // On écrase cet en-tête UNIQUEMENT pour cette route de fichiers (le handler s'exécute après le
+  // hook onRequest de helmet, donc notre valeur gagne) ; le reste de l'API garde sa politique.
+  // Posé avant tout retour pour couvrir aussi bien la réponse 302 que l'envoi direct du fichier.
+  reply.header('Cross-Origin-Resource-Policy', 'cross-origin');
+
   if (!isPublicKey(key)) return notFound();
 
   if (await storage.localPath(key)) return reply.sendFile(key, uploadPath);
