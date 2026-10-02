@@ -64,6 +64,12 @@ export interface IRegister {
   contact: string;
   birthdate: Date;
   country: string;
+  // Code promo unifié (facultatif) : résolu automatiquement en code influenceur ou parrainage à l'inscription.
+  promoCode?: string;
+  // Rétro-compat (anciennes versions app) : codes envoyés séparément, toujours tolérés.
+  referralCode?: string;
+  influencerCode?: string;
+  agentMatricule?: string;
 }
 
 export interface ISecurityPreferences {

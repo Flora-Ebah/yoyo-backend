@@ -29,6 +29,9 @@ const defaultRoute: any = (fastify: any, options, done) => {
           // Matricule de l'agent (interne) rattaché à l'inscription, saisi depuis yoyo-pro.
           // Facultatif : s'il est fourni, il doit correspondre à un agent existant (sinon erreur).
           agentMatricule: { type: 'string' },
+          // Code promo unifié (facultatif) : résolu en influenceur PUIS parrainage côté serveur.
+          promoCode: { type: 'string' },
+          // Rétro-compat (anciennes versions app) : codes envoyés séparément, toujours tolérés.
           // Parrainage (#6/#7) : code du parrain (facultatif).
           referralCode: { type: 'string' },
           // Attribution influenceur (#17) : code influenceur (facultatif).

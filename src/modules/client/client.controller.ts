@@ -2,6 +2,7 @@ import coddyger, { IErrorObject, defines, env } from 'coddyger';
 import { locale } from '../../public';
 import { IClient, IRegister, ClientService, IUpdatePassword } from './';
 import { LoginService } from '../login/login.service';
+import { InfluencerService } from '../influencer/influencer.service';
 import { notificationManager, NotificationCategory, NotificationType } from '../../services/notification';
 import { NotificationHelper } from '../../helpers/notification.helper';
 
@@ -10,10 +11,12 @@ const controllerLabel: string = 'ClientController';
 export class ClientController {
   private readonly service: ClientService;
   private readonly serviceLogin: LoginService;
+  private readonly serviceInfluencer: InfluencerService;
 
   constructor() {
     this.service = new ClientService();
     this.serviceLogin = new LoginService();
+    this.serviceInfluencer = new InfluencerService();
   }
 
   /**
@@ -144,23 +147,70 @@ export class ClientController {
           formattedItem.createdBy = agent._id;
         }
 
-        // Parrainage (#6/#7) : code du parrain saisi à l'inscription (facultatif). On résout le
-        // parrain et on mémorise le lien (`referredBy`) ; le crédit (mois offert) intervient
-        // plus tard, quand le filleul devient abonné payant.
-        const sponsorCode = (item as any).referralCode;
-        if (sponsorCode && String(sponsorCode).trim()) {
-          const referrer: any = await this.service.resolveReferrer(String(sponsorCode));
-          if (referrer) formattedItem.referredBy = referrer._id;
+        // ===================== Code promo unifié (influenceur OU parrainage) =====================
+        // L'app n'envoie plus qu'UN SEUL champ `promoCode`, que le serveur résout automatiquement.
+        // Rétro-compat : si `promoCode` est absent, on retombe sur les anciens champs séparés
+        // (`influencerCode` / `referralCode`) envoyés par les versions plus anciennes de l'app.
+        // `promo` est renvoyé dans la réponse pour que l'app affiche le type reconnu.
+        let promo: { type: 'influencer' | 'referral' | 'invalid' | 'none'; code: string | null } = {
+          type: 'none',
+          code: null
+        };
+
+        const rawPromo = (item as any).promoCode;
+        if (rawPromo && String(rawPromo).trim()) {
+          const promoCode = String(rawPromo).trim();
+          promo.code = promoCode.toUpperCase();
+
+          // PRIORITÉ (choix documenté) : on tente D'ABORD le code influenceur, PUIS le code
+          // parrainage. Ce choix tranche une éventuelle collision (un même code reconnu par les
+          // deux systèmes) en faveur de l'influenceur.
+          // a. Influenceur : code actif ?
+          const influencer: any = await this.serviceInfluencer.validateCode(promoCode);
+          if (influencer) {
+            // Même comportement que l'ancien `influencerCode` : mémorisé tel quel (uppercase).
+            formattedItem.influencerCode = promoCode.toUpperCase();
+            promo.type = 'influencer';
+          } else {
+            // b. Parrainage : un client possède-t-il ce code de parrainage ?
+            const referrer: any = await this.service.resolveReferrer(promoCode);
+            if (referrer) {
+              // Même logique que l'ancien `referralCode` : on mémorise le lien `referredBy`.
+              // Le crédit (mois offert) intervient plus tard, à la souscription payante.
+              formattedItem.referredBy = referrer._id;
+              promo.type = 'referral';
+            } else {
+              // c. Code inconnu : on NE bloque PAS l'inscription (code promo facultatif), on l'ignore.
+              promo.type = 'invalid';
+            }
+          }
+        } else {
+          // Rétro-compat : anciens champs séparés, traités exactement comme avant.
+          // Parrainage (#6/#7) : code du parrain saisi à l'inscription (facultatif). On résout le
+          // parrain et on mémorise le lien (`referredBy`) ; le crédit (mois offert) intervient
+          // plus tard, quand le filleul devient abonné payant.
+          const sponsorCode = (item as any).referralCode;
+          if (sponsorCode && String(sponsorCode).trim()) {
+            const referrer: any = await this.service.resolveReferrer(String(sponsorCode));
+            if (referrer) {
+              formattedItem.referredBy = referrer._id;
+              promo = { type: 'referral', code: String(sponsorCode).trim().toUpperCase() };
+            }
+          }
+
+          // Attribution influenceur (#17) : code saisi à l'inscription (facultatif), mémorisé tel quel.
+          const infCode = (item as any).influencerCode;
+          if (infCode && String(infCode).trim()) {
+            formattedItem.influencerCode = String(infCode).trim().toUpperCase();
+            promo = { type: 'influencer', code: String(infCode).trim().toUpperCase() };
+          }
         }
+
         // Le code saisi (celui du parrain) ne doit jamais devenir le code propre du nouveau
         // client : on le retire pour que `create()` en génère un neuf et unique.
         delete formattedItem.referralCode;
-
-        // Attribution influenceur (#17) : code saisi à l'inscription (facultatif), mémorisé tel quel.
-        const infCode = (item as any).influencerCode;
-        if (infCode && String(infCode).trim()) {
-          formattedItem.influencerCode = String(infCode).trim().toUpperCase();
-        }
+        // `promoCode` est un champ d'entrée transitoire : il ne doit pas être persisté sur le client.
+        delete formattedItem.promoCode;
 
         // Détails du dernier compte enregistré pour le slug
 			  const theLast: any = await this.service.selectLatest();
@@ -181,10 +231,12 @@ export class ClientController {
           metadata: { type: formattedItem.isPartner ? 'pros' : 'clients', clientId: String(formattedItem._id) }
         });
 
+        // On expose le type de code promo reconnu pour que l'app affiche le bon message
+        // (« code influenceur appliqué » / « code parrainage appliqué » / « code invalide »).
         resolve({
           status: defines.status.created,
           message: locale.controller.successSave,
-          data: null
+          data: { promo }
         });
       } catch (error) {
         reject(error);
