@@ -88,13 +88,24 @@ export class PlanService {
    */
   async getById(id: string): Promise<any> {
     try {
-      return await this.dao.selectOne({ _id: id, status: { $nin: ['removed', 'archived'] } });
+      const result = await this.dao.selectOne({ _id: id, status: { $nin: ['removed', 'archived'] } });
+      // Le DAO renvoie un objet { error: true } en cas d'erreur réelle (exception Mongo)
+      if (result && (result as any).error) {
+        throw result;
+      }
+      return result ?? null;
     } catch (error) {
-      LoggerService.log({ 
-        type: LogLevel.Error, 
-        content: error, 
-        location: this.serviceLabel, 
-        method: 'getById' 
+      // `selectOne` rejette avec `null`/`undefined` quand le document est introuvable
+      // (doc || Promise.reject(doc)). Ce n'est pas une erreur : on renvoie `null`
+      // pour que le contrôleur réponde proprement un 404 au lieu d'un 500.
+      if (error === null || error === undefined) {
+        return null;
+      }
+      LoggerService.log({
+        type: LogLevel.Error,
+        content: error,
+        location: this.serviceLabel,
+        method: 'getById'
       });
       throw error;
     }
@@ -156,8 +167,15 @@ export class PlanService {
   async delete(id: string): Promise<void> {
     try {
       const result:any = await this.dao.update({ _id: id }, { status: 'removed' });
-      if (result.error) {
-        throw new Error(result);
+      // On ne considère une vraie erreur QUE si le DAO renvoie { error: true }.
+      // modifiedCount: 0 (plan déjà 'removed' / inchangé) n'est PAS une erreur :
+      // la suppression logique est idempotente.
+      if (result?.error === true) {
+        const message =
+          typeof result?.message === 'string'
+            ? result.message
+            : `Échec de la suppression du plan ${id}`;
+        throw new Error(message);
       }
     } catch (error) {
       LoggerService.log({ 
