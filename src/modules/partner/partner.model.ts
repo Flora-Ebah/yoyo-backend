@@ -116,7 +116,7 @@ export class PartnerSet extends MongoDbDao<IPartner & Document> implements IData
 					.sort(sortObject)
 					.skip(startIndex)
 					.limit(pageSize)
-					.populate('user', 'firstname lastname email')
+					.populate('user', 'firstname lastname email isDocumentVerified')
 					.populate('categories')
 					.lean(),
 				model.countDocuments(payloads.params)
@@ -157,7 +157,7 @@ export class PartnerSet extends MongoDbDao<IPartner & Document> implements IData
 	}
 
 	selectOne(params: object, fields?: string): Promise<Document | any> {
-		return Promise.resolve(this.defaultModel.findOne(params, fields).lean().populate('user', 'firstname lastname email').populate('categories')).catch((e: any) => {
+		return Promise.resolve(this.defaultModel.findOne(params, fields).lean().populate('user', 'firstname lastname email isDocumentVerified').populate('categories')).catch((e: any) => {
 			return { error: true, data: e };
 		});
 	}

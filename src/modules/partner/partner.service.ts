@@ -131,6 +131,30 @@ export class PartnerService {
    * Récupère tous les éléments
    * @returns Liste des éléments
    */
+  /**
+   * Ajoute le flag public `verified` (boutique certifiée) à la fiche d'une boutique, dérivé du
+   * statut KYC du PROPRIÉTAIRE (`Client.isDocumentVerified`) exposé via `partner.user`.
+   * Défaut `false` si le propriétaire est introuvable ou non vérifié. Le champ brut
+   * `isDocumentVerified` est retiré de `user` pour n'exposer que le booléen `verified`.
+   * @param partner Boutique « lean » (telle que renvoyée par le DAO)
+   * @returns La même boutique enrichie du booléen `verified`
+   */
+  private addVerifiedFlag(partner: any): any {
+    if (!partner || typeof partner !== 'object') {
+      return partner;
+    }
+
+    const owner: any = partner.user;
+    const verified = !!(owner && typeof owner === 'object' && owner.isDocumentVerified === true);
+
+    if (owner && typeof owner === 'object' && 'isDocumentVerified' in owner) {
+      delete owner.isDocumentVerified;
+    }
+
+    partner.verified = verified;
+    return partner;
+  }
+
   async getAll(payloads: { page?: number; pageSize?: number; query?: string; status?: string; category?: string; createdBy?: string; sort?: string; from?: string; to?: string }): Promise<any> {
     try {
       let page: number = payloads.page ?? 1;
@@ -186,7 +210,9 @@ export class PartnerService {
 				throw data;
 			}
 
-      const rows: IPartner[] = data.rows;
+      const rows: IPartner[] = Array.isArray(data.rows)
+				? data.rows.map((row: any) => this.addVerifiedFlag(row))
+				: data.rows;
 			delete data.rows;
 
       return {
@@ -194,11 +220,11 @@ export class PartnerService {
         rows
       };
     } catch (error) {
-      LoggerService.log({ 
-        type: LogLevel.Error, 
-        content: error, 
-        location: this.serviceLabel, 
-        method: 'getAll' 
+      LoggerService.log({
+        type: LogLevel.Error,
+        content: error,
+        location: this.serviceLabel,
+        method: 'getAll'
       });
       throw error;
     }
@@ -230,7 +256,8 @@ export class PartnerService {
    */
   async getById(id: string): Promise<any> {
     try {
-      return await this.dao.selectOne({ _id: id, status: { $nin: ['removed', 'archived'] } });
+      const partner: any = await this.dao.selectOne({ _id: id, status: { $nin: ['removed', 'archived'] } });
+      return partner && !partner.error ? this.addVerifiedFlag(partner) : partner;
     } catch (error) {
       LoggerService.log({ 
         type: LogLevel.Error, 
