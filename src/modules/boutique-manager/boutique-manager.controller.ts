@@ -75,10 +75,10 @@ export class BoutiqueManagerController {
     }).catch((e: IErrorObject) => coddyger.catchReturn(e, controllerLabel, 'listByBoutique'));
   }
 
-  remove(id: string, ownerId: string) {
+  remove(id: string, ownerId: string, isAdmin: boolean = false) {
     return new Promise(async (resolve, reject) => {
       try {
-        const result: any = await this.service.remove(id, ownerId);
+        const result: any = await this.service.remove(id, ownerId, isAdmin);
         if (!result.success) {
           return resolve({ status: defines.status.badRequest, message: result.message, data: null });
         }

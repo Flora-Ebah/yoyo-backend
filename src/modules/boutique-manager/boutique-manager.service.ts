@@ -29,6 +29,19 @@ export class BoutiqueManagerService {
   }
 
   /**
+   * Un lien est visible uniquement si sa boutique référencée existe encore et n'est pas
+   * supprimée/archivée. `selectHug` peuple toujours `boutique` (avec `status`) : une boutique
+   * introuvable (ref cassée) revient à `null`, une boutique supprimée porte un `status` exclu.
+   */
+  private boutiqueVisible(link: any): boolean {
+    const b = link?.boutique;
+    if (!b) return false; // boutique introuvable / non peuplée
+    const status = typeof b === 'object' ? b.status : undefined;
+    if (typeof status === 'string' && ['removed', 'archived'].includes(status)) return false;
+    return true;
+  }
+
+  /**
    * Invite un gérant sur une boutique : crée un compte client (téléphone + code) et le lien.
    * Retourne le code d'accès en clair UNE fois, pour que le propriétaire le transmette au gérant
    * (le SMS étant désactivé côté serveur).
@@ -123,7 +136,8 @@ export class BoutiqueManagerService {
   /** Tous les gérants d'un propriétaire (toutes ses boutiques). */
   async listByOwner(ownerId: string): Promise<any[]> {
     const rows: any = await this.dao.selectHug({ owner: ownerId, status: { $nin: ['removed'] } });
-    return Array.isArray(rows) ? rows : [];
+    // Exclure les gérants rattachés à une boutique supprimée/archivée ou introuvable.
+    return Array.isArray(rows) ? rows.filter((r: any) => this.boutiqueVisible(r)) : [];
   }
 
   /**
@@ -138,19 +152,22 @@ export class BoutiqueManagerService {
   /** Gérants d'une boutique donnée. */
   async listByBoutique(boutiqueId: string): Promise<any[]> {
     const rows: any = await this.dao.selectHug({ boutique: boutiqueId, status: { $nin: ['removed'] } });
-    return Array.isArray(rows) ? rows : [];
+    // Exclure les liens dont la boutique est supprimée/archivée ou introuvable.
+    return Array.isArray(rows) ? rows.filter((r: any) => this.boutiqueVisible(r)) : [];
   }
 
   /**
    * Retire un gérant : soft-delete du lien + désactivation de son compte (il ne pourra plus se
    * connecter). Vérifie que le lien appartient bien au propriétaire.
    */
-  async remove(id: string, ownerId: string): Promise<any> {
+  async remove(id: string, ownerId: string, isAdmin: boolean = false): Promise<any> {
     const link: any = await this.dao.selectOne({ _id: id });
     if (!link || link.error) {
       return { success: false, message: 'Gérant introuvable.' };
     }
-    if (String(link.owner) !== String(ownerId)) {
+    // Un ADMIN (back-office) peut retirer n'importe quel gérant. Un propriétaire (yoyo-pro) ne
+    // peut retirer QUE ses propres gérants.
+    if (!isAdmin && String(link.owner) !== String(ownerId)) {
       return { success: false, message: "Vous ne pouvez pas retirer ce gérant." };
     }
 

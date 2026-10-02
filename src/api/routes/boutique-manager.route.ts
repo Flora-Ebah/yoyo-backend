@@ -82,7 +82,9 @@ const defaultRoute: any = (fastify: any, options, done) => {
     handler: (request, reply) => {
       const user: any = request.user;
       const id: any = request.params.id;
-      const Q = Controller.remove(id, user._id);
+      // Un jeton admin (back-office) porte `isAdmin` : il peut retirer n'importe quel gérant.
+      // Un propriétaire (yoyo-pro) ne peut retirer que les siens (contrôle dans le service).
+      const Q = Controller.remove(id, user._id, !!user.isAdmin);
       return coddyger.api(reply, Q);
     }
   });
