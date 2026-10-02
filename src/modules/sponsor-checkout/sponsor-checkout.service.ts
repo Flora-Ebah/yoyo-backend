@@ -35,42 +35,56 @@ export class SponsorCheckoutService {
   async checkout(merchantId: string, boutiqueId: string, sponsorPlanId: string): Promise<any> {
     // Validation des identifiants
     if (!coddyger.string.isValidObjectId(boutiqueId)) {
-      return { ok: false, status: 400, message: "Identifiant de boutique invalide." };
+      // TODO DIAGNOSTIC TEMPORAIRE - à retirer
+      return { ok: false, status: 400, message: "Identifiant de boutique invalide.", data: { stage: 'validation_body', field: 'boutiqueId' } };
     }
     if (!coddyger.string.isValidObjectId(sponsorPlanId)) {
-      return { ok: false, status: 400, message: 'Identifiant de formule invalide.' };
+      // TODO DIAGNOSTIC TEMPORAIRE - à retirer
+      return { ok: false, status: 400, message: 'Identifiant de formule invalide.', data: { stage: 'validation_body', field: 'sponsorPlanId' } };
     }
 
     // Appartenance : la boutique doit exister, ne pas être supprimée et appartenir au marchand.
     const boutique: any = await this.partners.selectOne({ _id: boutiqueId, status: { $nin: ['removed'] } });
     if (!boutique) {
-      return { ok: false, status: 404, message: 'Boutique introuvable.' };
+      // TODO DIAGNOSTIC TEMPORAIRE - à retirer
+      return { ok: false, status: 404, message: 'Boutique introuvable.', data: { stage: 'boutique_not_found' } };
     }
 
     // `user` est peuplé ({ _id, ... }) par PartnerSet ; on compare l'identifiant brut.
     const ownerId = boutique.user?._id ?? boutique.user;
     if (!ownerId || String(ownerId) !== String(merchantId)) {
       // On masque l'existence de la boutique d'autrui (anti-IDOR).
-      return { ok: false, status: 404, message: 'Boutique introuvable.' };
+      // TODO DIAGNOSTIC TEMPORAIRE - à retirer (stage reflète la vraie cause : propriété)
+      return { ok: false, status: 404, message: 'Boutique introuvable.', data: { stage: 'boutique_forbidden' } };
     }
 
     // Formule : doit exister et être active. Le prix provient d'ICI, jamais du client.
     const formula: any = await this.sponsorPlans.getById(sponsorPlanId);
     if (!formula || formula.status === 'removed') {
-      return { ok: false, status: 404, message: 'Formule de mise en avant introuvable.' };
+      // TODO DIAGNOSTIC TEMPORAIRE - à retirer
+      return { ok: false, status: 404, message: 'Formule de mise en avant introuvable.', data: { stage: 'formula_not_found' } };
     }
     if (formula.isActive === false || formula.status !== 'active') {
-      return { ok: false, status: 400, message: "Cette formule de mise en avant n'est plus disponible." };
+      // TODO DIAGNOSTIC TEMPORAIRE - à retirer
+      return { ok: false, status: 400, message: "Cette formule de mise en avant n'est plus disponible.", data: { stage: 'formula_inactive' } };
     }
 
     // Délégation à l'infrastructure de paiement partagée.
     const result: any = await this.transactions.createSponsorTransaction(merchantId, boutiqueId, formula);
 
     if (!result || result.success === false) {
+      // TODO DIAGNOSTIC TEMPORAIRE - à retirer : on remonte le motif réel (étape + réponse OM nettoyée,
+      // montant/devise/orderId) dans `data` tout en gardant un `message` utilisateur générique.
       return {
         ok: false,
         status: result?.status || 400,
-        message: result?.message || "Impossible d'initier le paiement de la mise en avant."
+        message: result?.message || "Impossible d'initier le paiement de la mise en avant.",
+        data: {
+          stage: result?.debug?.stage || 'create_sponsor_transaction',
+          amount: result?.debug?.amount ?? (Number(formula?.price) > 0 ? Number(formula.price) : 0),
+          currency: process.env.OM_CURRENCY || 'OUV',
+          ...(result?.debug ? { debug: result.debug } : {})
+        }
       };
     }
 

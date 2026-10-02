@@ -22,7 +22,8 @@ export class SponsorCheckoutController {
           return resolve({
             status: result.status || defines.status.badRequest,
             message: result.message,
-            data: null
+            // TODO DIAGNOSTIC TEMPORAIRE - à retirer : on propage le détail (stage/OM) au lieu de null
+            data: result.data ?? null
           });
         }
 

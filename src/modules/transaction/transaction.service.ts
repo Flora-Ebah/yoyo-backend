@@ -13,7 +13,28 @@ type ErrorResult = {
   success: false;
   error: Error;
   message: string;
+  // TODO DIAGNOSTIC TEMPORAIRE - à retirer : détail non sensible du motif d'échec (étape + réponse OM nettoyée)
+  debug?: any;
 };
+
+/**
+ * TODO DIAGNOSTIC TEMPORAIRE - à retirer
+ * Nettoie le corps de réponse Orange Money pour n'en garder que des champs non sensibles
+ * (code/message/description/...). Ne JAMAIS laisser passer de clés/tokens/credentials.
+ */
+function sanitizeOmBody(body: any): any {
+  if (body == null) return null;
+  if (typeof body === 'string') return body.slice(0, 500);
+  if (typeof body !== 'object') return body;
+  const allowed = ['code', 'message', 'description', 'error', 'error_description', 'status', 'statusCode', 'detail', 'title'];
+  const out: any = {};
+  for (const key of allowed) {
+    if (body[key] !== undefined && typeof body[key] !== 'object') out[key] = body[key];
+  }
+  // Repli : si rien d'autorisé n'a été trouvé, on expose uniquement les clés présentes (pas les valeurs) pour situer la forme.
+  if (Object.keys(out).length === 0) out._keys = Object.keys(body).slice(0, 20);
+  return out;
+}
 
 type SuccessResult<T> = {
   success: true;
@@ -680,7 +701,15 @@ export class TransactionService {
         return {
           success: false,
           error: new Error('Impossible d\'initier le paiement'),
-          message: 'Impossible d\'initier le paiement'
+          message: 'Impossible d\'initier le paiement',
+          // TODO DIAGNOSTIC TEMPORAIRE - à retirer
+          debug: {
+            stage: 'om_initiate',
+            reason: 'no_payment_url',
+            orderId: transaction?._id?.toString(),
+            amount: plan?.price,
+            omBody: sanitizeOmBody(paymentDetails)
+          }
         };
       }
       
@@ -704,7 +733,15 @@ export class TransactionService {
       return {
         success: false,
         error: error instanceof Error ? error : new Error(String(error)),
-        message: 'Erreur lors de l\'initiation du paiement'
+        message: 'Erreur lors de l\'initiation du paiement',
+        // TODO DIAGNOSTIC TEMPORAIRE - à retirer : étape + statut HTTP OM + corps OM nettoyé (sans secrets)
+        debug: {
+          stage: error?.step || 'om_payment',
+          omStatus: error?.status ?? null,
+          omBody: sanitizeOmBody(error?.data ?? error?.message ?? null),
+          orderId: transaction?._id?.toString(),
+          amount: plan?.price
+        }
       };
     }
   }
@@ -897,9 +934,17 @@ export class TransactionService {
       await this.create(paymentResult.data);
       const saved = await this.dao.selectOne({ _id: transactionId });
       return { success: true, data: saved };
-    } catch (error) {
+    } catch (error: any) {
       console.log(error);
-      return { success: false, error: error instanceof Error ? error : new Error(String(error)) };
+      return {
+        success: false,
+        error: error instanceof Error ? error : new Error(String(error)),
+        // TODO DIAGNOSTIC TEMPORAIRE - à retirer
+        debug: {
+          stage: 'db_create',
+          reason: error?.message || String(error)
+        }
+      };
     }
   }
 

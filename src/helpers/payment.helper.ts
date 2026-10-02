@@ -79,6 +79,7 @@ export class PaymentHelper {
       } catch (err: any) {
         reject({
           error: true,
+          step: 'om_token', // TODO DIAGNOSTIC TEMPORAIRE - à retirer
           status: err?.response?.status,
           data: err?.response?.data ?? err?.message ?? err
         });
@@ -148,6 +149,7 @@ export class PaymentHelper {
         // identifiants marchand, etc.) est perdue et masquée par un message générique en amont.
         reject({
           error: true,
+          step: 'om_initiate', // TODO DIAGNOSTIC TEMPORAIRE - à retirer
           status: err?.response?.status,
           data: err?.response?.data ?? err?.message ?? err
         });
