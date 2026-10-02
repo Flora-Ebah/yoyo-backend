@@ -77,7 +77,11 @@ export class PaymentHelper {
         
         resolve(response.data);
       } catch (err: any) {
-        reject({ error: true, data: err });
+        reject({
+          error: true,
+          status: err?.response?.status,
+          data: err?.response?.data ?? err?.message ?? err
+        });
       }
     });
   }
@@ -139,7 +143,14 @@ export class PaymentHelper {
         
         resolve(response.data);
       } catch (err: any) {
-        reject({ error: true, data: err });
+        // On remonte le détail réel renvoyé par Orange Money (corps de réponse + code HTTP)
+        // plutôt que l'objet axios brut : sans cela, la cause exacte du refus (montant invalide,
+        // identifiants marchand, etc.) est perdue et masquée par un message générique en amont.
+        reject({
+          error: true,
+          status: err?.response?.status,
+          data: err?.response?.data ?? err?.message ?? err
+        });
       }
     });
   }

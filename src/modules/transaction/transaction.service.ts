@@ -690,7 +690,17 @@ export class TransactionService {
       transaction.paymentMethod = 'orange-money';
       
       return { success: true, data: transaction };
-    } catch (error) {
+    } catch (error: any) {
+      // Le vrai motif de refus Orange Money (corps de réponse + code HTTP, remonté par
+      // PaymentHelper) était jusqu'ici avalé et remplacé par un message générique, rendant le
+      // diagnostic impossible. On le journalise explicitement ici.
+      const omDetail = error?.data ?? error?.message ?? error;
+      LoggerService.log({
+        type: LogLevel.Error,
+        content: `Échec de l'initiation du paiement Orange Money (orderId=${transaction?._id}, amount=${plan?.price}, status=${error?.status ?? 'n/a'}): ${typeof omDetail === 'object' ? JSON.stringify(omDetail) : omDetail}`,
+        location: this.serviceLabel,
+        method: 'processPaymentInitiation'
+      });
       return {
         success: false,
         error: error instanceof Error ? error : new Error(String(error)),
