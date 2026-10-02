@@ -25,6 +25,12 @@ export class PartnerLikeSet extends MongoDbDao<IPartnerLike & Document> implemen
   selectOne(params: object, fields?: string): Promise<Document | any> {
     return Promise.resolve(this.defaultModel.findOne(params, fields).lean()).catch((e: any) => ({ error: true, data: e }));
   }
+
+  // Le `count` hérité de MongoDbDao fait `doc || Promise.reject(doc)` : il REJETTE quand le total
+  // vaut 0 (après un unlike, ou pour une boutique sans like). On surcharge pour renvoyer 0 sans rejet.
+  count(params: object): Promise<number | any> {
+    return Promise.resolve(this.defaultModel.countDocuments(params)).catch((e: any) => ({ error: true, data: e }));
+  }
 }
 
 /* ------------------------------------------------------------------------------------------------ */
@@ -48,6 +54,11 @@ export class PartnerCommentSet extends MongoDbDao<IPartnerComment & Document> im
 
   selectOne(params: object, fields?: string): Promise<Document | any> {
     return Promise.resolve(this.defaultModel.findOne(params, fields).lean()).catch((e: any) => ({ error: true, data: e }));
+  }
+
+  // Idem PartnerLikeSet : le `count` hérité rejette quand le total vaut 0 (boutique sans commentaire).
+  count(params: object): Promise<number | any> {
+    return Promise.resolve(this.defaultModel.countDocuments(params)).catch((e: any) => ({ error: true, data: e }));
   }
 
   /** Liste paginée des commentaires actifs d'une boutique (récents d'abord), auteur peuplé. */
