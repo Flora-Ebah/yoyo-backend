@@ -1,3 +1,9 @@
+/** Entrée de la liste des références YOYO (cf. `ISettings.yoyoReferences`). */
+export interface IYoyoReference {
+  code: string;
+  label: string;
+}
+
 /**
  * Interface du module Settings — paramètres globaux de la plateforme, éditables depuis le CMS.
  *
@@ -46,5 +52,12 @@ export interface ISettings {
    * `target` : 'all' = tous les partenaires, 'sponsored' = uniquement les sponsorisés.
    */
   proximityPush?: { radiusMeters: number; minIntervalHours: number; target: 'all' | 'sponsored' };
+  /**
+   * Références YOYO proposées dans la liste déroulante du formulaire d'inscription de l'app Pro.
+   * `code` est le **matricule d'un agent actif** : c'est lui qu'envoie l'app (`agentMatricule`) et
+   * qui rattache le marchand à l'agent (`client.createdBy`). `label` est le libellé affiché.
+   * Éditable depuis le back-office ; chaque code est vérifié contre les agents à l'enregistrement.
+   */
+  yoyoReferences?: IYoyoReference[];
   status?: string;
 }

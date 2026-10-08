@@ -136,6 +136,13 @@ export class SettingsService {
         };
       }
 
+      if (typeof data.yoyoReferences !== 'undefined' && Array.isArray(data.yoyoReferences)) {
+        next.yoyoReferences = data.yoyoReferences.map((r: any) => ({
+          code: String(r.code).trim(),
+          label: String(r.label ?? '').trim()
+        }));
+      }
+
       const result: any = await this.dao.update({ _id: current._id }, next);
       if (result && result.error) {
         throw result;

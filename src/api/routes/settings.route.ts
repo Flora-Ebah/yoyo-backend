@@ -38,7 +38,7 @@ const defaultRoute: any = (fastify: any, options, done) => {
     schema: {
       tags,
       summary: 'Mettre à jour les paramètres de la plateforme',
-      description: 'Réservé aux administrateurs. Met à jour les bornes de remise marchand (min/max, en %).',
+      description: 'Réservé aux administrateurs. Met à jour les bornes de remise marchand (min/max, en %) et la liste des références YOYO de l’inscription Pro.',
       body: {
         type: 'object',
         properties: {
@@ -74,6 +74,20 @@ const defaultRoute: any = (fastify: any, options, done) => {
               target: { type: 'string', enum: ['all', 'sponsored'] }
             },
             additionalProperties: false
+          },
+          // Références YOYO de l'inscription Pro : `code` = matricule d'un agent actif.
+          yoyoReferences: {
+            type: 'array',
+            maxItems: 500,
+            items: {
+              type: 'object',
+              properties: {
+                code: { type: 'string', maxLength: 50 },
+                label: { type: 'string', maxLength: 100 }
+              },
+              required: ['code'],
+              additionalProperties: false
+            }
           }
         },
         additionalProperties: false

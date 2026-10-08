@@ -17,6 +17,8 @@ const schema = new mongoose.Schema<ISettings>(
     // Abo « mise en avant » (#2) et push proximité (#1), configurables au BO.
     sponsorPlan: { price: { type: Number }, durationDays: { type: Number } },
     proximityPush: { radiusMeters: { type: Number }, minIntervalHours: { type: Number }, target: { type: String, enum: ['all', 'sponsored'] } },
+    // Références YOYO de l'inscription Pro (cf. ISettings) : code = matricule d'un agent.
+    yoyoReferences: [{ code: { type: String }, label: { type: String }, _id: false }],
     status: { type: String, enum: ['active', 'inactive', 'removed'], default: 'active' }
   },
   { timestamps: true }

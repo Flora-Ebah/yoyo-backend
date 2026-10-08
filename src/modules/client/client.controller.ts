@@ -140,7 +140,7 @@ export class ClientController {
           if (!agent) {
             return resolve({
               status: defines.status.badRequest,
-              message: "Le matricule de l'agent est introuvable. Vérifiez-le ou laissez le champ vide.",
+              message: "La référence YOYO est introuvable. Choisissez-en une dans la liste ou laissez le champ vide.",
               data: null
             });
           }

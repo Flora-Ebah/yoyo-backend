@@ -1,6 +1,7 @@
 import coddyger, { IErrorObject, defines } from 'coddyger';
 import { SettingsService } from './settings.service';
-import { ISettings } from './settings.interface';
+import { ISettings, IYoyoReference } from './settings.interface';
+import { AdminSet } from '../admin/admin.model';
 
 const controllerLabel: string = 'SettingsController';
 
@@ -66,6 +67,15 @@ export class SettingsController {
           patch.accountDeletionGraceDays = Math.round(grace);
         }
 
+        // Références YOYO de l'inscription Pro. Optionnel : validé seulement s'il est fourni.
+        if (typeof body.yoyoReferences !== 'undefined') {
+          const result = await this.validateYoyoReferences(body.yoyoReferences);
+          if (typeof result === 'string') {
+            return resolve({ status: defines.status.badRequest, message: result, data: null });
+          }
+          patch.yoyoReferences = result;
+        }
+
         const settings = await this.service.update(patch);
         resolve({
           status: defines.status.requestOK,
@@ -79,5 +89,48 @@ export class SettingsController {
       console.error(e);
       return coddyger.catchReturn(e, controllerLabel, 'update');
     });
+  }
+
+  /**
+   * Normalise la liste des références YOYO et vérifie que chaque code est le matricule d'un agent
+   * actif : c'est ce code que l'app Pro envoie à l'inscription pour rattacher le marchand à l'agent,
+   * et l'inscription est refusée s'il ne correspond à aucun agent. Une référence orpheline
+   * bloquerait donc toutes les inscriptions qui la choisissent.
+   * @returns La liste normalisée, ou le message d'erreur à renvoyer.
+   */
+  private async validateYoyoReferences(input: unknown): Promise<IYoyoReference[] | string> {
+    if (!Array.isArray(input)) {
+      return 'La liste des références YOYO est invalide.';
+    }
+
+    const references: IYoyoReference[] = input.map((r: any) => {
+      const code = String(r?.code ?? '').trim();
+      // Libellé facultatif : à défaut, la liste affiche le code.
+      return { code, label: String(r?.label ?? '').trim() || code };
+    });
+
+    if (references.some((r) => !r.code)) {
+      return 'Chaque référence YOYO doit avoir un code.';
+    }
+
+    const codes = references.map((r) => r.code);
+    const duplicate = codes.find((code, i) => codes.indexOf(code) !== i);
+    if (duplicate) {
+      return `La référence « ${duplicate} » apparaît plusieurs fois.`;
+    }
+
+    if (codes.length) {
+      const agents: any = await new AdminSet().selectHug({ matricule: { $in: codes }, status: 'active' });
+      if (agents?.error) {
+        throw agents;
+      }
+      const known = new Set((agents as any[]).map((a) => a.matricule));
+      const unknown = codes.filter((code) => !known.has(code));
+      if (unknown.length) {
+        return `Aucun agent actif n'a pour matricule : ${unknown.join(', ')}.`;
+      }
+    }
+
+    return references;
   }
 }

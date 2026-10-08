@@ -220,9 +220,11 @@ export class OtpController {
 				// (ex: nouvel email/téléphone lors d'un changement d'email/téléphone,
 				// qui n'est associé à aucun compte tant que la modification n'est pas
 				// enregistrée) - ne pas planter dans ce cas.
+				// `email`, `firstname` et `lastname` sont projetés pour l'email de bienvenue : avec
+				// `_id` seul, `welcomeClient` partait sans destinataire (« No recipients defined »).
 				const user: any = await this.clientService.getOne(
 					{ $or: [{ email: formattedLogin }, { contact: formattedLogin }] },
-					'_id'
+					'_id email firstname lastname'
 				);
 
 				if (user && otp.purpose === MessageTypes.TYPES.ACCOUNT_VERIFICATION) {
@@ -234,7 +236,10 @@ export class OtpController {
 					const confirmationFlag =
 						otp.type === 'email' ? { isEmailConfirmed: true } : { isPhoneConfirmed: true };
 					await this.clientService.update(user._id, { status: 'active', ...confirmationFlag });
-					MessageHelper.welcomeClient(user)
+					// Un client inscrit par téléphone peut ne pas avoir d'email.
+					if (user.email) {
+						MessageHelper.welcomeClient(user);
+					}
 				}
 
 				// [SÉCURITÉ F-03] Un parcours « mot de passe oublié » est autorisé par la
