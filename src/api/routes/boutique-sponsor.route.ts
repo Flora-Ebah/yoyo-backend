@@ -37,7 +37,8 @@ const defaultRoute: any = (fastify: any, options, done) => {
     }
   });
 
-  // Liste de toutes les sponsorisations (admin)
+  // Liste de toutes les sponsorisations (back-office) — protégée par le sujet `subscriptions`
+  // (mutualisé avec le suivi des abonnements clients côté admin).
   fastify.route({
     schema: {
       tags,
@@ -49,18 +50,39 @@ const defaultRoute: any = (fastify: any, options, done) => {
           pageSize: { type: 'number' },
           status: { type: 'string' },
           from: { type: 'string' },
-          to: { type: 'string' }
+          to: { type: 'string' },
+          q: { type: 'string' },
+          expiringDays: { type: 'number' }
         },
         additionalProperties: false
       }
     },
     method: 'GET',
     url: `${routePath}`,
-    preHandler: TokenMiddleware.verifyAdmin,
+    preHandler: TokenMiddleware.can('read', 'subscriptions'),
     handler: (request, reply) => coddyger.api(reply, Controller.list({
       page: request.query.page, pageSize: request.query.pageSize, status: request.query.status,
-      from: request.query.from, to: request.query.to
+      from: request.query.from, to: request.query.to, q: request.query.q,
+      expiringDays: request.query.expiringDays
     }))
+  });
+
+  // Métriques des mises en avant boutiques (back-office)
+  fastify.route({
+    schema: {
+      tags,
+      summary: 'Métriques des mises en avant boutiques',
+      description: 'Compteurs : actifs, en cours d\'expiration, expirés, total, nouveaux du mois, revenu, répartition par formule',
+      query: {
+        type: 'object',
+        properties: { expiringDays: { type: 'number', default: 7 } },
+        additionalProperties: false
+      }
+    },
+    method: 'GET',
+    url: `${routePath}/metrics`,
+    preHandler: TokenMiddleware.can('read', 'subscriptions'),
+    handler: (request, reply) => coddyger.api(reply, Controller.metrics(request.query.expiringDays || 7))
   });
 
   // Sponsorisation active d'une boutique (admin OU marchand propriétaire — self-service).
