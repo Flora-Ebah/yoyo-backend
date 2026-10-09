@@ -9,14 +9,19 @@ const schema = new mongoose.Schema<IPayment>({
   amount: { type: Number },
   discountPercentage: { type: Number, default: 0 },
   completedAt: { type: Date },
-  status: { 
-    type: String, 
-    enum: ['pending', 'success', 'failed', 'refunded', 'expired', 'cancelled', 'rejected'], 
-    default: 'pending' 
+  status: {
+    type: String,
+    enum: ['pending', 'success', 'failed', 'refunded', 'expired', 'cancelled', 'rejected', 'invalidated'],
+    default: 'pending'
   },
   deniedAt: { type: Date },
   deniedReason: { type: String },
   deniedBy: { type: Schema.Types.ObjectId, ref: 'Client' },
+  // Auteur de la validation : dans le flux 100% client, toujours 'client'.
+  validatedBy: { type: String, enum: ['client', 'partner'] },
+  // Traçabilité de l'invalidation a posteriori d'un ticket par le marchand.
+  invalidatedAt: { type: Date },
+  invalidatedBy: { type: Schema.Types.ObjectId, ref: 'Client' },
 },
 { timestamps: true });
 

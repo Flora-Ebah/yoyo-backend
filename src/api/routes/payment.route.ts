@@ -41,40 +41,34 @@ const defaultRoute: any = (fastify: any, options, done) => {
     }
   });
 
-  // Validate
+  // Flux client en un appel : le client scanne la boutique, saisit le prix total et valide
+  // lui-même sa réduction. `from` provient du jeton, jamais du corps.
   fastify.route({
 		schema: {
-			tags: tagsPartner,
-			summary: 'Valider une demande de reduction',
+			tags: tagsClient,
+			summary: 'Valider sa réduction (flux client)',
+			description: 'Le client valide lui-même sa réduction après avoir scanné la boutique et saisi le prix total',
 			body: {
 				type: 'object',
 				properties: {
-					_id: { type: 'string' },
-          amount: { type: 'number' },
-          deniedReason: { type: 'string' },
-					status: {
-						type: 'string',
-						enum: ['pending', 'success', 'failed', 'refunded', 'expired', 'cancelled', 'rejected'],
-						default: 'success'
-					}
+					to: { type: 'string' },
+					amount: { type: 'number' }
 				},
-				required: ['_id'],
+				required: ['to', 'amount'],
 				additionalProperties: false
 			}
 		},
-		method: 'PUT',
-		url: `${routePath}`,
+		method: 'POST',
+		url: `${routePath}/redeem`,
+		// Même borne que l'ancien `initiate` : un client valide rarement plus de dix fois par minute.
+		// Première barrière anti double-soumission ; le service ajoute un garde-fou idempotent.
+		config: { rateLimit: { max: 10, timeWindow: '1 minute' } },
 		preHandler: TokenMiddleware.verify,
 		handler: (request, reply) => {
 			let body: any = request.body;
-			const _id = body._id;
-      delete body._id;
-      
-      if (body.status === 'rejected') {
-        body.deniedBy = request.user._id;
-      }
+			let user: any = request.user;
 
-			let Q = Controller.validate(_id, body, request.user?._id);
+			let Q = Controller.redeem(user._id, body.to, body.amount);
 			return coddyger.api(reply, Q);
 		}
 	});
@@ -352,36 +346,29 @@ const defaultRoute: any = (fastify: any, options, done) => {
     }
   });
 
-  // Valider un paiement
+  // Invalidation a posteriori d'un ticket par le marchand (seul pouvoir restant sur un ticket).
+  // Le service vérifie que l'appelant possède bien la boutique destinataire.
   fastify.route({
     schema: {
-      tags,
-      summary: 'Valider un paiement',
+      tags: tagsPartner,
+      summary: 'Invalider un ticket de réduction',
+      description: 'Le propriétaire de la boutique invalide un ticket déjà validé par le client',
       params: {
         type: 'object',
         properties: {
-          partnerId: { type: 'string' }
+          id: { type: 'string' }
         },
-        required: ['partnerId'],
-        additionalProperties: false
-      },
-      body: {
-        type: 'object',
-        properties: {
-          amount: { type: 'number' }
-        },
-        required: ['amount'],
+        required: ['id'],
         additionalProperties: false
       }
     },
     method: 'POST',
-    url: `${routePath}/validate/:partnerId`,
+    url: `${routePath}/invalidate/:id`,
     preHandler: TokenMiddleware.verify,
     handler: (request, reply) => {
-      let partnerId: any = request.params.partnerId;
-      let amount: any = request.body.amount;
+      let _id: any = request.params.id;
 
-      let Q = Controller.validatePayment(partnerId, amount, request.user?._id);
+      let Q = Controller.invalidate(_id, request.user?._id);
       return coddyger.api(reply, Q);
     }
   });

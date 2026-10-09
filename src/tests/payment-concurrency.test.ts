@@ -103,23 +103,16 @@ describe('Demandes de réduction concurrentes', () => {
     expect(ids.size).to.equal(1);
   });
 
-  it('la réduction est figée à la création et n’est pas révisée par un rescan', async () => {
+  it('la réduction appliquée est celle de la BOUTIQUE (maxDiscount), pas du plan', async () => {
+    // Le pourcentage vient désormais de `partner.maxDiscount` (30), plus du plan du client.
     const first: any = await service.create({ from: CLIENT_ID, to: PARTNER_ID } as any);
-    expect(first.demande.discountPercentage).to.equal(20);
-
-    // Le plan du client change entre les deux scans.
-    sinon.restore();
-    sinon.stub(SubscriptionService.prototype, 'getCurrentSubscriptionWithPlanDetails').resolves({
-      userId: { _id: CLIENT_ID, firstname: 'Awa', lastname: 'Diallo' },
-      planId: { discountPercentage: 50 }
-    } as any);
-    sinon.stub(PushNotificationService.prototype, 'create').resolves({} as any);
+    expect(first.demande.discountPercentage).to.equal(30);
 
     const second: any = await service.create({ from: CLIENT_ID, to: PARTNER_ID } as any);
 
     expect(second.created).to.be.false;
     // La demande déjà soumise au partenaire ne doit pas changer de valeur sous ses pieds.
-    expect(second.demande.discountPercentage).to.equal(20);
+    expect(second.demande.discountPercentage).to.equal(30);
   });
 
   it('deux clients différents chez le même partenaire obtiennent chacun leur demande', async () => {

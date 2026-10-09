@@ -331,7 +331,7 @@ export class PaymentService {
 
       const [subscription, partner] = await Promise.all([
         this.subscriptionService.getCurrentSubscriptionWithPlanDetails(from),
-        partnerModel.findOne({ _id: to, status: { $nin: ['removed', 'archived'] } }, '_id name user').lean()
+        partnerModel.findOne({ _id: to, status: { $nin: ['removed', 'archived'] } }, '_id name user maxDiscount').lean()
       ]);
 
       if(!subscription) {
@@ -342,7 +342,9 @@ export class PaymentService {
         return { error: true, message: locale.notfound("Partenaire") };
       }
 
-      const discountPercentage: number = subscription.planId?.discountPercentage ?? 0;
+      // Le pourcentage appliqué est désormais celui de la BOUTIQUE (`partner.maxDiscount`),
+      // plus celui du plan du client. Absent ou 0 => aucune réduction.
+      const discountPercentage: number = Number(partner.maxDiscount ?? 0) || 0;
 
       let demande: any;
       let created: boolean;
@@ -445,77 +447,203 @@ export class PaymentService {
   }
 
   /**
-   * Met à jour une demande de réduction : acceptation (avec montant) ou rejet par le commerçant.
+   * Arrondit le net et calcule la réduction appliquée.
    *
-   * @param id ID de la demande
-   * @param item Nouvelles données (`status`, `amount`, `deniedReason`)
-   * @param actorId `request.user._id` de l'appelant — requis pour le contrôle de propriété
-   * @returns La demande mise à jour, ou un descripteur d'erreur (`forbidden` / `conflict`)
+   * INVARIANT SÉCURITÉ : seul `amount` (prix total) vient du client ; le net et le montant de la
+   * réduction sont TOUJOURS recalculés ici à partir du pourcentage figé côté serveur.
    */
-  async update(id: string, item: Partial<IPayment>, actorId?: string): Promise<IPayment | IErrorObject | any> {
+  private computeDiscount(amount: number, discountPercentage: number): { net: number; discount: number } {
+    const pct = Number.isFinite(discountPercentage) ? Math.max(0, discountPercentage) : 0;
+    const net = Math.round(amount * (1 - pct / 100));
+    const discount = amount - net;
+
+    return { net, discount };
+  }
+
+  /**
+   * Flux client en un seul appel : le client scanne le QR (id boutique), saisit le prix total et
+   * valide lui-même sa réduction. Écrit directement un ticket `success`, sans intervention du
+   * marchand (qui conserve uniquement le pouvoir d'invalider a posteriori, cf. `invalidate`).
+   *
+   * Transaction logique atomique :
+   *  1. abonnement ACTIF du client (exigence conservée) ;
+   *  2. boutique existante et `from` ≠ `to` ;
+   *  3. montant borné (`validateAmount` : > 0 et ≥ `partner.minOrder`) ;
+   *  4. pourcentage figé = `partner.maxDiscount` (0 si absent) ;
+   *  5. net + réduction recalculés SERVEUR ;
+   *  6. garde-fou idempotent : un ticket `success` identique (from, to, amount) de moins de ~60 s
+   *     est renvoyé tel quel au lieu d'en créer un second (anti double-soumission) ;
+   *  7. notification du marchand (push + socket).
+   *
+   * @param from Client authentifié (issu du jeton, jamais du corps)
+   * @param to Boutique scannée
+   * @param amount Prix total saisi par le client — SEULE valeur monétaire acceptée du client
+   * @returns `{ ticket }` — montant, réduction, net, boutique, date
+   */
+  async redeem(from: string, to: string, amount: any): Promise<any> {
     try {
-      if(!coddyger.string.isValidObjectId(id)) {
-        return { error: true, data: locale.wrongObjectId("du paiement") };
+      if (!coddyger.string.isValidObjectId(from) || !coddyger.string.isValidObjectId(to)) {
+        return { error: true, data: locale.wrongObjectId('du client') };
       }
 
-      const getPayment:any = await this.dao.selectOne({ _id: id });
-      if(!getPayment) {
-        return { error: true, data: locale.notfound('Demande de paiement') };
+      if (String(from) === String(to)) {
+        return { error: true, data: locale.controller.payment.sameClient };
       }
 
-      const partnerId: string = String(getPayment.to?._id ?? getPayment.to ?? '');
+      const partnerModel: any = (this.partnerDao as any).defaultModel;
+
+      const [subscription, partner] = await Promise.all([
+        this.subscriptionService.getCurrentSubscriptionWithPlanDetails(from),
+        partnerModel.findOne({ _id: to, status: { $nin: ['removed', 'archived'] } }, '_id name user maxDiscount minOrder').lean()
+      ]);
+
+      if (!subscription) {
+        return { error: true, data: locale.controller.payment.noSubscription };
+      }
+
+      if (!partner) {
+        return { error: true, data: locale.notfound('Partenaire') };
+      }
+
+      const invalidAmount = this.validateAmount(amount, partner);
+      if (invalidAmount) {
+        return invalidAmount;
+      }
+
+      const total: number = Number(amount);
+
+      // Pourcentage de la BOUTIQUE, figé côté serveur. Absent / 0 => réduction nulle.
+      const discountPercentage: number = Number(partner.maxDiscount ?? 0) || 0;
+      const { net, discount } = this.computeDiscount(total, discountPercentage);
+
+      const model: any = (this.dao as any).defaultModel;
+
+      // Garde-fou idempotent léger : rejoue le dernier ticket success identique (from, to, amount)
+      // s'il date de moins de 60 s, pour absorber une double-soumission (double tap, retry réseau)
+      // sans créer deux tickets. Le rate-limit de la route reste la première barrière.
+      const sixtySecondsAgo = new Date(Date.now() - 60 * 1000);
+      const recent: any = await model
+        .findOne({ from, to, amount: total, status: 'success', completedAt: { $gte: sixtySecondsAgo } })
+        .sort({ completedAt: -1 })
+        .lean();
+
+      if (recent) {
+        return { ticket: this.buildTicket(recent, partner, discount, net) };
+      }
+
+      const _id = coddyger.string.generateObjectId();
+      const completedAt = new Date();
+
+      await model.create({
+        _id,
+        from,
+        to,
+        amount: total,
+        discountPercentage,
+        status: 'success',
+        completedAt,
+        validatedBy: 'client'
+      });
+
+      // Notifie le marchand (réutilise push + socket, comme la notification de demande initiée).
+      await this.pushNotificationService.create({
+        title: 'Réduction validée',
+        body: `Une réduction vient d'être validée dans votre boutique ${partner.name}`,
+        type: 'info',
+        priority: 'high',
+        data: {
+          userId: partner.user,
+          demand: String(_id),
+          boutiqueId: String(to),
+          status: 'success',
+          url: `/payment/${_id}`
+        },
+        target: Events.PUSH_DEMANDE,
+        status: 'pending'
+      } as IPushNotification);
+
+      return {
+        ticket: this.buildTicket({ _id, amount: total, discountPercentage, completedAt }, partner, discount, net)
+      };
+    } catch (error) {
+      return { error: true, data: error };
+    }
+  }
+
+  /**
+   * Met en forme le ticket renvoyé à l'app client après un `redeem`.
+   */
+  private buildTicket(payment: any, partner: any, discount: number, net: number): any {
+    return {
+      _id: String(payment._id),
+      montant: Number(payment.amount),
+      reduction: discount,
+      net,
+      discountPercentage: Number(payment.discountPercentage ?? 0),
+      boutique: { _id: String(partner._id), name: partner.name },
+      date: payment.completedAt,
+      status: 'success'
+    };
+  }
+
+  /**
+   * Invalidation a posteriori d'un ticket par le marchand : seul pouvoir restant du commerçant sur
+   * un ticket. Fait passer un ticket `success` à `invalidated` et notifie le client.
+   *
+   * @param id Ticket à invalider
+   * @param actorId `request.user._id` — doit posséder la boutique destinataire (`resolveOwnedPartner`)
+   * @returns Le ticket invalidé, ou un descripteur d'erreur (`forbidden` / `conflict`)
+   */
+  async invalidate(id: string, actorId?: string): Promise<any> {
+    try {
+      if (!coddyger.string.isValidObjectId(id)) {
+        return { error: true, data: locale.wrongObjectId('du paiement') };
+      }
+
+      const payment: any = await this.dao.selectOne({ _id: id });
+      if (!payment) {
+        return { error: true, data: locale.notfound('Ticket de réduction') };
+      }
+
+      const partnerId: string = String(payment.to?._id ?? payment.to ?? '');
       const ownership: any = await this.resolveOwnedPartner(partnerId, String(actorId ?? ''));
       if (ownership.error) {
         return ownership;
       }
 
-      if (getPayment.status !== 'pending') {
-        return { error: true, conflict: true, data: locale.controller.payment.alreadyProcessed };
-      }
-
-      const subscription:any = await this.subscriptionService.getCurrentSubscriptionWithPlanDetails(getPayment.from);
-      if(!subscription) {
-        return { error: true, data: locale.controller.payment.noSubscription };
-      }
-
-      if (item.status === 'rejected') {
-        item.deniedAt = new Date();
-        item.deniedReason = item.deniedReason ?? 'La demande de réduction a été rejetée';
-      } else {
-        const invalidAmount = this.validateAmount(item.amount, ownership.partner);
-        if (invalidAmount) {
-          return invalidAmount;
-        }
-
-        item.amount = Number(item.amount);
-        item.completedAt = new Date();
+      if (payment.status !== 'success') {
+        return { error: true, conflict: true, data: locale.controller.payment.notInvalidable };
       }
 
       const model: any = (this.dao as any).defaultModel;
       const applied: any = await model
-        .findOneAndUpdate({ _id: id, status: 'pending' }, { $set: item }, { new: true })
+        .findOneAndUpdate(
+          { _id: id, status: 'success' },
+          { $set: { status: 'invalidated', invalidatedAt: new Date(), invalidatedBy: actorId } },
+          { new: true }
+        )
         .lean();
 
       if (!applied) {
-        return { error: true, conflict: true, data: locale.controller.payment.alreadyProcessed };
+        return { error: true, conflict: true, data: locale.controller.payment.notInvalidable };
       }
 
-      // Send notification
+      // Notifie le client que sa réduction a été invalidée par la boutique.
       await this.pushNotificationService.create({
-				title: 'Demande de reduction',
-				body: 'Votre demande de reduction chez ' + getPayment.to.name + ' a été ' + (item.status === 'rejected' ? 'rejetée' : 'acceptée'),
-				type: 'info',
-				priority: 'high',
-				data: {
-					userId: subscription.userId._id,
-					demand: id,
-					boutiqueId: partnerId,
-					status: item.status,
-					url: `/payment/${id}`
-				},
-				target: Events.USER_NOTIFICATION,
-				status: 'pending'
-			} as IPushNotification);
+        title: 'Réduction invalidée',
+        body: `Votre réduction chez ${payment.to?.name ?? 'la boutique'} a été invalidée`,
+        type: 'warning',
+        priority: 'high',
+        data: {
+          userId: String(payment.from?._id ?? payment.from ?? ''),
+          demand: id,
+          boutiqueId: partnerId,
+          status: 'invalidated',
+          url: `/payment/${id}`
+        },
+        target: Events.USER_NOTIFICATION,
+        status: 'pending'
+      } as IPushNotification);
 
       return this.getById(id);
     } catch (error) {
@@ -798,64 +926,4 @@ export class PaymentService {
     }
   }
 
-  /**
-   * Valide un paiement
-   * @param partnerId ID du partenaire
-   * @param amount Montant du paiement
-   * @returns Paiement validé
-   */
-  async validatePayment(partnerId: string, amount: number, actorId?: string): Promise<any> {
-    try {
-      const ownership: any = await this.resolveOwnedPartner(partnerId, String(actorId ?? ''));
-      if (ownership.error) {
-        return ownership;
-      }
-
-      const invalidAmount = this.validateAmount(amount, ownership.partner);
-      if (invalidAmount) {
-        return invalidAmount;
-      }
-
-      const model: any = (this.dao as any).defaultModel;
-      const lastPayment: any = await model
-        .findOneAndUpdate(
-          { to: partnerId, status: 'pending' },
-          { $set: { status: 'success', amount: Number(amount), completedAt: new Date() } },
-          { sort: { createdAt: -1 }, new: true }
-        )
-        .lean();
-
-      if (!lastPayment) {
-        return { error: true, data: locale.notfound('Demande de réduction en attente') };
-      }
-
-      // Envoyer une notification au client.
-      const notification:any = await this.pushNotificationService.create({
-        title: "Paiement validé",
-        body: "Votre paiement a été validé avec succès",
-        type: "success",
-        priority: "normal",
-        data: {
-          userId: lastPayment.from,
-          demand: String(lastPayment._id),
-          boutiqueId: String(partnerId),
-          status: 'success',
-          url: `/payment/${lastPayment._id}`
-        },
-        target: Events.USER_NOTIFICATION,
-        status: "pending"
-      } as IPushNotification);
-
-      if(notification.error) {
-        throw new Error(notification);
-      }
-
-      return {
-        data: await this.getById(lastPayment._id),
-        rows: [lastPayment]
-      };
-    } catch (error) {
-      return { error: true, data: error };
-    }
-  }
 }

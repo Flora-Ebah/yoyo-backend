@@ -180,53 +180,70 @@ export class PaymentController {
   }
 
   /**
-   * Met à jour un élément existant
-   * @param id ID de l'élément à mettre à jour
-   * @param item Nouvelles données
-   * @returns Élément mis à jour
-   */
-  /**
-   * Traite une demande de réduction : acceptation avec montant, ou rejet motivé.
+   * Flux client en un appel : le client valide lui-même sa réduction après avoir scanné la
+   * boutique et saisi le prix total. Écrit un ticket `success` et renvoie le ticket.
    *
-   * @param actorId `request.user._id` — le service vérifie que l'appelant possède bien la boutique
-   *        destinataire. Sans cela, tout compte connecté pouvait valider n'importe quelle demande.
+   * @param from `request.user._id` — issu du jeton, jamais du corps de la requête
+   * @param to Boutique scannée
+   * @param amount Prix total saisi par le client (seule valeur monétaire acceptée du client)
    */
-  validate(id: string, item: Partial<IPayment>, actorId?: string) {
+  redeem(from: string, to: string, amount: number) {
     return new Promise(async (resolve, reject) => {
       try {
-        // Vérification de l'existence de l'élément
-        const existingItem = await this.service.getById(id);
+        const result: any = await this.service.redeem(from, to, amount);
 
-        if (!existingItem) {
+        if (result?.error) {
           return resolve({
-            status: defines.status.notFound,
-            message: locale.notfound('Demande de paiement'),
-            data: null
-          });
-        }
-
-        // Mise à jour
-        const updatedItem: any = await this.service.update(id, item, actorId);
-
-        if (updatedItem?.error) {
-          return resolve({
-            status: PaymentController.errorStatus(updatedItem),
-            message: updatedItem.data,
+            status: PaymentController.errorStatus(result),
+            message: result.data,
             data: null
           });
         }
 
         resolve({
-          status: defines.status.requestOK,
-          message: locale.controller.done,
-          data: updatedItem
+          status: defines.status.created,
+          message: locale.controller.payment.redeemed,
+          data: result.ticket
         });
       } catch (error) {
         reject(error);
       }
     }).catch((e: IErrorObject) => {
       console.error(e);
-      return coddyger.catchReturn(e, controllerLabel, 'update');
+      return coddyger.catchReturn(e, controllerLabel, 'redeem');
+    });
+  }
+
+  /**
+   * Invalidation a posteriori d'un ticket par le marchand (propriétaire de la boutique).
+   *
+   * @param id Ticket à invalider
+   * @param actorId `request.user._id` — le service vérifie la propriété de la boutique
+   */
+  invalidate(id: string, actorId?: string) {
+    return new Promise(async (resolve, reject) => {
+      try {
+        const result: any = await this.service.invalidate(id, actorId);
+
+        if (result?.error) {
+          return resolve({
+            status: PaymentController.errorStatus(result),
+            message: result.data,
+            data: null
+          });
+        }
+
+        resolve({
+          status: defines.status.requestOK,
+          message: locale.controller.payment.invalidated,
+          data: result
+        });
+      } catch (error) {
+        reject(error);
+      }
+    }).catch((e: IErrorObject) => {
+      console.error(e);
+      return coddyger.catchReturn(e, controllerLabel, 'invalidate');
     });
   }
 
@@ -392,55 +409,6 @@ export class PaymentController {
     }).catch((e: IErrorObject) => {
       console.error(e);
       return coddyger.catchReturn(e, controllerLabel, 'getPartnerTransactions');
-    });
-  }
-
-  /**
-   * Valide un paiement
-   * @param partnerId ID du partenaire
-   * @param amount Montant du paiement
-   * @returns Paiement validé
-   */
-  validatePayment(partnerId: string, amount: number, actorId?: string) {
-    return new Promise(async (resolve, reject) => {
-      try {
-        if (!coddyger.string.isValidObjectId(partnerId)) {
-          return resolve({
-            status: defines.status.badRequest,
-            message: locale.wrongObjectId("du partenaire"),
-            data: null
-          });
-        }
-
-        if (!amount || amount <= 0) {
-          return resolve({
-            status: defines.status.badRequest,
-            message: locale.controller.payment.invalidAmount,
-            data: null
-          });
-        }
-
-        const items: any = await this.service.validatePayment(partnerId, amount, actorId);
-
-        if (items?.error) {
-          return resolve({
-            status: PaymentController.errorStatus(items),
-            message: items.data,
-            data: null
-          });
-        }
-
-        resolve({
-          status: defines.status.requestOK,
-          message: locale.controller.done,
-          data: items.data
-        });
-      } catch (error) {
-        reject(error);
-      }
-    }).catch((e: IErrorObject) => {
-      console.error(e);
-      return coddyger.catchReturn(e, controllerLabel, 'validatePayment');
     });
   }
 

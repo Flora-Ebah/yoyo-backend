@@ -82,7 +82,10 @@ export const locale = {
 			notOwner: "Vous n'êtes pas autorisé à traiter les demandes de cette boutique",
 			alreadyProcessed: 'Cette demande de réduction a déjà été traitée',
 			invalidAmount: 'Le montant de la facture doit être un nombre supérieur à 0',
-			belowMinOrder: (min: number) => `Le montant de la facture doit atteindre le minimum de commande de ${min} F`
+			belowMinOrder: (min: number) => `Le montant de la facture doit atteindre le minimum de commande de ${min} F`,
+			notInvalidable: "Seul un ticket validé peut être invalidé",
+			redeemed: 'Réduction validée avec succès',
+			invalidated: 'Le ticket a été invalidé'
 		},
 		transaction: {
 			active_subscription_error: 'Vous avez déjà un abonnement actif'
