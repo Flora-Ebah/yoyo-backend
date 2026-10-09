@@ -384,6 +384,28 @@ export class SubscriptionController {
   }
 
   /**
+   * Récupère des compteurs d'abonnements pour le back-office.
+   * @param expiringDays Fenêtre (en jours) pour les abonnements « en cours d'expiration » (défaut 7)
+   * @returns Compteurs : actifs, en cours d'expiration, expirés, total
+   */
+  getMetrics(expiringDays: number = 7) {
+    return new Promise(async (resolve, reject) => {
+      try {
+        const metrics = await (this.dao as SubscriptionSet).getMetrics(expiringDays);
+
+        return resolve({
+          status: defines.status.requestOK,
+          message: 'Métriques des abonnements récupérées avec succès',
+          data: metrics
+        });
+      } catch (e) {
+        console.error(e);
+        return coddyger.catchReturn(e, controllerLabel, 'getMetrics');
+      }
+    });
+  }
+
+  /**
    * Active un renouvellement en attente
    * @param subscriptionId ID de l'abonnement
    * @returns Résultat de l'opération

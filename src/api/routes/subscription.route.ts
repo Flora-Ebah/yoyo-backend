@@ -165,6 +165,31 @@ const defaultRoute: any = (fastify: any, options, done) => {
     }
   });
 
+  // Métriques des abonnements (back-office)
+  fastify.route({
+    schema: {
+      tags,
+      summary: 'Métriques des abonnements',
+      description: 'Compteurs d\'abonnements pour le back-office : actifs, en cours d\'expiration, expirés, total',
+      query: {
+        type: 'object',
+        properties: {
+          expiringDays: { type: 'number', default: 7 }
+        },
+        additionalProperties: false
+      }
+    },
+    method: 'GET',
+    url: `${routePath}/metrics`,
+    preHandler: TokenMiddleware.verifyAdmin,
+    handler: (request, reply) => {
+      const expiringDays = request.query.expiringDays || 7;
+
+      let Q = Controller.getMetrics(expiringDays);
+      return coddyger.api(reply, Q);
+    }
+  });
+
   // Renouveler un abonnement
   fastify.route({
     schema: {

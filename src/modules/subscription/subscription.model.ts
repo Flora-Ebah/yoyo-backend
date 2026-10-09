@@ -309,6 +309,41 @@ export class SubscriptionSet extends MongoDbDao<any> implements IData<any> {
   }
 
   /**
+   * Calcule des compteurs d'abonnements pour le back-office.
+   * Réutilise les mêmes critères de date que les crons de renouvellement/expiration.
+   * @param expiringDays Fenêtre (en jours) pour considérer un abonnement « en cours d'expiration »
+   * @returns Compteurs : actifs, en cours d'expiration, expirés, total
+   */
+  async getMetrics(expiringDays: number = 7): Promise<{ active: number; expiringSoon: number; expired: number; total: number }> {
+    try {
+      const now = new Date();
+      const thresholdDate = new Date(now);
+      thresholdDate.setDate(thresholdDate.getDate() + expiringDays);
+
+      const [active, expiringSoon, expired, total] = await Promise.all([
+        // Abonnements actifs non encore échus
+        this.defaultModel.countDocuments({ status: 'active', endDate: { $gt: now } }),
+        // Abonnements actifs expirant dans la fenêtre donnée
+        this.defaultModel.countDocuments({ status: 'active', endDate: { $gt: now, $lte: thresholdDate } }),
+        // Abonnements déjà expirés (marqués « expired » ou dont la date est passée)
+        this.defaultModel.countDocuments({ $or: [{ status: 'expired' }, { endDate: { $lte: now } }] }),
+        // Total des abonnements
+        this.defaultModel.countDocuments({})
+      ]);
+
+      return { active, expiringSoon, expired, total };
+    } catch (error) {
+      LoggerService.log({
+        type: LogLevel.Error,
+        content: error,
+        location: this.setTitle,
+        method: 'getMetrics'
+      });
+      throw error;
+    }
+  }
+
+  /**
    * Marque les abonnements expirés comme tels
    * @returns Nombre d'abonnements mis à jour
    */
