@@ -7,6 +7,7 @@ import rateLimit from '@fastify/rate-limit';
 import path from 'path';
 import fs from 'fs';
 import crypto from 'crypto';
+import jwt from 'jsonwebtoken';
 import coddyger, { defines, env } from 'coddyger';
 import { swaggerConfig, swaggerUiConfig, isSwaggerEnabled } from './config/swagger.config';
 import { FileUpload } from './api/middleware';
@@ -56,7 +57,23 @@ export default class Router {
 		// la signature, `TokenMiddleware.verify` s'en charge juste après. Repli sur l'IP pour les
 		// routes d'avant-connexion, qui n'ont pas d'identité.
 		this.router.register(rateLimit, {
-			max: 100, // Max requests per session (ou par IP à défaut) per time window
+			// Limite PAR SESSION. Un ADMIN (back-office) a une limite bien plus haute : le rendu
+			// serveur du CMS fait légitimement des dizaines d'appels `list`/stats en rafale à chaque
+			// page (tableau de bord, navigation rapide…), avec un seul token — 100/min était trop bas
+			// et renvoyait des 429. Les clients mobiles restent à 100/min.
+			max: (request: FastifyRequest) => {
+				const auth = request.headers?.authorization;
+				if (auth) {
+					const token = auth.startsWith('Bearer ') ? auth.slice(7) : auth;
+					try {
+						const payload: any = jwt.verify(token, env.jwt.secret!);
+						if (payload?.isAdmin) return 1000;
+					} catch {
+						/* token invalide/expiré → limite standard ci-dessous */
+					}
+				}
+				return 100; // Max requests per session (ou par IP à défaut) par fenêtre
+			},
 			timeWindow: '1 minute', // Time window for rate limiting
 			keyGenerator: (request: FastifyRequest) => {
 				const auth = request.headers?.authorization;
