@@ -31,16 +31,6 @@ const schema = new mongoose.Schema<IPlan>(
       min: 1,
       default: 30
     },
-    maxScansPerDay: {
-      type: Number,
-      min: 1,
-      default: 5
-    },
-    maxScansPerMonth: {
-      type: Number,
-      min: 1,
-      default: 100
-    },
     features: [{
       type: String,
       required: true
@@ -92,7 +82,7 @@ export class PlanSet extends MongoDbDao<Document> implements IData<Document> {
     super();
   }
 
-  props: string = 'name description price currency durationDays maxScansPerDay maxScansPerMonth features partnerCategories maxCashbackAmount isPopular isActive';
+  props: string = 'name description price currency durationDays features partnerCategories maxCashbackAmount isPopular isActive';
   setTitle: string = 'PlanSet';
 
   /**

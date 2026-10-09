@@ -8,8 +8,6 @@ export interface IPlan {
   price: number;               // Prix du plan
   currency: string;            // Devise (ex: "XOF", "EUR", "USD")
   durationDays: number;        // Durée en jours (30, 90, 365, etc.)
-  maxScansPerDay?: number;     // Nombre maximum de scans QR par jour
-  maxScansPerMonth?: number;   // Nombre maximum de scans QR par mois
   features: string[];          // Liste des fonctionnalités incluses
   partnerCategories?: string[]; // Catégories de partenaires où le plan est applicable
   maxCashbackAmount?: number;  // Montant maximum de cashback par transaction

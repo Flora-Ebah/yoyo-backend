@@ -26,8 +26,6 @@ const defaultRoute: any = (fastify: any, options, done) => {
             default: 'XOF'
           },
           durationDays: { type: 'number', default: 30 },
-          maxScansPerDay: { type: 'number', default: 5 },
-          maxScansPerMonth: { type: 'number', default: 100 },
           features: {
             type: 'array',
             items: { type: 'string' }
@@ -73,8 +71,6 @@ const defaultRoute: any = (fastify: any, options, done) => {
             enum: ['XOF', 'EUR', 'USD', 'GBP']
           },
           durationDays: { type: 'number' },
-          maxScansPerDay: { type: 'number' },
-          maxScansPerMonth: { type: 'number' },
           features: {
             type: 'array',
             items: { type: 'string' }

@@ -48,24 +48,6 @@ export const createPlanSchema = Joi.object({
       'number.integer': 'La durée doit être un nombre entier',
       'number.min': 'La durée doit être d\'au moins 1 jour'
     }),
-  maxScansPerDay: Joi.number()
-    .integer()
-    .min(1)
-    .default(5)
-    .messages({
-      'number.base': 'Le nombre maximum de scans par jour doit être un nombre',
-      'number.integer': 'Le nombre maximum de scans par jour doit être un nombre entier',
-      'number.min': 'Le nombre maximum de scans par jour doit être d\'au moins 1'
-    }),
-  maxScansPerMonth: Joi.number()
-    .integer()
-    .min(1)
-    .default(100)
-    .messages({
-      'number.base': 'Le nombre maximum de scans par mois doit être un nombre',
-      'number.integer': 'Le nombre maximum de scans par mois doit être un nombre entier',
-      'number.min': 'Le nombre maximum de scans par mois doit être d\'au moins 1'
-    }),
   features: Joi.array()
     .items(Joi.string())
     .required()
@@ -138,22 +120,6 @@ export const updatePlanSchema = Joi.object({
       'number.base': 'La durée doit être un nombre',
       'number.integer': 'La durée doit être un nombre entier',
       'number.min': 'La durée doit être d\'au moins 1 jour'
-    }),
-  maxScansPerDay: Joi.number()
-    .integer()
-    .min(1)
-    .messages({
-      'number.base': 'Le nombre maximum de scans par jour doit être un nombre',
-      'number.integer': 'Le nombre maximum de scans par jour doit être un nombre entier',
-      'number.min': 'Le nombre maximum de scans par jour doit être d\'au moins 1'
-    }),
-  maxScansPerMonth: Joi.number()
-    .integer()
-    .min(1)
-    .messages({
-      'number.base': 'Le nombre maximum de scans par mois doit être un nombre',
-      'number.integer': 'Le nombre maximum de scans par mois doit être un nombre entier',
-      'number.min': 'Le nombre maximum de scans par mois doit être d\'au moins 1'
     }),
   features: Joi.array()
     .items(Joi.string())

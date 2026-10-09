@@ -27,8 +27,6 @@ class PlanSeeder {
         price: { type: Number, required: true },
         currency: { type: String, required: true },
         durationDays: { type: Number, required: true },
-        maxScansPerDay: { type: Number },
-        maxScansPerMonth: { type: Number },
         features: [{ type: String }],
         partnerCategories: [{ type: String }],
         maxCashbackAmount: { type: Number },
@@ -73,8 +71,6 @@ class PlanSeeder {
         price: 0,
         currency: 'XOF',
         durationDays: 7,
-        maxScansPerDay: 5,
-        maxScansPerMonth: 50,
         features: [
           '5 scans QR par jour',
           '50 scans par mois maximum',
@@ -100,8 +96,6 @@ class PlanSeeder {
         price: 2500,
         currency: 'XOF',
         durationDays: 30,
-        maxScansPerDay: 20,
-        maxScansPerMonth: 200,
         features: [
           '20 scans QR par jour',
           '200 scans par mois',
@@ -130,8 +124,6 @@ class PlanSeeder {
         price: 5000,
         currency: 'XOF',
         durationDays: 30,
-        maxScansPerDay: 50,
-        maxScansPerMonth: 500,
         features: [
           '50 scans QR par jour',
           '500 scans par mois',
@@ -164,8 +156,6 @@ class PlanSeeder {
         price: 10000,
         currency: 'XOF',
         durationDays: 30,
-        maxScansPerDay: 100,
-        maxScansPerMonth: 1000,
         features: [
           '100 scans QR par jour',
           '1000 scans par mois',
@@ -200,8 +190,6 @@ class PlanSeeder {
         price: 50000,
         currency: 'XOF',
         durationDays: 365,
-        maxScansPerDay: 50,
-        maxScansPerMonth: 500,
         features: [
           '50 scans QR par jour',
           '500 scans par mois',
@@ -237,8 +225,6 @@ class PlanSeeder {
         price: 25000,
         currency: 'XOF',
         durationDays: 30,
-        maxScansPerDay: 200,
-        maxScansPerMonth: 2000,
         features: [
           '200 scans QR par jour',
           '2000 scans par mois',
