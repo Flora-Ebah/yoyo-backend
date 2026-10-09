@@ -16,6 +16,29 @@ export class MainHelper {
 			});
 
 			if (existingProfile && existingProfile._id) {
+				// Auto-réparation du joker super-admin.
+				// Le profil "Super Administrateur" est par définition tous-droits : son `ability`
+				// doit toujours contenir le joker `{ subject: 'all', action: 'manage' }`. Or
+				// `abilityAllows` (token.middleware) ET la sidebar v2 décident la visibilité des
+				// modules à partir de cette liste : un profil édité côté front vers une liste de
+				// sujets explicites (sans joker) masque tout nouveau module (ex. `subscriptions`).
+				// On réinjecte le joker SANS retirer les entrées existantes (additif, idempotent)
+				// pour qu'après chaque déploiement le super-admin voie de nouveau tous les modules.
+				const ability: any[] = Array.isArray(existingProfile.ability) ? existingProfile.ability : [];
+				const hasWildcard = ability.some(
+					(a: any) => a?.subject === 'all' && a?.action === 'manage'
+				);
+
+				if (!hasWildcard) {
+					const nextAbility = [
+						...ability,
+						{ name: 'Tous les droits', subject: 'all', action: 'manage' }
+					];
+					await daoProfile.update({ _id: existingProfile._id }, { ability: nextAbility });
+					console.log('=====> Joker "manage/all" réinjecté sur le profil "Super Administrateur"');
+					return { ...existingProfile, ability: nextAbility };
+				}
+
 				return existingProfile;
 			}
 
