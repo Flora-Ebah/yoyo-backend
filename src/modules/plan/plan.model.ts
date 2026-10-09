@@ -31,12 +31,6 @@ const schema = new mongoose.Schema<IPlan>(
       min: 1,
       default: 30
     },
-    discountPercentage: {
-      type: Number,
-      required: true,
-      min: 1,
-      max: 100
-    },
     maxScansPerDay: {
       type: Number,
       min: 1,
@@ -67,10 +61,6 @@ const schema = new mongoose.Schema<IPlan>(
       type: Boolean,
       default: true
     },
-    trialDays: {
-      type: Number,
-      default: 0
-    },
     metadata: {
       type: Schema.Types.Mixed
     },
@@ -91,7 +81,6 @@ schema.index({ name: 1 });
 schema.index({ price: 1 });
 schema.index({ isActive: 1 });
 schema.index({ isPopular: 1 });
-schema.index({ discountPercentage: 1 });
 schema.index({ partnerCategories: 1 });
 
 const model = mongoose.model<IPlan>('Plan', schema);
@@ -103,7 +92,7 @@ export class PlanSet extends MongoDbDao<Document> implements IData<Document> {
     super();
   }
 
-  props: string = 'name description price currency durationDays discountPercentage maxScansPerDay maxScansPerMonth features partnerCategories maxCashbackAmount isPopular isActive trialDays';
+  props: string = 'name description price currency durationDays maxScansPerDay maxScansPerMonth features partnerCategories maxCashbackAmount isPopular isActive';
   setTitle: string = 'PlanSet';
 
   /**

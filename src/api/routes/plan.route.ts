@@ -26,10 +26,9 @@ const defaultRoute: any = (fastify: any, options, done) => {
             default: 'XOF'
           },
           durationDays: { type: 'number', default: 30 },
-          discountPercentage: { type: 'number' },
           maxScansPerDay: { type: 'number', default: 5 },
           maxScansPerMonth: { type: 'number', default: 100 },
-          features: { 
+          features: {
             type: 'array',
             items: { type: 'string' }
           },
@@ -41,10 +40,9 @@ const defaultRoute: any = (fastify: any, options, done) => {
           maxCashbackAmount: { type: 'number' },
           isPopular: { type: 'boolean', default: false },
           isActive: { type: 'boolean', default: true },
-          trialDays: { type: 'number', default: 0 },
           metadata: { type: 'object' }
         },
-        required: ['name', 'description', 'price', 'discountPercentage', 'features'],
+        required: ['name', 'description', 'price', 'features'],
         additionalProperties: false
       }
     },
@@ -75,10 +73,9 @@ const defaultRoute: any = (fastify: any, options, done) => {
             enum: ['XOF', 'EUR', 'USD', 'GBP']
           },
           durationDays: { type: 'number' },
-          discountPercentage: { type: 'number' },
           maxScansPerDay: { type: 'number' },
           maxScansPerMonth: { type: 'number' },
-          features: { 
+          features: {
             type: 'array',
             items: { type: 'string' }
           },
@@ -89,7 +86,6 @@ const defaultRoute: any = (fastify: any, options, done) => {
           maxCashbackAmount: { type: 'number' },
           isPopular: { type: 'boolean' },
           isActive: { type: 'boolean' },
-          trialDays: { type: 'number' },
           metadata: { type: 'object' }
         },
         required: ['_id'],

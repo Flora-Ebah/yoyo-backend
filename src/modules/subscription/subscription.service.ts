@@ -612,8 +612,7 @@ export class SubscriptionService {
           description: plan.description,
           price: plan.price,
           currency: plan.currency,
-          features: plan.features,
-          discountPercentage: plan.discountPercentage ?? 0
+          features: plan.features
         },
         daysRemaining,
         totalDays,

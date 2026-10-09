@@ -27,7 +27,6 @@ class PlanSeeder {
         price: { type: Number, required: true },
         currency: { type: String, required: true },
         durationDays: { type: Number, required: true },
-        discountPercentage: { type: Number, default: 0 },
         maxScansPerDay: { type: Number },
         maxScansPerMonth: { type: Number },
         features: [{ type: String }],
@@ -35,7 +34,6 @@ class PlanSeeder {
         maxCashbackAmount: { type: Number },
         isPopular: { type: Boolean, default: false },
         isActive: { type: Boolean, default: true },
-        trialDays: { type: Number },
         metadata: { type: mongoose.Schema.Types.Mixed },
         status: { 
           type: String, 
@@ -75,7 +73,6 @@ class PlanSeeder {
         price: 0,
         currency: 'XOF',
         durationDays: 7,
-        discountPercentage: 0,
         maxScansPerDay: 5,
         maxScansPerMonth: 50,
         features: [
@@ -89,7 +86,6 @@ class PlanSeeder {
         maxCashbackAmount: 100,
         isPopular: false,
         isActive: true,
-        trialDays: 7,
         status: 'active',
         metadata: {
           planType: 'trial',
@@ -104,7 +100,6 @@ class PlanSeeder {
         price: 2500,
         currency: 'XOF',
         durationDays: 30,
-        discountPercentage: 5,
         maxScansPerDay: 20,
         maxScansPerMonth: 200,
         features: [
@@ -135,7 +130,6 @@ class PlanSeeder {
         price: 5000,
         currency: 'XOF',
         durationDays: 30,
-        discountPercentage: 10,
         maxScansPerDay: 50,
         maxScansPerMonth: 500,
         features: [
@@ -170,7 +164,6 @@ class PlanSeeder {
         price: 10000,
         currency: 'XOF',
         durationDays: 30,
-        discountPercentage: 15,
         maxScansPerDay: 100,
         maxScansPerMonth: 1000,
         features: [
@@ -207,7 +200,6 @@ class PlanSeeder {
         price: 50000,
         currency: 'XOF',
         durationDays: 365,
-        discountPercentage: 10,
         maxScansPerDay: 50,
         maxScansPerMonth: 500,
         features: [
@@ -245,7 +237,6 @@ class PlanSeeder {
         price: 25000,
         currency: 'XOF',
         durationDays: 30,
-        discountPercentage: 12,
         maxScansPerDay: 200,
         maxScansPerMonth: 2000,
         features: [

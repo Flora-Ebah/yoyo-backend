@@ -48,16 +48,6 @@ export const createPlanSchema = Joi.object({
       'number.integer': 'La durée doit être un nombre entier',
       'number.min': 'La durée doit être d\'au moins 1 jour'
     }),
-  discountPercentage: Joi.number()
-    .required()
-    .min(1)
-    .max(100)
-    .messages({
-      'number.base': 'Le pourcentage de réduction doit être un nombre',
-      'number.min': 'Le pourcentage de réduction doit être d\'au moins 1%',
-      'number.max': 'Le pourcentage de réduction ne peut pas dépasser 100%',
-      'any.required': 'Le pourcentage de réduction est requis'
-    }),
   maxScansPerDay: Joi.number()
     .integer()
     .min(1)
@@ -101,15 +91,6 @@ export const createPlanSchema = Joi.object({
     .default(false),
   isActive: Joi.boolean()
     .default(true),
-  trialDays: Joi.number()
-    .integer()
-    .min(0)
-    .default(0)
-    .messages({
-      'number.base': 'Le nombre de jours d\'essai doit être un nombre',
-      'number.integer': 'Le nombre de jours d\'essai doit être un nombre entier',
-      'number.min': 'Le nombre de jours d\'essai ne peut pas être négatif'
-    }),
   metadata: Joi.object()
     .optional()
 });
@@ -158,14 +139,6 @@ export const updatePlanSchema = Joi.object({
       'number.integer': 'La durée doit être un nombre entier',
       'number.min': 'La durée doit être d\'au moins 1 jour'
     }),
-  discountPercentage: Joi.number()
-    .min(1)
-    .max(100)
-    .messages({
-      'number.base': 'Le pourcentage de réduction doit être un nombre',
-      'number.min': 'Le pourcentage de réduction doit être d\'au moins 1%',
-      'number.max': 'Le pourcentage de réduction ne peut pas dépasser 100%'
-    }),
   maxScansPerDay: Joi.number()
     .integer()
     .min(1)
@@ -202,14 +175,6 @@ export const updatePlanSchema = Joi.object({
     }),
   isPopular: Joi.boolean(),
   isActive: Joi.boolean(),
-  trialDays: Joi.number()
-    .integer()
-    .min(0)
-    .messages({
-      'number.base': 'Le nombre de jours d\'essai doit être un nombre',
-      'number.integer': 'Le nombre de jours d\'essai doit être un nombre entier',
-      'number.min': 'Le nombre de jours d\'essai ne peut pas être négatif'
-    }),
   metadata: Joi.object()
     .optional()
-}); 
+});
