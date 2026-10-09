@@ -314,24 +314,69 @@ export class SubscriptionSet extends MongoDbDao<any> implements IData<any> {
    * @param expiringDays Fenêtre (en jours) pour considérer un abonnement « en cours d'expiration »
    * @returns Compteurs : actifs, en cours d'expiration, expirés, total
    */
-  async getMetrics(expiringDays: number = 7): Promise<{ active: number; expiringSoon: number; expired: number; total: number }> {
+  async getMetrics(expiringDays: number = 7): Promise<{
+    active: number;
+    expiringSoon: number;
+    expired: number;
+    total: number;
+    newThisMonth: number;
+    revenue: number;
+    byPlan: Array<{ plan: string; count: number }>;
+  }> {
     try {
       const now = new Date();
       const thresholdDate = new Date(now);
       thresholdDate.setDate(thresholdDate.getDate() + expiringDays);
 
-      const [active, expiringSoon, expired, total] = await Promise.all([
+      // Début du mois calendaire courant (filtre sur startDate pour newThisMonth).
+      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
+      const startOfNextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1, 0, 0, 0, 0);
+
+      // Critère « actif » partagé avec le compteur `active` : statut actif + non échu.
+      const activeFilter = { status: 'active', endDate: { $gt: now } };
+
+      const [active, expiringSoon, expired, total, newThisMonth, revenueAgg, byPlanAgg] = await Promise.all([
         // Abonnements actifs non encore échus
-        this.defaultModel.countDocuments({ status: 'active', endDate: { $gt: now } }),
+        this.defaultModel.countDocuments(activeFilter),
         // Abonnements actifs expirant dans la fenêtre donnée
         this.defaultModel.countDocuments({ status: 'active', endDate: { $gt: now, $lte: thresholdDate } }),
         // Abonnements déjà expirés (marqués « expired » ou dont la date est passée)
         this.defaultModel.countDocuments({ $or: [{ status: 'expired' }, { endDate: { $lte: now } }] }),
         // Total des abonnements
-        this.defaultModel.countDocuments({})
+        this.defaultModel.countDocuments({}),
+        // Abonnements souscrits dans le mois calendaire courant (sur startDate)
+        this.defaultModel.countDocuments({ startDate: { $gte: startOfMonth, $lt: startOfNextMonth } }),
+        // Valeur du parc actif : somme des `price` des abonnements actifs
+        this.defaultModel.aggregate([
+          { $match: activeFilter },
+          { $group: { _id: null, total: { $sum: '$price' } } }
+        ]),
+        // Répartition des abonnements actifs par formule (plan)
+        this.defaultModel.aggregate([
+          { $match: activeFilter },
+          { $group: { _id: '$planId', count: { $sum: 1 } } },
+          {
+            $lookup: {
+              from: 'plans',
+              localField: '_id',
+              foreignField: '_id',
+              as: 'plan'
+            }
+          },
+          { $sort: { count: -1 } }
+        ])
       ]);
 
-      return { active, expiringSoon, expired, total };
+      const revenue = Array.isArray(revenueAgg) && revenueAgg.length > 0 ? revenueAgg[0].total || 0 : 0;
+
+      const byPlan: Array<{ plan: string; count: number }> = (Array.isArray(byPlanAgg) ? byPlanAgg : []).map(
+        (row: any) => ({
+          plan: row.plan?.[0]?.name || 'Inconnu',
+          count: row.count || 0
+        })
+      );
+
+      return { active, expiringSoon, expired, total, newThisMonth, revenue, byPlan };
     } catch (error) {
       LoggerService.log({
         type: LogLevel.Error,
