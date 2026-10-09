@@ -145,22 +145,26 @@ const defaultRoute: any = (fastify: any, options, done) => {
             enum: ['active', 'expired', 'cancelled', 'pending', 'trial']
           },
           from: { type: 'string' },
-          to: { type: 'string' }
+          to: { type: 'string' },
+          q: { type: 'string' },
+          expiringDays: { type: 'number' }
         },
         additionalProperties: false
       }
     },
     method: 'GET',
     url: `${routePath}`,
-    preHandler: TokenMiddleware.verifyAdmin,
+    preHandler: TokenMiddleware.can('read', 'subscriptions'),
     handler: (request, reply) => {
       const page = request.query.page || 1;
       const pageSize = request.query.pageSize || 10;
       const status = request.query.status;
       const from = request.query.from;
       const to = request.query.to;
+      const q = request.query.q;
+      const expiringDays = request.query.expiringDays;
 
-      let Q = Controller.list(page, pageSize, status, from, to);
+      let Q = Controller.list(page, pageSize, status, from, to, q, expiringDays);
       return coddyger.api(reply, Q);
     }
   });
@@ -181,7 +185,7 @@ const defaultRoute: any = (fastify: any, options, done) => {
     },
     method: 'GET',
     url: `${routePath}/metrics`,
-    preHandler: TokenMiddleware.verifyAdmin,
+    preHandler: TokenMiddleware.can('read', 'subscriptions'),
     handler: (request, reply) => {
       const expiringDays = request.query.expiringDays || 7;
 

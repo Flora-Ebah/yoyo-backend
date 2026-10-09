@@ -4,6 +4,7 @@ import { dateRangeFilter } from '../../shared/date-filter';
 import { ISubscription, SubscriptionSet } from './';
 import { SubscriptionService } from './subscription.service';
 import { IPlan, PlanSet } from '../plan';
+import { ClientSet } from '../client';
 
 const controllerLabel: string = 'SubscriptionController';
 
@@ -247,17 +248,73 @@ export class SubscriptionController {
    * @param page Numéro de page
    * @param pageSize Taille de la page
    * @param status Statut des abonnements à récupérer
+   * @param from Date de début de la période (filtre sur `startDate`)
+   * @param to Date de fin de la période (filtre sur `startDate`)
+   * @param q Recherche texte sur le client (nom/prénom/email) et le nom du plan
+   * @param expiringDays Ne renvoie que les abonnements `active` expirant sous X jours
    * @returns Liste des abonnements
    */
-  list(page: number = 1, pageSize: number = 10, status?: string, from?: string, to?: string) {
+  list(
+    page: number = 1,
+    pageSize: number = 10,
+    status?: string,
+    from?: string,
+    to?: string,
+    q?: string,
+    expiringDays?: number
+  ) {
     return new Promise(async (resolve, reject) => {
       try {
-        const params: any = { ...dateRangeFilter(from, to) };
+        // `from`/`to` filtrent la date de souscription (startDate), pas la date technique createdAt.
+        const params: any = { ...dateRangeFilter(from, to, 'startDate') };
 
         if (status) {
           params.status = status;
         }
-        
+
+        // Fenêtre d'expiration : réutilise la logique de getExpiringSubscriptions / getMetrics.
+        // On ne garde que les abonnements actifs dont endDate ∈ [maintenant, maintenant + expiringDays].
+        if (expiringDays !== undefined && expiringDays !== null && !Number.isNaN(Number(expiringDays))) {
+          const now = new Date();
+          const thresholdDate = new Date(now);
+          thresholdDate.setDate(thresholdDate.getDate() + Number(expiringDays));
+
+          params.status = 'active';
+          params.endDate = { $gt: now, $lte: thresholdDate };
+        }
+
+        // Recherche texte sur des champs peuplés (client et plan).
+        // Même approche que la liste des transactions : on résout d'abord les ids
+        // clients / plans correspondant au texte, puis on filtre sur ces ids.
+        if (!coddyger.string.isEmpty(q)) {
+          const rx = { $regex: q, $options: 'i' };
+
+          let clientIds: any[] = [];
+          let planIds: any[] = [];
+
+          try {
+            const clients: any = await new ClientSet().selectHug({
+              $or: [{ firstname: rx }, { lastname: rx }, { email: rx }]
+            });
+            if (Array.isArray(clients)) {
+              clientIds = clients.map((c: any) => c._id);
+            }
+          } catch (searchError) {
+            clientIds = [];
+          }
+
+          try {
+            const plans: any = await new PlanSet().selectHug({ name: rx });
+            if (Array.isArray(plans)) {
+              planIds = plans.map((p: any) => p._id);
+            }
+          } catch (searchError) {
+            planIds = [];
+          }
+
+          params.$or = [{ userId: { $in: clientIds } }, { planId: { $in: planIds } }];
+        }
+
         const result = await this.dao.select({
           params,
           page,

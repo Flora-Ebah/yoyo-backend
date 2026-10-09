@@ -107,7 +107,7 @@ export class SubscriptionSet extends MongoDbDao<any> implements IData<any> {
   }
 
   props: string = 'userId planId startDate endDate status paymentStatus paymentMethod transactionId autoRenew price currency';
-  userProps: string = '_id slug lastname firstname contact';
+  userProps: string = '_id slug lastname firstname email contact';
   setTitle: string = 'SubscriptionSet';
 
   /**
