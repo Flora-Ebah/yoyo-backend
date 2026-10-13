@@ -22,6 +22,8 @@ const schema = new mongoose.Schema<IPayment>({
   // Traçabilité de l'invalidation a posteriori d'un ticket par le marchand.
   invalidatedAt: { type: Date },
   invalidatedBy: { type: Schema.Types.ObjectId, ref: 'Client' },
+  // Montant très au-dessus des achats habituels de la boutique : ticket validé mais signalé au marchand.
+  flagged: { type: Boolean, default: false },
 },
 { timestamps: true });
 

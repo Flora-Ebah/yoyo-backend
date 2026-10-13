@@ -448,4 +448,48 @@ export class PaymentController {
       return coddyger.catchReturn(e, controllerLabel, 'getClientTransactions');
     });
   }
+
+  /**
+   * Économies cumulées du client connecté (tickets validés uniquement).
+   * @param clientId `request.user._id`
+   */
+  getClientSavings(clientId: string) {
+    return new Promise(async (resolve, reject) => {
+      try {
+        if (!coddyger.string.isValidObjectId(clientId)) {
+          return resolve({ status: defines.status.badRequest, message: locale.wrongObjectId('du client'), data: null });
+        }
+
+        const data = await this.service.getClientSavings(clientId);
+        resolve({ status: defines.status.requestOK, message: locale.controller.payment.savings, data });
+      } catch (error) {
+        reject(error);
+      }
+    }).catch((e: IErrorObject) => {
+      console.error(e);
+      return coddyger.catchReturn(e, controllerLabel, 'getClientSavings');
+    });
+  }
+
+  /**
+   * Réductions utilisées aujourd'hui / ce mois par le client connecté, et quota journalier.
+   * @param clientId `request.user._id`
+   */
+  getScanUsage(clientId: string) {
+    return new Promise(async (resolve, reject) => {
+      try {
+        if (!coddyger.string.isValidObjectId(clientId)) {
+          return resolve({ status: defines.status.badRequest, message: locale.wrongObjectId('du client'), data: null });
+        }
+
+        const data = await this.service.getScanUsage(clientId);
+        resolve({ status: defines.status.requestOK, message: locale.controller.payment.scanUsage, data });
+      } catch (error) {
+        reject(error);
+      }
+    }).catch((e: IErrorObject) => {
+      console.error(e);
+      return coddyger.catchReturn(e, controllerLabel, 'getScanUsage');
+    });
+  }
 }

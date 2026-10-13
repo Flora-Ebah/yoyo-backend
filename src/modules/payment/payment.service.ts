@@ -9,6 +9,7 @@ import { ClientService } from '../client/client.service';
 import { ClientSet } from '../client';
 import { PartnerSet } from '../partner';
 import { AppEvents, eventBus } from '../../events';
+import { PlatformConfigService } from '../platform-config/platform-config.service';
 
 export class PaymentService {
   private readonly dao: IData<IPayment>;
@@ -19,6 +20,8 @@ export class PaymentService {
   private readonly clientService: ClientService;
   /** Accès direct au modèle Partner pour les lectures projetées du chemin de scan. */
   private readonly partnerDao: PartnerSet;
+  /** Garde-fous du montant saisi par le client (`redeemLimits`, réglés au BO). */
+  private readonly platformConfigService: PlatformConfigService;
 
   constructor() {
     this.dao = new PaymentSet();
@@ -27,6 +30,7 @@ export class PaymentService {
     this.partnerService = new PartnerService();
     this.clientService = new ClientService();
     this.partnerDao = new PartnerSet();
+    this.platformConfigService = new PlatformConfigService();
   }
 
   /**
@@ -431,7 +435,7 @@ export class PaymentService {
    * Il n'était soumis à aucun contrôle : ni positivité, ni cohérence avec le minimum de commande
    * de la boutique. Le montant alimente les statistiques de revenus et le calcul de la remise.
    */
-  private validateAmount(amount: any, partner: any): { error: true; data: string } | null {
+  private validateAmount(amount: any, partner: any, maxAmount: number = 0): { error: true; data: string } | null {
     const value = Number(amount);
 
     if (!Number.isFinite(value) || value <= 0) {
@@ -443,7 +447,53 @@ export class PaymentService {
       return { error: true, data: locale.controller.payment.belowMinOrder(minOrder) };
     }
 
+    // Plafond par achat : celui de la boutique s'il est fixé, sinon celui de la plateforme.
+    // Le client saisissant lui-même le montant, c'est la borne contre un zéro de trop ou une fraude.
+    const ceiling = this.effectiveMaxAmount(partner, maxAmount);
+    if (ceiling > 0 && value > ceiling) {
+      return { error: true, data: locale.controller.payment.aboveMaxOrder(ceiling) };
+    }
+
     return null;
+  }
+
+  /** Plafond par achat applicable : `partner.maxOrder` s'il est > 0, sinon le plafond plateforme (0 = aucun). */
+  private effectiveMaxAmount(partner: any, platformMax: number): number {
+    const own = Number(partner?.maxOrder ?? 0);
+    if (Number.isFinite(own) && own > 0) return own;
+    const fallback = Number(platformMax ?? 0);
+    return Number.isFinite(fallback) && fallback > 0 ? fallback : 0;
+  }
+
+  /** Minuit (heure du serveur) du jour courant : début de la fenêtre du quota journalier. */
+  private startOfToday(): Date {
+    const d = new Date();
+    d.setHours(0, 0, 0, 0);
+    return d;
+  }
+
+  /**
+   * Indique si le montant est très au-dessus des achats habituels de la boutique : plus de 5 fois la
+   * médiane de ses 50 derniers tickets validés. Ne bloque rien — le ticket est seulement signalé au
+   * marchand, qui peut l'invalider. Sans historique suffisant (< 10 tickets), rien n'est signalé.
+   */
+  private async isUnusualAmount(to: string, amount: number): Promise<boolean> {
+    try {
+      const model: any = (this.dao as any).defaultModel;
+      const recent: any[] = await model
+        .find({ to, status: 'success' }, 'amount')
+        .sort({ completedAt: -1 })
+        .limit(50)
+        .lean();
+      const amounts = (recent ?? []).map((p: any) => Number(p.amount)).filter((n: number) => Number.isFinite(n) && n > 0);
+      if (amounts.length < 10) return false;
+      amounts.sort((a: number, b: number) => a - b);
+      const mid = Math.floor(amounts.length / 2);
+      const median = amounts.length % 2 ? amounts[mid] : (amounts[mid - 1] + amounts[mid]) / 2;
+      return median > 0 && amount > 5 * median;
+    } catch {
+      return false;
+    }
   }
 
   /**
@@ -468,12 +518,14 @@ export class PaymentService {
    * Transaction logique atomique :
    *  1. abonnement ACTIF du client (exigence conservée) ;
    *  2. boutique existante et `from` ≠ `to` ;
-   *  3. montant borné (`validateAmount` : > 0 et ≥ `partner.minOrder`) ;
+   *  3. montant borné (`validateAmount` : > 0, ≥ `partner.minOrder`, ≤ plafond boutique ou plateforme) ;
    *  4. pourcentage figé = `partner.maxDiscount` (0 si absent) ;
    *  5. net + réduction recalculés SERVEUR ;
    *  6. garde-fou idempotent : un ticket `success` identique (from, to, amount) de moins de ~60 s
    *     est renvoyé tel quel au lieu d'en créer un second (anti double-soumission) ;
-   *  7. notification du marchand (push + socket).
+   *  7. délai par boutique (`redeemLimits.cooldownHours`) et quota journalier (`redeemLimits.maxPerDay`) ;
+   *  8. montant inhabituel pour la boutique => ticket `flagged`, signalé au marchand ;
+   *  9. notification du marchand (push + socket).
    *
    * @param from Client authentifié (issu du jeton, jamais du corps)
    * @param to Boutique scannée
@@ -492,9 +544,10 @@ export class PaymentService {
 
       const partnerModel: any = (this.partnerDao as any).defaultModel;
 
-      const [subscription, partner] = await Promise.all([
+      const [subscription, partner, limits] = await Promise.all([
         this.subscriptionService.getCurrentSubscriptionWithPlanDetails(from),
-        partnerModel.findOne({ _id: to, status: { $nin: ['removed', 'archived'] } }, '_id name user maxDiscount minOrder').lean()
+        partnerModel.findOne({ _id: to, status: { $nin: ['removed', 'archived'] } }, '_id name user maxDiscount minOrder maxOrder').lean(),
+        this.platformConfigService.getRedeemLimits()
       ]);
 
       if (!subscription) {
@@ -505,7 +558,7 @@ export class PaymentService {
         return { error: true, data: locale.notfound('Partenaire') };
       }
 
-      const invalidAmount = this.validateAmount(amount, partner);
+      const invalidAmount = this.validateAmount(amount, partner, limits.maxAmount);
       if (invalidAmount) {
         return invalidAmount;
       }
@@ -531,6 +584,31 @@ export class PaymentService {
         return { ticket: this.buildTicket(recent, partner, discount, net) };
       }
 
+      // Délai par boutique : APRÈS le garde-fou idempotent, pour qu'un rejeu légitime (double tap,
+      // retry réseau) reçoive toujours son ticket au lieu d'une erreur.
+      const cooldownHours = Number(limits.cooldownHours) || 0;
+      if (cooldownHours > 0) {
+        const last: any = await model
+          .findOne({ from, to, status: 'success', completedAt: { $gte: new Date(Date.now() - cooldownHours * 3600 * 1000) } }, 'completedAt')
+          .sort({ completedAt: -1 })
+          .lean();
+        if (last?.completedAt) {
+          const unlockAt = new Date(new Date(last.completedAt).getTime() + cooldownHours * 3600 * 1000);
+          return { error: true, data: locale.controller.payment.redeemCooldown(unlockAt) };
+        }
+      }
+
+      // Quota journalier, toutes boutiques confondues.
+      const maxPerDay = Number(limits.maxPerDay) || 0;
+      if (maxPerDay > 0) {
+        const usedToday: number = await model.countDocuments({ from, status: 'success', completedAt: { $gte: this.startOfToday() } });
+        if (usedToday >= maxPerDay) {
+          return { error: true, data: locale.controller.payment.dailyLimitReached(maxPerDay) };
+        }
+      }
+
+      const flagged = await this.isUnusualAmount(to, total);
+
       const _id = coddyger.string.generateObjectId();
       const completedAt = new Date();
 
@@ -542,13 +620,16 @@ export class PaymentService {
         discountPercentage,
         status: 'success',
         completedAt,
-        validatedBy: 'client'
+        validatedBy: 'client',
+        flagged
       });
 
       // Notifie le marchand (réutilise push + socket, comme la notification de demande initiée).
       await this.pushNotificationService.create({
-        title: 'Réduction validée',
-        body: `Une réduction vient d'être validée dans votre boutique ${partner.name}`,
+        title: flagged ? '⚠️ Montant inhabituel' : 'Réduction validée',
+        body: flagged
+          ? `Réduction validée sur un achat de ${total.toLocaleString('fr-FR')} F dans votre boutique ${partner.name}, bien au-dessus de vos montants habituels. Vérifiez-la et invalidez-la si besoin.`
+          : `Une réduction vient d'être validée dans votre boutique ${partner.name}`,
         type: 'info',
         priority: 'high',
         data: {
@@ -556,6 +637,7 @@ export class PaymentService {
           demand: String(_id),
           boutiqueId: String(to),
           status: 'success',
+          flagged,
           url: `/payment/${_id}`
         },
         target: Events.PUSH_DEMANDE,
@@ -926,4 +1008,59 @@ export class PaymentService {
     }
   }
 
+  /**
+   * Économies cumulées d'un client : somme des réductions de ses tickets VALIDÉS (`success`). Les
+   * tickets invalidés par le marchand, en attente ou refusés ne comptent pas. La réduction de chaque
+   * ticket est recalculée avec la même formule que `redeem` (`computeDiscount`).
+   *
+   * @returns `{ total, month, count }` — `month` couvre le mois civil en cours (heure du serveur)
+   */
+  async getClientSavings(clientId: string): Promise<{ total: number; month: number; count: number }> {
+    const model: any = (this.dao as any).defaultModel;
+    const rows: any[] = await model
+      .find({ from: clientId, status: 'success' }, 'amount discountPercentage completedAt createdAt')
+      .lean();
+
+    const now = new Date();
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+
+    let total = 0;
+    let month = 0;
+    for (const p of rows ?? []) {
+      const amount = Number(p.amount);
+      if (!Number.isFinite(amount) || amount <= 0) continue;
+      const { discount } = this.computeDiscount(amount, Number(p.discountPercentage ?? 0));
+      total += discount;
+      const at = new Date(p.completedAt ?? p.createdAt);
+      if (at >= monthStart) month += discount;
+    }
+
+    return { total, month, count: (rows ?? []).length };
+  }
+
+  /**
+   * Consommation des réductions du jour par rapport au quota (`redeemLimits.maxPerDay`), lue par
+   * l'app Client pour la pastille « N aujourd'hui ». Même comptage que le quota de `redeem`.
+   * `dayLimit` / `monthLimit` à 0 = illimité (pas de quota mensuel à ce jour).
+   */
+  async getScanUsage(clientId: string): Promise<{ hasSubscription: boolean; dayUsed: number; dayLimit: number; monthUsed: number; monthLimit: number }> {
+    const model: any = (this.dao as any).defaultModel;
+    const now = new Date();
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+
+    const [subscription, limits, dayUsed, monthUsed] = await Promise.all([
+      this.subscriptionService.getCurrentSubscriptionWithPlanDetails(clientId),
+      this.platformConfigService.getRedeemLimits(),
+      model.countDocuments({ from: clientId, status: 'success', completedAt: { $gte: this.startOfToday() } }),
+      model.countDocuments({ from: clientId, status: 'success', completedAt: { $gte: monthStart } })
+    ]);
+
+    return {
+      hasSubscription: !!subscription,
+      dayUsed: Number(dayUsed) || 0,
+      dayLimit: Number(limits.maxPerDay) || 0,
+      monthUsed: Number(monthUsed) || 0,
+      monthLimit: 0
+    };
+  }
 }

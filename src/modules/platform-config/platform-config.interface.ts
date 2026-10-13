@@ -14,5 +14,13 @@ export interface IPlatformConfig {
    * serveur à l'envoi (`ffprobe`, `POST /upload`), lus par l'app Pro pour guider le marchand.
    */
   media?: { maxVideoSeconds: number; maxVideoSizeMb: number };
+  /**
+   * Garde-fous du flux « le client saisit lui-même le montant » (`PaymentService.redeem`), sans
+   * validation manuelle du marchand. 0 = garde-fou désactivé.
+   *  - `maxAmount` : plafond par achat (FCFA), sauf si la boutique fixe son propre `maxOrder` ;
+   *  - `cooldownHours` : délai minimum entre deux réductions d'un même client dans une même boutique ;
+   *  - `maxPerDay` : nombre maximum de réductions par client et par jour, toutes boutiques confondues.
+   */
+  redeemLimits?: { maxAmount: number; cooldownHours: number; maxPerDay: number };
   status?: string;
 }

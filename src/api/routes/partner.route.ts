@@ -59,6 +59,7 @@ const defaultRoute: any = (fastify: any, options, done) => {
           videoPoster: { type: 'string', maxLength: 255 },
           maxDiscount: { type: 'number', minimum: 0, maximum: 100 },
           minOrder: { type: 'number', minimum: 0 },
+          maxOrder: { type: 'number', minimum: 0 },
           status: { 
             type: 'string',
             enum: ['active', 'inactive', 'suspended', 'removed'],
@@ -161,6 +162,7 @@ const defaultRoute: any = (fastify: any, options, done) => {
           videoPoster: { type: 'string', maxLength: 255 },
           maxDiscount: { type: 'number', minimum: 0, maximum: 100 },
           minOrder: { type: 'number', minimum: 0 },
+          maxOrder: { type: 'number', minimum: 0 },
           status: { 
             type: 'string',
             enum: ['active', 'inactive', 'suspended', 'removed'] 
@@ -596,7 +598,8 @@ const defaultRoute: any = (fastify: any, options, done) => {
           video: { type: 'string', maxLength: 255 },
           videoPoster: { type: 'string', maxLength: 255 },
           maxDiscount: { type: 'number', minimum: 0, maximum: 100 },
-          minOrder: { type: 'number', minimum: 0 }
+          minOrder: { type: 'number', minimum: 0 },
+          maxOrder: { type: 'number', minimum: 0 }
         },
         required: ['name'],
         additionalProperties: true

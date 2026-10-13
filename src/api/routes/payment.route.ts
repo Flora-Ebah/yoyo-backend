@@ -403,6 +403,42 @@ const defaultRoute: any = (fastify: any, options, done) => {
     }
   });
 
+  // Économies cumulées du client connecté (somme des réductions de ses tickets validés)
+  fastify.route({
+    schema: {
+      tags: tagsClient,
+      summary: 'Économies du client connecté',
+      description: 'Total des réductions validées (hors tickets invalidés), total du mois en cours et nombre de tickets'
+    },
+    method: 'GET',
+    url: `${routePath}/savings/me`,
+    preHandler: TokenMiddleware.verify,
+    handler: (request, reply) => {
+      let user: any = request.user;
+
+      let Q = Controller.getClientSavings(user._id);
+      return coddyger.api(reply, Q);
+    }
+  });
+
+  // Réductions utilisées aujourd'hui par le client connecté, et quota journalier (`redeemLimits.maxPerDay`)
+  fastify.route({
+    schema: {
+      tags: tagsClient,
+      summary: 'Consommation des réductions du jour',
+      description: "Réductions validées aujourd'hui et ce mois, et quota journalier (0 = illimité)"
+    },
+    method: 'GET',
+    url: `${routePath}/scan-usage/me`,
+    preHandler: TokenMiddleware.verify,
+    handler: (request, reply) => {
+      let user: any = request.user;
+
+      let Q = Controller.getScanUsage(user._id);
+      return coddyger.api(reply, Q);
+    }
+  });
+
   done();
 };
 

@@ -48,6 +48,8 @@ const schema = new mongoose.Schema<IPartner>({
   videoPoster: { type: String },
   maxDiscount: { type: Number },
   minOrder: { type: Number },
+  // Plafond par achat (FCFA) ; absent ou 0 = plafond de la plateforme (`redeemLimits.maxAmount`).
+  maxOrder: { type: Number },
   isSponsored: { type: Boolean, default: false },
   // Jours et heures d'ouverture
   openingHours: [openingHoursSchema],

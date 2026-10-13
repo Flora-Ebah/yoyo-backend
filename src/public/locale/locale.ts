@@ -83,6 +83,12 @@ export const locale = {
 			alreadyProcessed: 'Cette demande de réduction a déjà été traitée',
 			invalidAmount: 'Le montant de la facture doit être un nombre supérieur à 0',
 			belowMinOrder: (min: number) => `Le montant de la facture doit atteindre le minimum de commande de ${min} F`,
+			aboveMaxOrder: (max: number) => `Le montant dépasse le plafond autorisé de ${max.toLocaleString('fr-FR')} F par achat. Vérifiez la somme saisie.`,
+			redeemCooldown: (unlockAt: Date) =>
+				`Vous avez déjà utilisé votre réduction dans cette boutique récemment. Nouvelle réduction possible à partir de ${unlockAt.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', timeZone: 'Africa/Abidjan' })}.`,
+			dailyLimitReached: (max: number) => `Vous avez atteint la limite de ${max} réduction${max > 1 ? 's' : ''} par jour. Réessayez demain.`,
+			savings: 'Économies du client',
+			scanUsage: 'Consommation des réductions du jour',
 			notInvalidable: "Seul un ticket validé peut être invalidé",
 			redeemed: 'Réduction validée avec succès',
 			invalidated: 'Le ticket a été invalidé'

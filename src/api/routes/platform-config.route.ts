@@ -14,7 +14,7 @@ const tags: string[] = ['Paramètres plateforme (#3/#2/#1)'];
  * strippés). Un nouveau fichier de route se déploie correctement, ce qui débloque l'écriture.
  *
  * - Lecture : `GET /platform-config` (apps + BO) — renvoie toute la configuration.
- * - Écriture : `PUT /platform-config` (admin) — accepte discountColors / sponsorPlan / proximityPush / media
+ * - Écriture : `PUT /platform-config` (admin) — accepte discountColors / sponsorPlan / proximityPush / media / redeemLimits
  *   (et les bornes de remise), et délègue au même `SettingsController.update`.
  */
 const defaultRoute: any = (fastify: any, options, done) => {
@@ -70,6 +70,16 @@ const defaultRoute: any = (fastify: any, options, done) => {
               maxVideoSeconds: { type: 'number', minimum: 1, maximum: 600 },
               // ≤ au plafond de réception de `POST /upload` (main.route.ts)
               maxVideoSizeMb: { type: 'number', minimum: 1, maximum: 200 }
+            },
+            additionalProperties: false
+          },
+          // Garde-fous du montant saisi par le client (`PaymentService.redeem`) ; 0 = désactivé.
+          redeemLimits: {
+            type: 'object',
+            properties: {
+              maxAmount: { type: 'number', minimum: 0 },
+              cooldownHours: { type: 'number', minimum: 0, maximum: 720 },
+              maxPerDay: { type: 'number', minimum: 0, maximum: 1000 }
             },
             additionalProperties: false
           }

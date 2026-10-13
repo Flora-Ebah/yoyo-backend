@@ -21,6 +21,25 @@ const normalizeMedia = (media: any): NonNullable<IPlatformConfig['media']> => {
   };
 };
 
+/** Garde-fous du montant saisi par le client : valeurs de départ, modifiables au BO. */
+export const DEFAULT_REDEEM_LIMITS = { maxAmount: 500000, cooldownHours: 4, maxPerDay: 5 };
+
+/**
+ * Garde-fous valides, champ par champ. Contrairement aux limites vidéo, 0 est une valeur légitime
+ * (garde-fou désactivé) : seul un champ absent ou invalide retombe sur le défaut.
+ */
+const normalizeRedeemLimits = (limits: any): NonNullable<IPlatformConfig['redeemLimits']> => {
+  const pick = (value: any, fallback: number) => {
+    const n = Number(value);
+    return value !== null && value !== undefined && value !== '' && Number.isFinite(n) && n >= 0 ? n : fallback;
+  };
+  return {
+    maxAmount: pick(limits?.maxAmount, DEFAULT_REDEEM_LIMITS.maxAmount),
+    cooldownHours: pick(limits?.cooldownHours, DEFAULT_REDEEM_LIMITS.cooldownHours),
+    maxPerDay: pick(limits?.maxPerDay, DEFAULT_REDEEM_LIMITS.maxPerDay)
+  };
+};
+
 export class PlatformConfigService {
   private readonly dao: PlatformConfigSet;
 
@@ -44,7 +63,16 @@ export class PlatformConfigService {
     }
     // `media` toujours complet dans la réponse, y compris pour un document créé avant ce champ :
     // les apps lisent ces limites sans valeur de repli codée en dur de leur côté.
-    return { ...doc, media: normalizeMedia(doc.media) } as IPlatformConfig;
+    return { ...doc, media: normalizeMedia(doc.media), redeemLimits: normalizeRedeemLimits(doc.redeemLimits) } as IPlatformConfig;
+  }
+
+  /** Garde-fous du montant saisi par le client (plafond, délai par boutique, quota journalier). */
+  async getRedeemLimits(): Promise<NonNullable<IPlatformConfig['redeemLimits']>> {
+    try {
+      return normalizeRedeemLimits((await this.get()).redeemLimits);
+    } catch {
+      return { ...DEFAULT_REDEEM_LIMITS };
+    }
   }
 
   /** Limites de la vidéo de présentation (durée en secondes, poids en Mo). */
@@ -83,6 +111,10 @@ export class PlatformConfigService {
 
     if (data.media) {
       next.media = normalizeMedia({ ...current.media, ...data.media });
+    }
+
+    if (data.redeemLimits) {
+      next.redeemLimits = normalizeRedeemLimits({ ...current.redeemLimits, ...data.redeemLimits });
     }
 
     const res: any = await this.dao.update({ _id: (current as any)._id }, next);

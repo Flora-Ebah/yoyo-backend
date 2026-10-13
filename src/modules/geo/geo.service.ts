@@ -1,6 +1,7 @@
 import { ClientSet } from '../client/client.model';
 import { PartnerSet } from '../partner/partner.model';
 import { SettingsService } from '../settings/settings.service';
+import { PlatformConfigService } from '../platform-config/platform-config.service';
 import { PushNotificationService } from '../push-notification/push-notification.service';
 
 /** Distance en mètres entre deux points GPS (formule de Haversine). */
@@ -18,18 +19,21 @@ function distanceMeters(lat1: number, lng1: number, lat2: number, lng2: number):
 /**
  * Push par proximité (#1). L'app remonte la position (background). Le serveur calcule le partenaire
  * le plus proche dans le rayon configuré au BO et envoie une notif FCM, avec anti-spam.
- * Tout est piloté par `settings.proximityPush` — aucune valeur en dur.
+ * Tout est piloté par `proximityPush` — aucune valeur en dur. Le BO l'enregistre dans platform-config
+ * (`PUT /platform-config`) ; `settings.proximityPush` n'est plus qu'un repli pour les anciennes bases.
  */
 export class GeoService {
   private readonly clientDao: ClientSet;
   private readonly partnerDao: PartnerSet;
   private readonly settings: SettingsService;
+  private readonly platformConfig: PlatformConfigService;
   private readonly pushService: PushNotificationService;
 
   constructor() {
     this.clientDao = new ClientSet();
     this.partnerDao = new PartnerSet();
     this.settings = new SettingsService();
+    this.platformConfig = new PlatformConfigService();
     this.pushService = new PushNotificationService();
   }
 
@@ -37,9 +41,11 @@ export class GeoService {
     // 1) Mémoriser la dernière position.
     await this.clientDao.update({ _id: userId }, { lastLocation: { lat, lng, at: new Date() } });
 
-    // 2) Config BO.
-    const cfg: any = await this.settings.getSettings();
-    const prox = cfg?.proximityPush;
+    // 2) Config BO. Lue dans platform-config, là où le BO l'écrit : elle était lue dans `settings`,
+    // que le BO ne met jamais à jour pour ce champ — le rayon restait vide et aucune notif ne partait.
+    const platform: any = await this.platformConfig.get().catch(() => null);
+    const legacy: any = platform?.proximityPush?.radiusMeters > 0 ? null : await this.settings.getSettings();
+    const prox = platform?.proximityPush?.radiusMeters > 0 ? platform.proximityPush : legacy?.proximityPush;
     if (!prox || !prox.radiusMeters || prox.radiusMeters <= 0) {
       return { updated: true, notified: false };
     }

@@ -43,6 +43,8 @@ export interface IPartner {
   videoPoster?: string;
   maxDiscount?: number;
   minOrder?: number;
+  /** Plafond par achat (FCFA) fixé par la boutique ; absent ou 0 = plafond de la plateforme. */
+  maxOrder?: number;
   isSponsored?: boolean;
   // Jours et heures d'ouverture
   openingHours?: IOpeningHours[];

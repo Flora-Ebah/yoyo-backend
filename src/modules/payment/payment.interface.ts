@@ -17,4 +17,6 @@ export interface IPayment {
   // Invalidation a posteriori par le marchand (seul pouvoir restant sur un ticket).
   invalidatedAt?: Date;
   invalidatedBy?: string;
+  // Montant inhabituel pour la boutique : signalé au marchand, qui peut invalider le ticket.
+  flagged?: boolean;
 }
