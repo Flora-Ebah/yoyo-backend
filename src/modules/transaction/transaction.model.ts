@@ -30,7 +30,8 @@ const schema = new mongoose.Schema<ITransaction>({
   // 'boutique-sponsor' (mise en avant d'une boutique par son marchand, flux self-service payant).
   kind: { type: String, enum: ['subscription', 'boutique-sponsor'], default: 'subscription' },
   // Métadonnées de mise en avant (uniquement pour kind === 'boutique-sponsor').
-  boutiqueId: { type: String },
+  boutiqueId: { type: String },                 // flux MONO (rétrocompat)
+  boutiqueIds: { type: [String], default: undefined }, // flux MULTI (YO Boost) : N boutiques, 1 paiement
   sponsorPlanId: { type: String },
 },
 { timestamps: true });

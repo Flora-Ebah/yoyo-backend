@@ -53,6 +53,38 @@ const defaultRoute: any = (fastify: any, options, done) => {
     }
   });
 
+  // [YO Boost] Initier le paiement UNIQUE d'une mise en avant pour N boutiques (marchand).
+  fastify.route({
+    schema: {
+      tags,
+      summary: 'Souscrire à une mise en avant pour plusieurs boutiques (paiement unique)',
+      description:
+        "Initie UN SEUL paiement couvrant la mise en avant de N boutiques du marchand connecté. " +
+        "Le montant est lu depuis la formule en base (prix × nombre de boutiques, jamais du client). " +
+        "À la validation du paiement, la mise en avant est activée sur TOUTES les boutiques.",
+      body: {
+        type: 'object',
+        properties: {
+          boutiqueIds: { type: 'array', items: { type: 'string' }, minItems: 1 },
+          sponsorPlanId: { type: 'string' }
+        },
+        required: ['boutiqueIds', 'sponsorPlanId'],
+        additionalProperties: false
+      }
+    },
+    method: 'POST',
+    url: `${routePath}/checkout-multi`,
+    preHandler: TokenMiddleware.verify,
+    handler: (request, reply) => {
+      const merchant: any = request.user;
+      const body: any = request.body;
+      return coddyger.api(
+        reply,
+        Controller.checkoutMulti(String(merchant._id), body.boutiqueIds, String(body.sponsorPlanId))
+      );
+    }
+  });
+
   // Statut / confirmation serveur d'un paiement de mise en avant (marchand).
   // Réutilise la vérification de paiement des transactions : le statut est revérifié auprès
   // d'Orange Money, puis l'activation idempotente de la mise en avant est déclenchée si succès.

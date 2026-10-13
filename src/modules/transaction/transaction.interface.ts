@@ -24,6 +24,9 @@ export interface ITransaction {
   // Permet au canal paiement→activation partagé de brancher la bonne activation.
   kind?: 'subscription' | 'boutique-sponsor';
   // Renseignés uniquement pour kind === 'boutique-sponsor'.
-  boutiqueId?: string;       // boutique (module partner) à mettre en avant
+  boutiqueId?: string;       // boutique (module partner) à mettre en avant — flux MONO (rétrocompat)
+  // Flux MULTI (YO Boost) : plusieurs boutiques mises en avant via UN SEUL paiement.
+  // Si renseigné, il prime sur `boutiqueId` lors de l'activation (qui boucle dessus).
+  boutiqueIds?: string[];
   sponsorPlanId?: string;    // formule de mise en avant (module sponsor-plan) à appliquer
 }

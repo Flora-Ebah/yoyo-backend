@@ -105,4 +105,93 @@ export class SponsorCheckoutService {
       }
     };
   }
+
+  /**
+   * [YO Boost] Initie le paiement UNIQUE d'une mise en avant pour N boutiques du marchand connecté.
+   *
+   * Valide chaque identifiant, vérifie la PROPRIÉTÉ de CHAQUE boutique (anti-IDOR : rejet GLOBAL
+   * 404 si une seule n'appartient pas au marchand), charge la formule UNE fois (prix serveur, jamais
+   * du client), puis délègue à `TransactionService.createSponsorTransactionMulti` (montant total =
+   * prix × N, un seul paiement, activation de toutes les boutiques à la validation).
+   *
+   * @param merchantId Marchand authentifié (request.user._id)
+   * @param boutiqueIds Boutiques à mettre en avant (au moins une)
+   * @param sponsorPlanId Formule de mise en avant choisie
+   */
+  async checkoutMulti(merchantId: string, boutiqueIds: string[], sponsorPlanId: string): Promise<any> {
+    const ids = Array.isArray(boutiqueIds) ? boutiqueIds.map((v) => String(v)) : [];
+
+    if (ids.length === 0) {
+      return { ok: false, status: 400, message: 'Veuillez sélectionner au moins une boutique.', data: { stage: 'validation_body', field: 'boutiqueIds' } };
+    }
+
+    // Dédoublonnage : une même boutique sélectionnée deux fois ne double pas le montant.
+    const uniqueIds = [...new Set(ids)];
+
+    // Validation du format de chaque identifiant de boutique.
+    for (const id of uniqueIds) {
+      if (!coddyger.string.isValidObjectId(id)) {
+        return { ok: false, status: 400, message: "Identifiant de boutique invalide.", data: { stage: 'validation_body', field: 'boutiqueIds' } };
+      }
+    }
+    if (!coddyger.string.isValidObjectId(sponsorPlanId)) {
+      return { ok: false, status: 400, message: 'Identifiant de formule invalide.', data: { stage: 'validation_body', field: 'sponsorPlanId' } };
+    }
+
+    // Propriété : CHAQUE boutique doit exister, ne pas être supprimée et appartenir au marchand.
+    // Rejet GLOBAL (anti-IDOR) dès qu'une seule échoue — on masque l'existence des boutiques d'autrui.
+    for (const id of uniqueIds) {
+      const boutique: any = await this.partners.selectOne({ _id: id, status: { $nin: ['removed'] } });
+      if (!boutique) {
+        return { ok: false, status: 404, message: 'Boutique introuvable.', data: { stage: 'boutique_not_found' } };
+      }
+      const ownerId = boutique.user?._id ?? boutique.user;
+      if (!ownerId || String(ownerId) !== String(merchantId)) {
+        return { ok: false, status: 404, message: 'Boutique introuvable.', data: { stage: 'boutique_forbidden' } };
+      }
+    }
+
+    // Formule : chargée UNE fois. Le prix provient d'ICI, jamais du client.
+    const formula: any = await this.sponsorPlans.getById(sponsorPlanId);
+    if (!formula || formula.status === 'removed') {
+      return { ok: false, status: 404, message: 'Formule de mise en avant introuvable.', data: { stage: 'formula_not_found' } };
+    }
+    if (formula.isActive === false || formula.status !== 'active') {
+      return { ok: false, status: 400, message: "Cette formule de mise en avant n'est plus disponible.", data: { stage: 'formula_inactive' } };
+    }
+
+    // Délégation : une seule transaction, montant total = prix × N.
+    const result: any = await this.transactions.createSponsorTransactionMulti(merchantId, uniqueIds, formula);
+
+    if (!result || result.success === false) {
+      return {
+        ok: false,
+        status: result?.status || 400,
+        message: result?.message || "Impossible d'initier le paiement de la mise en avant.",
+        data: {
+          stage: result?.debug?.stage || 'create_sponsor_transaction_multi',
+          amount: result?.debug?.amount ?? ((Number(formula?.price) > 0 ? Number(formula.price) : 0) * uniqueIds.length),
+          currency: process.env.OM_CURRENCY || 'OUV',
+          ...(result?.debug ? { debug: result.debug } : {})
+        }
+      };
+    }
+
+    const tx: any = result.data || {};
+    return {
+      ok: true,
+      status: 201,
+      message: tx.isFree ? 'Mise en avant activée (formule gratuite).' : 'Paiement de la mise en avant initié.',
+      data: {
+        transactionId: String(tx._id),
+        amount: tx.amount,
+        currency: tx.currency,
+        paymentStatus: tx.paymentStatus,
+        paymentUrl: tx.paymentUrl,
+        isFree: !!tx.isFree,
+        boutiqueIds: uniqueIds.map(String),
+        sponsorPlanId: String(sponsorPlanId)
+      }
+    };
+  }
 }

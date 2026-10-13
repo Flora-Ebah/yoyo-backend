@@ -72,4 +72,31 @@ export class SponsorCheckoutController {
       }
     }).catch((e: IErrorObject) => coddyger.catchReturn(e, controllerLabel, 'checkout'));
   }
+
+  /**
+   * [YO Boost] Initie le paiement UNIQUE d'une mise en avant pour N boutiques du marchand connecté.
+   */
+  checkoutMulti(merchantId: string, boutiqueIds: string[], sponsorPlanId: string) {
+    return new Promise(async (resolve, reject) => {
+      try {
+        const result: any = await this.service.checkoutMulti(merchantId, boutiqueIds, sponsorPlanId);
+
+        if (!result.ok) {
+          return resolve({
+            status: result.status || defines.status.badRequest,
+            message: buildDiagMessage(result.message, result.data),
+            data: result.data ?? null
+          });
+        }
+
+        resolve({
+          status: result.status || defines.status.created,
+          message: result.message,
+          data: result.data
+        });
+      } catch (error) {
+        reject(error);
+      }
+    }).catch((e: IErrorObject) => coddyger.catchReturn(e, controllerLabel, 'checkoutMulti'));
+  }
 }

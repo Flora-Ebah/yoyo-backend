@@ -949,39 +949,160 @@ export class TransactionService {
   }
 
   /**
-   * [MISE EN AVANT] Active la mise en avant d'une boutique à partir d'une transaction réglée.
+   * [MISE EN AVANT MULTI — YO Boost] Crée UNE transaction pour N boutiques, avec UN SEUL paiement.
    *
-   * Délègue au `BoutiqueSponsorService.sponsor` existant (lit prix/durée depuis la formule et pose
-   * `isSponsored`). Chargé paresseusement pour éviter tout couplage à l'import. Les erreurs sont
-   * journalisées mais non propagées : la transaction est bel et bien payée, on ne renvoie pas
-   * d'échec au prestataire qui rejouerait la notification.
+   * Même infrastructure de paiement que `createSponsorTransaction` (Orange Money des abonnements) :
+   * le montant total = `formula.price × boutiqueIds.length`, stocké sur la transaction. L'activation
+   * (sur TOUTES les boutiques) est déclenchée par le canal paiement→activation partagé via `kind`.
    *
-   * @param transaction Transaction de sponsorisation (porte boutiqueId / sponsorPlanId / user)
+   * SÉCURITÉ : le montant n'est JAMAIS lu du client ; le prix provient de la formule (base).
+   * L'appartenance de CHAQUE boutique au marchand est contrôlée en amont (sponsor-checkout).
+   *
+   * @param merchantId Marchand connecté (devient `user` de la transaction)
+   * @param boutiqueIds Boutiques à mettre en avant (au moins une)
+   * @param formula Formule de mise en avant déjà résolue en base
+   */
+  async createSponsorTransactionMulti(merchantId: string, boutiqueIds: string[], formula: any): Promise<any> {
+    try {
+      const ids = Array.isArray(boutiqueIds) ? boutiqueIds.map(String) : [];
+      if (ids.length === 0) {
+        return { success: false, status: 400, message: 'Aucune boutique à mettre en avant.' };
+      }
+
+      const unitPrice = Number(formula?.price) > 0 ? Number(formula.price) : 0;
+      const price = unitPrice * ids.length; // montant TOTAL = prix unitaire × N boutiques
+      const currency = process.env.OM_CURRENCY || 'OUV';
+
+      const transactionIdResult = this.generateTransactionId();
+      if (!transactionIdResult.success) {
+        return transactionIdResult;
+      }
+      const transactionId = transactionIdResult.data;
+
+      const transaction: ITransaction = {
+        _id: transactionId,
+        user: merchantId,
+        amount: price,
+        currency,
+        status: 'active',
+        paymentMethod: 'orange-money',
+        paymentStatus: 'pending',
+        paymentDate: new Date(),
+        paymentId: transactionId.toString(),
+        paymentUrl: '',
+        kind: 'boutique-sponsor',
+        boutiqueIds: ids,
+        // Rétrocompat : on renseigne aussi boutiqueId avec la 1ère boutique (lecture par anciens outils).
+        boutiqueId: ids[0],
+        sponsorPlanId: String(formula._id)
+      };
+
+      // Formule gratuite (prix <= 0) : aucun paiement à initier, on active directement les N boutiques.
+      if (price <= 0) {
+        transaction.paymentMethod = 'free';
+        transaction.paymentStatus = 'success';
+        transaction.paymentUrl = 'free';
+        await this.create(transaction);
+        await this.activateBoutiqueSponsor(transaction, transactionId);
+
+        const savedFree = await this.dao.selectOne({ _id: transactionId });
+        return { success: true, data: { ...savedFree, isFree: true } };
+      }
+
+      // Paiement payant : initiation Orange Money partagée (montant total).
+      const paymentResult = await this.processPaymentInitiation(transaction, { price });
+      if (!paymentResult.success) {
+        return paymentResult;
+      }
+
+      await this.create(paymentResult.data);
+      const saved = await this.dao.selectOne({ _id: transactionId });
+      return { success: true, data: saved };
+    } catch (error: any) {
+      console.log(error);
+      return {
+        success: false,
+        error: error instanceof Error ? error : new Error(String(error)),
+        debug: { stage: 'db_create', reason: error?.message || String(error) }
+      };
+    }
+  }
+
+  /**
+   * [MISE EN AVANT] Active la mise en avant des boutiques d'une transaction réglée.
+   *
+   * Généralisé pour le flux MULTI (YO Boost) : boucle sur `transaction.boutiqueIds` (repli sur
+   * `boutiqueId` si ancien format mono) et appelle `BoutiqueSponsorService.sponsor` pour chacune.
+   *
+   * RÉ-ENTRANT / IDEMPOTENT par boutique : une boutique déjà sponsorisée activement n'est pas
+   * ré-activée (on vérifie via `activeForBoutique`). Un ré-appel (rejeu de notification) n'active
+   * donc que les manquantes. En fin de traitement, on vérifie que les N boutiques sont bien
+   * `isSponsored` ; on re-tente / journalise les éventuels échecs. Les erreurs ne sont pas
+   * propagées (la transaction est payée ; ne pas renvoyer d'échec au prestataire).
+   *
+   * @param transaction Transaction de sponsorisation (porte boutiqueIds / boutiqueId / sponsorPlanId / user)
    * @param transactionId ID de la transaction
    */
   private async activateBoutiqueSponsor(transaction: any, transactionId: string): Promise<void> {
-    try {
-      // eslint-disable-next-line @typescript-eslint/no-var-requires
-      const { BoutiqueSponsorService } = require('../boutique-sponsor/boutique-sponsor.service');
-      const sponsorService = new BoutiqueSponsorService();
-      await sponsorService.sponsor(
-        String(transaction.boutiqueId),
-        String(transaction.user),
-        transaction.sponsorPlanId ? String(transaction.sponsorPlanId) : undefined
-      );
-      LoggerService.log({
-        type: LogLevel.Info,
-        content: `Mise en avant activée pour la boutique ${transaction.boutiqueId} (transaction ${transactionId})`,
-        location: this.serviceLabel,
-        method: 'activateBoutiqueSponsor'
-      });
-    } catch (error) {
-      LoggerService.log({
-        type: LogLevel.Error,
-        content: `Échec d'activation de la mise en avant pour la transaction ${transactionId}: ${error}`,
-        location: this.serviceLabel,
-        method: 'activateBoutiqueSponsor'
-      });
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { BoutiqueSponsorService } = require('../boutique-sponsor/boutique-sponsor.service');
+    const sponsorService = new BoutiqueSponsorService();
+
+    // Liste des boutiques : flux MULTI prioritaire, repli mono pour l'ancien format.
+    let ids: string[] = Array.isArray(transaction.boutiqueIds) && transaction.boutiqueIds.length
+      ? transaction.boutiqueIds.map(String)
+      : (transaction.boutiqueId ? [String(transaction.boutiqueId)] : []);
+    // Dédoublonnage défensif (une même boutique ne doit être activée qu'une fois).
+    ids = [...new Set(ids)];
+
+    const sponsorPlanId = transaction.sponsorPlanId ? String(transaction.sponsorPlanId) : undefined;
+    const userId = String(transaction.user);
+
+    for (const boutiqueId of ids) {
+      try {
+        // Idempotence par boutique : ne pas ré-activer une mise en avant déjà active.
+        const active = await sponsorService.activeForBoutique(boutiqueId);
+        if (active) {
+          continue;
+        }
+        await sponsorService.sponsor(boutiqueId, userId, sponsorPlanId);
+        LoggerService.log({
+          type: LogLevel.Info,
+          content: `Mise en avant activée pour la boutique ${boutiqueId} (transaction ${transactionId})`,
+          location: this.serviceLabel,
+          method: 'activateBoutiqueSponsor'
+        });
+      } catch (error) {
+        LoggerService.log({
+          type: LogLevel.Error,
+          content: `Échec d'activation de la mise en avant pour la boutique ${boutiqueId} (transaction ${transactionId}): ${error}`,
+          location: this.serviceLabel,
+          method: 'activateBoutiqueSponsor'
+        });
+      }
+    }
+
+    // Vérification finale : toutes les boutiques doivent être sponsorisées activement ; re-tente sinon.
+    for (const boutiqueId of ids) {
+      try {
+        const active = await sponsorService.activeForBoutique(boutiqueId);
+        if (!active) {
+          LoggerService.log({
+            type: LogLevel.Error,
+            content: `Boutique ${boutiqueId} non sponsorisée après activation (transaction ${transactionId}) — nouvelle tentative`,
+            location: this.serviceLabel,
+            method: 'activateBoutiqueSponsor'
+          });
+          await sponsorService.sponsor(boutiqueId, userId, sponsorPlanId);
+        }
+      } catch (error) {
+        LoggerService.log({
+          type: LogLevel.Error,
+          content: `Échec de la re-tentative d'activation pour la boutique ${boutiqueId} (transaction ${transactionId}): ${error}`,
+          location: this.serviceLabel,
+          method: 'activateBoutiqueSponsor'
+        });
+      }
     }
   }
 
