@@ -8,6 +8,7 @@ const { AdminSeeder } = require('./admin.seeder');
 const { RolesSeeder } = require('./roles.seeder');
 const { CommercialSeeder } = require('./commercial.seeder');
 const { DemoSeeder } = require('./demo.seeder');
+const { SponsorPlanSeeder } = require('./sponsor-plan.seeder');
 
 class SeederRunner {
   constructor() {
@@ -17,6 +18,7 @@ class SeederRunner {
     this.rolesSeeder = new RolesSeeder();
     this.commercialSeeder = new CommercialSeeder();
     this.demoSeeder = new DemoSeeder();
+    this.sponsorPlanSeeder = new SponsorPlanSeeder();
   }
 
   /**
@@ -45,6 +47,11 @@ class SeederRunner {
       console.log('🛡️  Seeding des rôles...');
       await this.rolesSeeder.seed();
       console.log('✅ Rôles seedés avec succès\n');
+
+      // 5. Seed des formules de mise en avant (YO Boost)
+      console.log('🚀 Seeding des formules de mise en avant...');
+      await this.sponsorPlanSeeder.seed();
+      console.log('✅ Formules de mise en avant seedées avec succès\n');
 
       // Les données de démonstration ne sont PAS incluses ici : elles se lancent
       // explicitement via `node seed.js --demo` (évite de créer des données de test
@@ -110,6 +117,15 @@ class SeederRunner {
   }
 
   /**
+   * Exécute seulement le seeder des formules de mise en avant (YO Boost)
+   */
+  async runSponsorPlans() {
+    console.log('🚀 Seeding des formules de mise en avant...');
+    await this.sponsorPlanSeeder.seed();
+    console.log('✅ Formules de mise en avant seedées avec succès!');
+  }
+
+  /**
    * Exécute seulement le seeder du compte commercial de test
    */
   async runCommercial() {
@@ -155,5 +171,6 @@ module.exports = {
   AdminSeeder,
   RolesSeeder,
   CommercialSeeder,
-  DemoSeeder
+  DemoSeeder,
+  SponsorPlanSeeder
 };

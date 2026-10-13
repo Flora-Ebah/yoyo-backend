@@ -76,6 +76,8 @@ Exemples:
       await seederRunner.runAdmin();
     } else if (args.includes('--roles')) {
       await seederRunner.runRoles();
+    } else if (args.includes('--sponsor-plans')) {
+      await seederRunner.runSponsorPlans();
     } else if (args.includes('--commercial')) {
       await seederRunner.runCommercial();
     } else if (args.includes('--demo')) {
