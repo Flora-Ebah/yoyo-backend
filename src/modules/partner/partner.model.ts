@@ -110,6 +110,10 @@ export class PartnerSet extends MongoDbDao<IPartner & Document> implements IData
 				sortObject = { createdAt: -1 };
 			}
 
+			// [YO Boost] Les boutiques mises en avant (isSponsored) remontent EN TÊTE du feed Découvrir.
+			// L'ordre des clés compte : isSponsored:-1 d'abord, puis le tri courant comme départage.
+			sortObject = { isSponsored: -1, ...sortObject };
+
 			const [rows, totalRows] = await Promise.all([
 				model
 					.find(payloads.params, '-password -__v')
