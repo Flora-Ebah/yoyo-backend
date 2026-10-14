@@ -69,7 +69,11 @@ export class PartnerCommentSet extends MongoDbDao<IPartnerComment & Document> im
   constructor() { super(); }
 
   selectOne(params: object, fields?: string): Promise<Document | any> {
-    return Promise.resolve(this.defaultModel.findOne(params, fields).lean()).catch((e: any) => ({ error: true, data: e }));
+    // Auteur peuplé (firstname/lastname/avatar) pour que addComment renvoie un
+    // commentaire complet, comme listByPartner — sinon le client affiche un auteur vide.
+    return Promise.resolve(
+      this.defaultModel.findOne(params, fields).populate('userId', '_id firstname lastname avatar').lean()
+    ).catch((e: any) => ({ error: true, data: e }));
   }
 
   // Idem PartnerLikeSet : le `count` hérité rejette quand le total vaut 0 (boutique sans commentaire).
