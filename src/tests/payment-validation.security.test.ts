@@ -1,4 +1,4 @@
-import { expect } from 'chai';
+﻿import { expect } from 'chai';
 import sinon from 'sinon';
 import mongoose from 'mongoose';
 import { MongoMemoryServer } from 'mongodb-memory-server';
@@ -10,38 +10,38 @@ import { PushNotificationService } from '../modules/push-notification';
 import { PlatformConfigService } from '../modules/platform-config/platform-config.service';
 
 /**
- * Flux 100% client de validation des réductions.
+ * Flux 100% client de validation des rÃ©ductions.
  *
  * La validation marchand (accept/reject, `PUT /payments`, `POST /payments/validate/:partnerId`) a
- * été supprimée. Le client valide désormais lui-même sa réduction en un seul appel (`redeem`), et
+ * Ã©tÃ© supprimÃ©e. Le client valide dÃ©sormais lui-mÃªme sa rÃ©duction en un seul appel (`redeem`), et
  * le marchand ne garde que le pouvoir d'invalider a posteriori un ticket (`invalidate`).
  *
- * Ces tests verrouillent les garanties clés :
- *  - le pourcentage appliqué est celui de la BOUTIQUE (`maxDiscount`), figé côté serveur ;
- *  - le net et la réduction sont recalculés serveur, jamais acceptés du client ;
- *  - le montant est borné (> 0 et ≥ minOrder) ;
+ * Ces tests verrouillent les garanties clÃ©s :
+ *  - le pourcentage appliquÃ© est celui de la BOUTIQUE (`maxDiscount`), figÃ© cÃ´tÃ© serveur ;
+ *  - le net et la rÃ©duction sont recalculÃ©s serveur, jamais acceptÃ©s du client ;
+ *  - le montant est bornÃ© (> 0 et â‰¥ minOrder) ;
  *  - l'appel est idempotent (anti double-soumission) ;
- *  - le montant est plafonné, et le client limité par boutique (délai) et par jour (quota) ;
- *  - un montant inhabituel pour la boutique est signalé au marchand sans être bloqué ;
- *  - seul le propriétaire de la boutique peut invalider, et seulement un ticket `success`.
+ *  - le montant est plafonnÃ©, et le client limitÃ© par boutique (dÃ©lai) et par jour (quota) ;
+ *  - un montant inhabituel pour la boutique est signalÃ© au marchand sans Ãªtre bloquÃ© ;
+ *  - seul le propriÃ©taire de la boutique peut invalider, et seulement un ticket `success`.
  */
-describe('[Sécurité] Flux client de validation des réductions', () => {
+describe('[SÃ©curitÃ©] Flux client de validation des rÃ©ductions', () => {
   let mongod: MongoMemoryServer;
   let service: PaymentService;
   let notifyStub: sinon.SinonStub;
 
-  /** Le commerçant, propriétaire de la boutique. */
+  /** Le commerÃ§ant, propriÃ©taire de la boutique. */
   const OWNER_ID = '507f1f77bcf86cd799439031';
   /** Le client qui scanne et valide. */
   const CLIENT_ID = '507f1f77bcf86cd799439032';
-  /** Un autre compte connecté, ni client ni propriétaire. */
+  /** Un autre compte connectÃ©, ni client ni propriÃ©taire. */
   const ATTACKER_ID = '507f1f77bcf86cd799439033';
   const PARTNER_ID = '507f1f77bcf86cd799439034';
 
   const MIN_ORDER = 5000;
   const MAX_DISCOUNT = 20; // pourcentage de la boutique
-  /** Garde-fous par défaut des tests (`redeemLimits`), surchargés au cas par cas. */
-  const LIMITS = { maxAmount: 500000, cooldownHours: 4, maxPerDay: 5 };
+  /** Garde-fous par dÃ©faut des tests (`redeemLimits`), surchargÃ©s au cas par cas. */
+  const LIMITS = { maxAmount: 500000, cooldownHours: 4, maxPerDay: 5, requireScanToken: false };
   let limitsStub: sinon.SinonStub;
 
   const paymentModel = () => (new PaymentSet() as any).defaultModel;
@@ -84,7 +84,7 @@ describe('[Sécurité] Flux client de validation des réductions', () => {
     sinon.restore();
   });
 
-  /** Insère un ticket success et renvoie son identifiant. */
+  /** InsÃ¨re un ticket success et renvoie son identifiant. */
   const givenSuccessTicket = async (
     amount = 10000,
     opts: { to?: string; completedAt?: Date; status?: string } = {}
@@ -103,12 +103,12 @@ describe('[Sécurité] Flux client de validation des réductions', () => {
     return String(id);
   };
 
-  describe('redeem — calcul et sécurité', () => {
-    it('applique le pourcentage de la BOUTIQUE et calcule net + réduction côté serveur', async () => {
-      const result: any = await service.redeem(CLIENT_ID, PARTNER_ID, 10000);
+  describe('redeem â€” calcul et sÃ©curitÃ©', () => {
+    it('applique le pourcentage de la BOUTIQUE et calcule net + rÃ©duction cÃ´tÃ© serveur', async () => {
+      const result: any = await service.redeem(CLIENT_ID, { to: PARTNER_ID, amount: 10000 });
 
       expect(result.error, JSON.stringify(result.data)).to.not.equal(true);
-      // 20% de 10000 => net 8000, réduction 2000.
+      // 20% de 10000 => net 8000, rÃ©duction 2000.
       expect(result.ticket.montant).to.equal(10000);
       expect(result.ticket.discountPercentage).to.equal(MAX_DISCOUNT);
       expect(result.ticket.net).to.equal(8000);
@@ -121,27 +121,27 @@ describe('[Sécurité] Flux client de validation des réductions', () => {
       expect(payment.completedAt).to.be.instanceOf(Date);
     });
 
-    it("ne fait JAMAIS confiance à un net ou une réduction fournis par le client", async () => {
-      // Le client tente d'injecter un net/réduction : seuls `to` et `amount` sont lus.
-      const result: any = await service.redeem(CLIENT_ID, PARTNER_ID, 10000);
+    it("ne fait JAMAIS confiance Ã  un net ou une rÃ©duction fournis par le client", async () => {
+      // Le client tente d'injecter un net/rÃ©duction : seuls `to` et `amount` sont lus.
+      const result: any = await service.redeem(CLIENT_ID, { to: PARTNER_ID, amount: 10000 });
 
       expect(result.ticket.net).to.equal(8000);
       expect(result.ticket.reduction).to.equal(2000);
     });
 
-    it('refuse un montant nul, négatif ou non numérique', async () => {
+    it('refuse un montant nul, nÃ©gatif ou non numÃ©rique', async () => {
       for (const amount of [0, -100, undefined, null, 'abc']) {
         await paymentModel().deleteMany({});
-        const result: any = await service.redeem(CLIENT_ID, PARTNER_ID, amount as any);
+        const result: any = await service.redeem(CLIENT_ID, { to: PARTNER_ID, amount: amount as any });
 
-        expect(result.error, `le montant ${String(amount)} doit être refusé`).to.be.true;
+        expect(result.error, `le montant ${String(amount)} doit Ãªtre refusÃ©`).to.be.true;
         const count = await paymentModel().countDocuments({});
         expect(count).to.equal(0);
       }
     });
 
-    it('refuse un montant inférieur au minimum de commande', async () => {
-      const result: any = await service.redeem(CLIENT_ID, PARTNER_ID, MIN_ORDER - 1);
+    it('refuse un montant infÃ©rieur au minimum de commande', async () => {
+      const result: any = await service.redeem(CLIENT_ID, { to: PARTNER_ID, amount: MIN_ORDER - 1 });
 
       expect(result.error).to.be.true;
       expect(String(result.data)).to.contain(String(MIN_ORDER));
@@ -152,118 +152,118 @@ describe('[Sécurité] Flux client de validation des réductions', () => {
       sinon.stub(SubscriptionService.prototype, 'getCurrentSubscriptionWithPlanDetails').resolves(null as any);
       sinon.stub(PushNotificationService.prototype, 'create').resolves({} as any);
 
-      const result: any = await service.redeem(CLIENT_ID, PARTNER_ID, 10000);
+      const result: any = await service.redeem(CLIENT_ID, { to: PARTNER_ID, amount: 10000 });
       expect(result.error).to.be.true;
     });
 
-    it('refuse une boutique inexistante sans rien écrire', async () => {
-      const result: any = await service.redeem(CLIENT_ID, '507f1f77bcf86cd799439099', 10000);
+    it('refuse une boutique inexistante sans rien Ã©crire', async () => {
+      const result: any = await service.redeem(CLIENT_ID, { to: '507f1f77bcf86cd799439099', amount: 10000 });
 
       expect(result.error).to.be.true;
       const count = await paymentModel().countDocuments({});
       expect(count).to.equal(0);
     });
 
-    it('notifie le marchand après un ticket créé', async () => {
-      await service.redeem(CLIENT_ID, PARTNER_ID, 10000);
+    it('notifie le marchand aprÃ¨s un ticket crÃ©Ã©', async () => {
+      await service.redeem(CLIENT_ID, { to: PARTNER_ID, amount: 10000 });
       expect(notifyStub.callCount).to.equal(1);
     });
 
-    it('idempotence : une double-soumission identique renvoie le même ticket sans en créer un second', async () => {
-      const first: any = await service.redeem(CLIENT_ID, PARTNER_ID, 10000);
-      const second: any = await service.redeem(CLIENT_ID, PARTNER_ID, 10000);
+    it('idempotence : une double-soumission identique renvoie le mÃªme ticket sans en crÃ©er un second', async () => {
+      const first: any = await service.redeem(CLIENT_ID, { to: PARTNER_ID, amount: 10000 });
+      const second: any = await service.redeem(CLIENT_ID, { to: PARTNER_ID, amount: 10000 });
 
       expect(first.error).to.not.equal(true);
       expect(second.error).to.not.equal(true);
       expect(String(second.ticket._id)).to.equal(String(first.ticket._id));
 
       const count = await paymentModel().countDocuments({ from: CLIENT_ID, to: PARTNER_ID, status: 'success' });
-      expect(count, 'un seul ticket malgré la double soumission').to.equal(1);
+      expect(count, 'un seul ticket malgrÃ© la double soumission').to.equal(1);
       // Une seule notification marchand.
       expect(notifyStub.callCount).to.equal(1);
     });
   });
 
-  describe('redeem — garde-fous du montant saisi par le client', () => {
+  describe('redeem â€” garde-fous du montant saisi par le client', () => {
     const OTHER_PARTNER_ID = '507f1f77bcf86cd799439035';
     const hoursAgo = (h: number) => new Date(Date.now() - h * 3600 * 1000);
 
     it('refuse un montant au-dessus du plafond de la plateforme', async () => {
-      const result: any = await service.redeem(CLIENT_ID, PARTNER_ID, LIMITS.maxAmount + 1);
+      const result: any = await service.redeem(CLIENT_ID, { to: PARTNER_ID, amount: LIMITS.maxAmount + 1 });
 
       expect(result.error).to.be.true;
       expect(await paymentModel().countDocuments({})).to.equal(0);
     });
 
-    it('applique le plafond propre à la boutique (maxOrder) avant celui de la plateforme', async () => {
+    it('applique le plafond propre Ã  la boutique (maxOrder) avant celui de la plateforme', async () => {
       await partnerModel().updateOne({ _id: PARTNER_ID }, { $set: { maxOrder: 20000 } });
       try {
-        const refused: any = await service.redeem(CLIENT_ID, PARTNER_ID, 20001);
+        const refused: any = await service.redeem(CLIENT_ID, { to: PARTNER_ID, amount: 20001 });
         expect(refused.error).to.be.true;
 
-        const accepted: any = await service.redeem(CLIENT_ID, PARTNER_ID, 20000);
+        const accepted: any = await service.redeem(CLIENT_ID, { to: PARTNER_ID, amount: 20000 });
         expect(accepted.error, JSON.stringify(accepted.data)).to.not.equal(true);
       } finally {
         await partnerModel().updateOne({ _id: PARTNER_ID }, { $unset: { maxOrder: 1 } });
       }
     });
 
-    it('plafond à 0 = désactivé', async () => {
+    it('plafond Ã  0 = dÃ©sactivÃ©', async () => {
       limitsStub.resolves({ ...LIMITS, maxAmount: 0 });
-      const result: any = await service.redeem(CLIENT_ID, PARTNER_ID, 5000000);
+      const result: any = await service.redeem(CLIENT_ID, { to: PARTNER_ID, amount: 5000000 });
 
       expect(result.error, JSON.stringify(result.data)).to.not.equal(true);
     });
 
-    it('refuse une seconde réduction dans la même boutique avant la fin du délai', async () => {
+    it('refuse une seconde rÃ©duction dans la mÃªme boutique avant la fin du dÃ©lai', async () => {
       await givenSuccessTicket(10000, { completedAt: hoursAgo(1) });
 
-      const result: any = await service.redeem(CLIENT_ID, PARTNER_ID, 12000);
+      const result: any = await service.redeem(CLIENT_ID, { to: PARTNER_ID, amount: 12000 });
 
       expect(result.error).to.be.true;
       expect(await paymentModel().countDocuments({ status: 'success' })).to.equal(1);
     });
 
-    it('accepte une nouvelle réduction dans la même boutique une fois le délai écoulé', async () => {
+    it('accepte une nouvelle rÃ©duction dans la mÃªme boutique une fois le dÃ©lai Ã©coulÃ©', async () => {
       await givenSuccessTicket(10000, { completedAt: hoursAgo(LIMITS.cooldownHours + 1) });
 
-      const result: any = await service.redeem(CLIENT_ID, PARTNER_ID, 12000);
+      const result: any = await service.redeem(CLIENT_ID, { to: PARTNER_ID, amount: 12000 });
 
       expect(result.error, JSON.stringify(result.data)).to.not.equal(true);
     });
 
-    it('un ticket invalidé ne déclenche pas le délai', async () => {
+    it('un ticket invalidÃ© ne dÃ©clenche pas le dÃ©lai', async () => {
       await givenSuccessTicket(10000, { completedAt: hoursAgo(1), status: 'invalidated' });
 
-      const result: any = await service.redeem(CLIENT_ID, PARTNER_ID, 12000);
+      const result: any = await service.redeem(CLIENT_ID, { to: PARTNER_ID, amount: 12000 });
 
       expect(result.error, JSON.stringify(result.data)).to.not.equal(true);
     });
 
-    it('la double-soumission reste idempotente malgré le délai par boutique', async () => {
-      const first: any = await service.redeem(CLIENT_ID, PARTNER_ID, 10000);
-      const replay: any = await service.redeem(CLIENT_ID, PARTNER_ID, 10000);
+    it('la double-soumission reste idempotente malgrÃ© le dÃ©lai par boutique', async () => {
+      const first: any = await service.redeem(CLIENT_ID, { to: PARTNER_ID, amount: 10000 });
+      const replay: any = await service.redeem(CLIENT_ID, { to: PARTNER_ID, amount: 10000 });
 
       expect(replay.error, JSON.stringify(replay.data)).to.not.equal(true);
       expect(String(replay.ticket._id)).to.equal(String(first.ticket._id));
     });
 
-    it('refuse au-delà du quota journalier, toutes boutiques confondues', async () => {
+    it('refuse au-delÃ  du quota journalier, toutes boutiques confondues', async () => {
       limitsStub.resolves({ ...LIMITS, maxPerDay: 2, cooldownHours: 0 });
       const now = new Date();
       // Deux tickets aujourd'hui dans une autre boutique.
       await givenSuccessTicket(10000, { to: OTHER_PARTNER_ID, completedAt: now });
       await givenSuccessTicket(11000, { to: OTHER_PARTNER_ID, completedAt: now });
 
-      const result: any = await service.redeem(CLIENT_ID, PARTNER_ID, 12000);
+      const result: any = await service.redeem(CLIENT_ID, { to: PARTNER_ID, amount: 12000 });
 
       expect(result.error).to.be.true;
       expect(String(result.data)).to.contain('2');
     });
 
-    it('signale (sans bloquer) un montant très au-dessus des achats habituels de la boutique', async () => {
-      limitsStub.resolves({ maxAmount: 0, cooldownHours: 0, maxPerDay: 0 });
-      // Historique : 10 achats à 10 000 dans la boutique (médiane 10 000), d'autres clients.
+    it('signale (sans bloquer) un montant trÃ¨s au-dessus des achats habituels de la boutique', async () => {
+      limitsStub.resolves({ maxAmount: 0, cooldownHours: 0, maxPerDay: 0, requireScanToken: false });
+      // Historique : 10 achats Ã  10 000 dans la boutique (mÃ©diane 10 000), d'autres clients.
       for (let i = 0; i < 10; i++) {
         await paymentModel().create({
           _id: new mongoose.Types.ObjectId(),
@@ -276,8 +276,8 @@ describe('[Sécurité] Flux client de validation des réductions', () => {
         });
       }
 
-      const normal: any = await service.redeem(CLIENT_ID, PARTNER_ID, 30000);
-      const unusual: any = await service.redeem(CLIENT_ID, PARTNER_ID, 60000);
+      const normal: any = await service.redeem(CLIENT_ID, { to: PARTNER_ID, amount: 30000 });
+      const unusual: any = await service.redeem(CLIENT_ID, { to: PARTNER_ID, amount: 60000 });
 
       expect(normal.error).to.not.equal(true);
       expect(unusual.error).to.not.equal(true);
@@ -287,10 +287,10 @@ describe('[Sécurité] Flux client de validation des réductions', () => {
     });
   });
 
-  describe('économies et consommation du client', () => {
-    it('getClientSavings ne compte que les tickets validés', async () => {
-      await givenSuccessTicket(10000); // réduction 2000
-      await givenSuccessTicket(5000); // réduction 1000
+  describe('Ã©conomies et consommation du client', () => {
+    it('getClientSavings ne compte que les tickets validÃ©s', async () => {
+      await givenSuccessTicket(10000); // rÃ©duction 2000
+      await givenSuccessTicket(5000); // rÃ©duction 1000
       await givenSuccessTicket(50000, { status: 'invalidated' });
       await givenSuccessTicket(50000, { status: 'pending', to: '507f1f77bcf86cd799439036' });
 
@@ -301,7 +301,7 @@ describe('[Sécurité] Flux client de validation des réductions', () => {
       expect(savings.count).to.equal(2);
     });
 
-    it('getScanUsage renvoie les réductions du jour et le quota', async () => {
+    it('getScanUsage renvoie les rÃ©ductions du jour et le quota', async () => {
       await givenSuccessTicket(10000);
       await givenSuccessTicket(10000, { completedAt: new Date(Date.now() - 3 * 24 * 3600 * 1000) });
 
@@ -313,8 +313,8 @@ describe('[Sécurité] Flux client de validation des réductions', () => {
     });
   });
 
-  describe('invalidate — pouvoir du marchand', () => {
-    it("refuse l'invalidation par un compte qui ne possède pas la boutique", async () => {
+  describe('invalidate â€” pouvoir du marchand', () => {
+    it("refuse l'invalidation par un compte qui ne possÃ¨de pas la boutique", async () => {
       const id = await givenSuccessTicket();
 
       const result: any = await service.invalidate(id, ATTACKER_ID);
@@ -326,7 +326,7 @@ describe('[Sécurité] Flux client de validation des réductions', () => {
       expect(payment.status).to.equal('success');
     });
 
-    it('autorise le propriétaire à invalider un ticket success', async () => {
+    it('autorise le propriÃ©taire Ã  invalider un ticket success', async () => {
       const id = await givenSuccessTicket();
 
       const result: any = await service.invalidate(id, OWNER_ID);
@@ -357,3 +357,4 @@ describe('[Sécurité] Flux client de validation des réductions', () => {
     });
   });
 });
+
