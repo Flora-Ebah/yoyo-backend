@@ -91,7 +91,13 @@ export const locale = {
 			scanUsage: 'Consommation des réductions du jour',
 			notInvalidable: "Seul un ticket validé peut être invalidé",
 			redeemed: 'Réduction validée avec succès',
-			invalidated: 'Le ticket a été invalidé'
+			invalidated: 'Le ticket a été invalidé',
+			scanExpired: 'Scan expiré, re-scannez le QR affiché par le commerçant',
+			scanInvalid: 'QR invalide, re-scannez le QR affiché par le commerçant',
+			scanTokenIssued: 'Jeton de scan généré',
+			scanVerified: 'Scan validé',
+			sessionExpired: 'Session expirée, re-scannez le QR affiché par le commerçant',
+			scanRequired: 'Un scan du QR affiché par le commerçant est requis pour valider votre réduction'
 		},
 		transaction: {
 			active_subscription_error: 'Vous avez déjà un abonnement actif'
