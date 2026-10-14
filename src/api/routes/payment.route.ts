@@ -41,8 +41,70 @@ const defaultRoute: any = (fastify: any, options, done) => {
     }
   });
 
+  // [SÉCURITÉ niveau 2] QR à jeton court — l'app marchand demande un jeton `scan` (30 s) à afficher
+  // dans son QR. Le QR n'encode donc plus l'id de boutique en clair et statique. AUTH MARCHAND :
+  // le service vérifie que l'appelant possède la boutique.
+  fastify.route({
+		schema: {
+			tags: tagsPartner,
+			summary: 'Jeton de scan du QR marchand',
+			description: 'Émet un jeton court (30 s) à encoder dans le QR affiché par le commerçant',
+			query: {
+				type: 'object',
+				properties: {
+					boutiqueId: { type: 'string' }
+				},
+				required: ['boutiqueId'],
+				additionalProperties: false
+			}
+		},
+		method: 'GET',
+		url: `${routePath}/scan-token`,
+		// Le QR se régénère toutes les 30 s côté app : laisser une marge confortable.
+		config: { rateLimit: { max: 60, timeWindow: '1 minute' } },
+		preHandler: TokenMiddleware.verify,
+		handler: (request, reply) => {
+			let user: any = request.user;
+			let boutiqueId: any = request.query.boutiqueId;
+
+			let Q = Controller.issueScanToken(boutiqueId, user._id);
+			return coddyger.api(reply, Q);
+		}
+	});
+
+  // [SÉCURITÉ niveau 2] Le client scanne le QR du marchand et échange le jeton `scan` contre une
+  // session `redeem` (10 min) liée à son compte. AUTH CLIENT.
+  fastify.route({
+		schema: {
+			tags: tagsClient,
+			summary: 'Vérifier un scan et ouvrir une session de réduction',
+			description: 'Échange le jeton scanné dans le QR contre une session redeem liée au client',
+			body: {
+				type: 'object',
+				properties: {
+					scanToken: { type: 'string' }
+				},
+				required: ['scanToken'],
+				additionalProperties: false
+			}
+		},
+		method: 'POST',
+		url: `${routePath}/scan-verify`,
+		config: { rateLimit: { max: 20, timeWindow: '1 minute' } },
+		preHandler: TokenMiddleware.verify,
+		handler: (request, reply) => {
+			let body: any = request.body;
+			let user: any = request.user;
+
+			let Q = Controller.scanVerify(body.scanToken, user._id);
+			return coddyger.api(reply, Q);
+		}
+	});
+
   // Flux client en un appel : le client scanne la boutique, saisit le prix total et valide
   // lui-même sa réduction. `from` provient du jeton, jamais du corps.
+  // Niveau 2 : `redeemSession` (issue de `scan-verify`) remplace `to` ; la boutique vient alors du
+  // jeton. `to` reste accepté en legacy tant que `redeemLimits.requireScanToken` est OFF.
   fastify.route({
 		schema: {
 			tags: tagsClient,
@@ -52,9 +114,10 @@ const defaultRoute: any = (fastify: any, options, done) => {
 				type: 'object',
 				properties: {
 					to: { type: 'string' },
-					amount: { type: 'number' }
+					amount: { type: 'number' },
+					redeemSession: { type: 'string' }
 				},
-				required: ['to', 'amount'],
+				required: ['amount'],
 				additionalProperties: false
 			}
 		},
@@ -68,7 +131,7 @@ const defaultRoute: any = (fastify: any, options, done) => {
 			let body: any = request.body;
 			let user: any = request.user;
 
-			let Q = Controller.redeem(user._id, body.to, body.amount);
+			let Q = Controller.redeem(user._id, { to: body.to, amount: body.amount, redeemSession: body.redeemSession });
 			return coddyger.api(reply, Q);
 		}
 	});

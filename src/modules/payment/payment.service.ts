@@ -10,6 +10,7 @@ import { ClientSet } from '../client';
 import { PartnerSet } from '../partner';
 import { AppEvents, eventBus } from '../../events';
 import { PlatformConfigService } from '../platform-config/platform-config.service';
+import { ScanTokenHelper } from '../../helpers/scan-token.helper';
 
 export class PaymentService {
   private readonly dao: IData<IPayment>;
@@ -430,6 +431,82 @@ export class PaymentService {
   }
 
   /**
+   * [SÉCURITÉ] Émet un jeton `scan` court (30 s) pour le QR affiché par l'app marchand.
+   *
+   * Le QR n'encode plus l'`id` de boutique en clair et statique, mais ce jeton signé qui expire en
+   * 30 s : une photo du QR devient inutile passé ce délai. Le marchand connecté doit POSSÉDER la
+   * boutique (sinon 403), sans quoi n'importe quel compte pourrait fabriquer des QR d'autrui.
+   *
+   * @param boutiqueId Boutique dont on affiche le QR
+   * @param actorId `request.user._id` du marchand connecté (propriétaire attendu)
+   * @returns `{ token, expiresIn }` ou un descripteur d'erreur (`forbidden` si pas propriétaire)
+   */
+  async issueScanToken(boutiqueId: string, actorId: string): Promise<any> {
+    try {
+      const ownership: any = await this.resolveOwnedPartner(boutiqueId, actorId);
+      if (ownership.error) {
+        return ownership;
+      }
+
+      const token = ScanTokenHelper.signScan(String(ownership.partner._id));
+      return { token, expiresIn: ScanTokenHelper.SCAN_TTL_SECONDS };
+    } catch (error) {
+      return { error: true, data: error };
+    }
+  }
+
+  /**
+   * [SÉCURITÉ] Échange un jeton `scan` (scanné sur le QR marchand) contre une session `redeem`.
+   *
+   * C'est l'étape qui prouve le scan frais : le client présente un jeton `scan` non expiré, et reçoit
+   * une session liée à SON compte et à la boutique issue du jeton (jamais d'un identifiant fourni par
+   * le client). La session vaut 10 min, le temps de saisir le montant et de valider.
+   *
+   * @param scanToken Jeton `scan` lu dans le QR
+   * @param userId `request.user._id` du client connecté
+   * @returns `{ redeemSession, expiresIn, boutique }` ; `gone` si le scan a expiré, erreur sinon
+   */
+  async scanVerify(scanToken: string, userId: string): Promise<any> {
+    try {
+      if (!coddyger.string.isValidObjectId(userId)) {
+        return { error: true, data: locale.wrongObjectId('du client') };
+      }
+
+      const result = ScanTokenHelper.verify(scanToken, 'scan');
+      if (result.expired) {
+        return { error: true, gone: true, data: locale.controller.payment.scanExpired };
+      }
+      if (result.invalid || !result.payload) {
+        return { error: true, data: locale.controller.payment.scanInvalid };
+      }
+
+      const boutiqueId = String(result.payload.boutiqueId);
+      const partnerModel: any = (this.partnerDao as any).defaultModel;
+      const partner: any = await partnerModel
+        .findOne({ _id: boutiqueId, status: { $nin: ['removed', 'archived'] } }, '_id name maxDiscount')
+        .lean();
+
+      if (!partner) {
+        return { error: true, data: locale.notfound('Partenaire') };
+      }
+
+      const redeemSession = ScanTokenHelper.signRedeem(boutiqueId, String(userId));
+
+      return {
+        redeemSession,
+        expiresIn: ScanTokenHelper.REDEEM_TTL_SECONDS,
+        boutique: {
+          _id: String(partner._id),
+          name: partner.name,
+          maxDiscount: Number(partner.maxDiscount ?? 0) || 0
+        }
+      };
+    } catch (error) {
+      return { error: true, data: error };
+    }
+  }
+
+  /**
    * Valide le montant de facture saisi par le commerçant.
    *
    * Il n'était soumis à aucun contrôle : ni positivité, ni cohérence avec le minimum de commande
@@ -527,27 +604,63 @@ export class PaymentService {
    *  8. montant inhabituel pour la boutique => ticket `flagged`, signalé au marchand ;
    *  9. notification du marchand (push + socket).
    *
-   * @param from Client authentifié (issu du jeton, jamais du corps)
-   * @param to Boutique scannée
-   * @param amount Prix total saisi par le client — SEULE valeur monétaire acceptée du client
+   * [SÉCURITÉ niveau 2] Deux modes, selon le flag `redeemLimits.requireScanToken` :
+   *  - session `redeem` fournie (issue de `scan-verify`) : la boutique vient du JETON, jamais du
+   *    corps ; le `userId` du jeton doit correspondre au client connecté (sinon 403), et un jeton
+   *    expiré renvoie 410 (« re-scannez »). Toujours accepté, même flag OFF.
+   *  - pas de session : si `requireScanToken` est ON → refus (400, scan obligatoire) ; sinon repli
+   *    legacy sur `to` fourni par le client (comportement historique inchangé).
+   *
+   * @param from Client authentifié (issu du jeton de session, jamais du corps)
+   * @param payload `{ to?, amount, redeemSession? }` — `amount` est la SEULE valeur monétaire du client
    * @returns `{ ticket }` — montant, réduction, net, boutique, date
    */
-  async redeem(from: string, to: string, amount: any): Promise<any> {
+  async redeem(from: string, payload: { to?: string; amount: any; redeemSession?: string }): Promise<any> {
     try {
-      if (!coddyger.string.isValidObjectId(from) || !coddyger.string.isValidObjectId(to)) {
+      const { to: toLegacy, amount, redeemSession } = payload ?? ({} as any);
+
+      if (!coddyger.string.isValidObjectId(from)) {
         return { error: true, data: locale.wrongObjectId('du client') };
       }
 
-      if (String(from) === String(to)) {
+      const limits = await this.platformConfigService.getRedeemLimits();
+
+      // Boutique EFFECTIVE : issue du jeton de session quand il est présent, jamais du client.
+      let effectiveTo: string;
+
+      if (redeemSession !== undefined && redeemSession !== null && redeemSession !== '') {
+        const session = ScanTokenHelper.verify(String(redeemSession), 'redeem');
+        if (session.expired) {
+          return { error: true, gone: true, data: locale.controller.payment.sessionExpired };
+        }
+        if (session.invalid || !session.payload) {
+          return { error: true, data: locale.controller.payment.scanInvalid };
+        }
+        // La session est nominative : elle ne vaut que pour le client qui a scanné.
+        if (String(session.payload.userId) !== String(from)) {
+          return { error: true, forbidden: true, data: locale.controller.payment.notOwner };
+        }
+        effectiveTo = String(session.payload.boutiqueId);
+      } else {
+        // Pas de session : interdit si le scan est obligatoire, sinon repli legacy sur `to`.
+        if (limits.requireScanToken) {
+          return { error: true, data: locale.controller.payment.scanRequired };
+        }
+        if (!toLegacy || !coddyger.string.isValidObjectId(toLegacy)) {
+          return { error: true, data: locale.wrongObjectId('du partenaire') };
+        }
+        effectiveTo = String(toLegacy);
+      }
+
+      if (String(from) === String(effectiveTo)) {
         return { error: true, data: locale.controller.payment.sameClient };
       }
 
       const partnerModel: any = (this.partnerDao as any).defaultModel;
 
-      const [subscription, partner, limits] = await Promise.all([
+      const [subscription, partner] = await Promise.all([
         this.subscriptionService.getCurrentSubscriptionWithPlanDetails(from),
-        partnerModel.findOne({ _id: to, status: { $nin: ['removed', 'archived'] } }, '_id name user maxDiscount minOrder maxOrder').lean(),
-        this.platformConfigService.getRedeemLimits()
+        partnerModel.findOne({ _id: effectiveTo, status: { $nin: ['removed', 'archived'] } }, '_id name user maxDiscount minOrder maxOrder').lean()
       ]);
 
       if (!subscription) {
@@ -557,6 +670,9 @@ export class PaymentService {
       if (!partner) {
         return { error: true, data: locale.notfound('Partenaire') };
       }
+
+      // À partir d'ici, `to` désigne toujours la boutique effective (jeton ou legacy).
+      const to: string = effectiveTo;
 
       const invalidAmount = this.validateAmount(amount, partner, limits.maxAmount);
       if (invalidAmount) {

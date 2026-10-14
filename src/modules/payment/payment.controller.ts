@@ -184,13 +184,12 @@ export class PaymentController {
    * boutique et saisi le prix total. Écrit un ticket `success` et renvoie le ticket.
    *
    * @param from `request.user._id` — issu du jeton, jamais du corps de la requête
-   * @param to Boutique scannée
-   * @param amount Prix total saisi par le client (seule valeur monétaire acceptée du client)
+   * @param payload `{ to?, amount, redeemSession? }` — la boutique vient du jeton de session si fourni
    */
-  redeem(from: string, to: string, amount: number) {
+  redeem(from: string, payload: { to?: string; amount: number; redeemSession?: string }) {
     return new Promise(async (resolve, reject) => {
       try {
-        const result: any = await this.service.redeem(from, to, amount);
+        const result: any = await this.service.redeem(from, payload);
 
         if (result?.error) {
           return resolve({
@@ -262,7 +261,86 @@ export class PaymentController {
       return defines.status.conflict;
     }
 
+    // `gone` (410) : jeton/scan expiré — l'app doit re-scanner le QR, pas re-saisir.
+    if (result?.gone) {
+      return defines.status.gone;
+    }
+
     return defines.status.badRequest;
+  }
+
+  /**
+   * Émet le jeton `scan` court (30 s) affiché dans le QR de l'app marchand.
+   *
+   * @param boutiqueId Boutique dont on affiche le QR
+   * @param actorId `request.user._id` — le service vérifie la propriété de la boutique
+   */
+  issueScanToken(boutiqueId: string, actorId: string) {
+    return new Promise(async (resolve, reject) => {
+      try {
+        if (!coddyger.string.isValidObjectId(boutiqueId)) {
+          return resolve({ status: defines.status.badRequest, message: locale.wrongObjectId('du partenaire'), data: null });
+        }
+
+        const result: any = await this.service.issueScanToken(boutiqueId, actorId);
+
+        if (result?.error) {
+          return resolve({
+            status: PaymentController.errorStatus(result),
+            message: result.data,
+            data: null
+          });
+        }
+
+        resolve({
+          status: defines.status.requestOK,
+          message: locale.controller.payment.scanTokenIssued,
+          data: { token: result.token, expiresIn: result.expiresIn }
+        });
+      } catch (error) {
+        reject(error);
+      }
+    }).catch((e: IErrorObject) => {
+      console.error(e);
+      return coddyger.catchReturn(e, controllerLabel, 'issueScanToken');
+    });
+  }
+
+  /**
+   * Échange un jeton `scan` (lu dans le QR) contre une session `redeem` liée au client connecté.
+   *
+   * @param scanToken Jeton `scan` présenté par le client
+   * @param userId `request.user._id` du client connecté
+   */
+  scanVerify(scanToken: string, userId: string) {
+    return new Promise(async (resolve, reject) => {
+      try {
+        const result: any = await this.service.scanVerify(scanToken, userId);
+
+        if (result?.error) {
+          return resolve({
+            status: PaymentController.errorStatus(result),
+            message: result.data,
+            data: null
+          });
+        }
+
+        resolve({
+          status: defines.status.requestOK,
+          message: locale.controller.payment.scanVerified,
+          data: {
+            redeemSession: result.redeemSession,
+            expiresIn: result.expiresIn,
+            boutique: result.boutique
+          }
+        });
+      } catch (error) {
+        reject(error);
+      }
+    }).catch((e: IErrorObject) => {
+      console.error(e);
+      return coddyger.catchReturn(e, controllerLabel, 'scanVerify');
+    });
   }
 
   /**
