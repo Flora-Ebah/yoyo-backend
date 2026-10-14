@@ -7,7 +7,7 @@ import fs from 'fs/promises';
 import { ClientService } from '../client/client.service';
 import { PlatformConfigService } from '../platform-config/platform-config.service';
 import { storage } from '../../services/storage/storage.service';
-import { DURATION_TOLERANCE_SECONDS, VideoError, extractPoster, probeVideo } from '../../helpers/video.helper';
+import { DURATION_TOLERANCE_SECONDS, VideoError, extractPoster, probeVideo, remuxFaststart } from '../../helpers/video.helper';
 const controllerLabel: string = 'MainController';
 
 export class MainController {
@@ -122,13 +122,48 @@ export class MainController {
 						}
 					}
 
-					const save: any = await FileUpload.save(file, contentType);
+					let save: any;
+					// Taille réellement sauvegardée (le remux faststart la modifie légèrement).
+					let savedSize = file.size;
+
+					if (duration !== undefined) {
+						// VIDÉO : on remux en « faststart » AVANT de sauvegarder, pour la lecture
+						// progressive du feed « Découvrir ». Le temporaire remuxé est enregistré à la
+						// place du fichier brut (même clé, même contentType video/mp4).
+						const fsTemp = `${file.path}-fs.mp4`;
+						try {
+							let remuxed = false;
+							try {
+								await remuxFaststart(file.path, fsTemp);
+								remuxed = true;
+							} catch (remuxError) {
+								// Repli non bloquant : on conserve la vidéo d'origine (lisible, juste
+								// moins fluide). Ne JAMAIS faire échouer tout l'upload pour le faststart.
+								console.error('Remux faststart échoué, conservation du fichier original :', remuxError);
+							}
+
+							// `FileUpload.save` lit `path` et supprime ce temporaire en sortie : on lui
+							// confie le remuxé via une copie du descripteur, sans toucher l'original.
+							const source = remuxed ? { ...file, path: fsTemp } : file;
+							if (remuxed) savedSize = (await fs.stat(fsTemp)).size;
+
+							save = await FileUpload.save(source, contentType);
+						} finally {
+							// Nettoyage du temporaire remuxé ET du temporaire multer d'origine
+							// (quel que soit le chemin pris : succès, repli ou erreur).
+							await fs.rm(fsTemp, { force: true });
+							await FileUpload.discard(file);
+						}
+					} else {
+						save = await FileUpload.save(file, contentType);
+					}
+
 					if (save.error) throw save;
 
 					files.push({
 						filename: save.filename,
 						originalname: file.originalname,
-						size: file.size,
+						size: savedSize,
 						...(duration !== undefined && { poster, duration: Math.round(duration * 10) / 10 })
 					});
 				}

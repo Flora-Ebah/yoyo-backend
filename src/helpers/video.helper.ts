@@ -57,5 +57,29 @@ export const extractPoster = async (file: string, output: string, duration: numb
 	}
 };
 
+/**
+ * Remux « faststart » : réécrit le conteneur MP4 en déplaçant l'atome `moov` (l'index) en TÊTE du
+ * fichier. Sans cela, le `moov` se trouve en fin de fichier et le lecteur doit tout télécharger
+ * avant d'afficher la 1re image (écran noir puis apparition « d'un coup ») ; avec, la lecture
+ * démarre progressivement, comportement attendu du feed « Découvrir » (type TikTok).
+ *
+ * `-c copy` : copie des pistes sans ré-encodage (rapide, sans perte de qualité) ; seul l'ordre des
+ * atomes change. L'opération est idempotente et bénigne (relancer sur un fichier déjà faststart ne
+ * dégrade rien).
+ *
+ * Lève via `toolError` (même convention que `extractPoster`). L'appelant décide du caractère
+ * bloquant : à l'upload, l'échec du faststart ne doit PAS faire échouer tout l'envoi (la vidéo
+ * d'origine reste lisible, simplement moins fluide) — voir `main.controller.ts`.
+ */
+export const remuxFaststart = async (input: string, output: string): Promise<void> => {
+	try {
+		await run('ffmpeg', ['-v', 'error', '-i', input, '-c', 'copy', '-movflags', '+faststart', '-y', output], {
+			timeout: TOOL_TIMEOUT_MS
+		});
+	} catch (error) {
+		throw toolError(error, 'ffmpeg');
+	}
+};
+
 /** Tolérance sur la durée : les conteneurs arrondissent (19,99 s annoncées « 20 s » par le téléphone). */
 export const DURATION_TOLERANCE_SECONDS = 0.5;
