@@ -42,6 +42,9 @@ COPY --from=builder /usr/src/app/build ./build
 COPY seed.js load-env.js migrate-uploads-to-s3.js ./
 COPY seeders/ ./seeders/
 
+# Scripts de maintenance ponctuels (rattrapage faststart des vidéos, etc.)
+COPY scripts/ ./scripts/
+
 # Fichiers de données requis par les seeders (référentiel de catégories, etc.)
 COPY src/config/category-taxonomy.json ./src/config/category-taxonomy.json
 
