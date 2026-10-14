@@ -20,7 +20,9 @@ export interface IPlatformConfig {
    *  - `maxAmount` : plafond par achat (FCFA), sauf si la boutique fixe son propre `maxOrder` ;
    *  - `cooldownHours` : délai minimum entre deux réductions d'un même client dans une même boutique ;
    *  - `maxPerDay` : nombre maximum de réductions par client et par jour, toutes boutiques confondues.
+   *  - `requireScanToken` : si `true`, `POST /payments/redeem` exige une session de scan fraîche
+   *    (QR à jeton court échangé via `scan-verify`) ; le `to` legacy en clair n'est plus accepté.
    */
-  redeemLimits?: { maxAmount: number; cooldownHours: number; maxPerDay: number };
+  redeemLimits?: { maxAmount: number; cooldownHours: number; maxPerDay: number; requireScanToken: boolean };
   status?: string;
 }

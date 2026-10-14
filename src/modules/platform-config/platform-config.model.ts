@@ -14,7 +14,7 @@ const schema = new mongoose.Schema<IPlatformConfig>({
   // Limites de la vidéo de présentation d'une boutique (cf. IPlatformConfig).
   media: { maxVideoSeconds: { type: Number }, maxVideoSizeMb: { type: Number } },
   // Garde-fous du montant saisi par le client (cf. IPlatformConfig).
-  redeemLimits: { maxAmount: { type: Number }, cooldownHours: { type: Number }, maxPerDay: { type: Number } },
+  redeemLimits: { maxAmount: { type: Number }, cooldownHours: { type: Number }, maxPerDay: { type: Number }, requireScanToken: { type: Boolean } },
   status: { type: String, enum: ['active', 'inactive', 'removed'], default: 'active' }
 },
 { timestamps: true, minimize: false });

@@ -79,7 +79,9 @@ const defaultRoute: any = (fastify: any, options, done) => {
             properties: {
               maxAmount: { type: 'number', minimum: 0 },
               cooldownHours: { type: 'number', minimum: 0, maximum: 720 },
-              maxPerDay: { type: 'number', minimum: 0, maximum: 1000 }
+              maxPerDay: { type: 'number', minimum: 0, maximum: 1000 },
+              // Exige un scan frais du QR marchand pour valider une réduction (défaut false).
+              requireScanToken: { type: 'boolean' }
             },
             additionalProperties: false
           }

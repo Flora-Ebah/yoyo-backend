@@ -22,7 +22,7 @@ const normalizeMedia = (media: any): NonNullable<IPlatformConfig['media']> => {
 };
 
 /** Garde-fous du montant saisi par le client : valeurs de départ, modifiables au BO. */
-export const DEFAULT_REDEEM_LIMITS = { maxAmount: 500000, cooldownHours: 4, maxPerDay: 5 };
+export const DEFAULT_REDEEM_LIMITS = { maxAmount: 500000, cooldownHours: 4, maxPerDay: 5, requireScanToken: false };
 
 /**
  * Garde-fous valides, champ par champ. Contrairement aux limites vidéo, 0 est une valeur légitime
@@ -36,7 +36,10 @@ const normalizeRedeemLimits = (limits: any): NonNullable<IPlatformConfig['redeem
   return {
     maxAmount: pick(limits?.maxAmount, DEFAULT_REDEEM_LIMITS.maxAmount),
     cooldownHours: pick(limits?.cooldownHours, DEFAULT_REDEEM_LIMITS.cooldownHours),
-    maxPerDay: pick(limits?.maxPerDay, DEFAULT_REDEEM_LIMITS.maxPerDay)
+    maxPerDay: pick(limits?.maxPerDay, DEFAULT_REDEEM_LIMITS.maxPerDay),
+    // Flag de sécurité : défaut `false` (comportement legacy) ; le BO peut l'activer pour exiger
+    // un vrai scan frais. Seul un booléen explicite `true` active l'exigence.
+    requireScanToken: limits?.requireScanToken === true
   };
 };
 
