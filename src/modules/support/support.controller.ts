@@ -1,0 +1,233 @@
+import coddyger, { IErrorObject, defines } from 'coddyger';
+import { locale } from '../../public';
+import { SupportService } from './support.service';
+
+const controllerLabel: string = 'SupportController';
+
+export class SupportController {
+	private readonly service: SupportService;
+
+	constructor() {
+		this.service = new SupportService();
+	}
+
+	/* ---------------------------------------------------------------------- */
+	/* Côté client                                                            */
+	/* ---------------------------------------------------------------------- */
+
+	/** Crée un ticket + le premier message. */
+	createTicket(payloads: { userId: string; category: string; message: string; attachment?: string }) {
+		return new Promise(async (resolve, reject) => {
+			try {
+				const result: any = await this.service.createTicket(payloads);
+				if (result.error) {
+					return resolve({
+						status: defines.status.badRequest,
+						message: typeof result.data === 'string' ? result.data : locale.controller.notValidStatus,
+						data: null
+					});
+				}
+				resolve({
+					status: defines.status.created,
+					message: locale.controller.successSave,
+					data: { ticket: result.ticket, message: result.message }
+				});
+			} catch (error) {
+				reject(error);
+			}
+		}).catch((e: IErrorObject) => coddyger.catchReturn(e, controllerLabel, 'createTicket'));
+	}
+
+	/** Liste des tickets du client. */
+	listClientTickets(userId: string) {
+		return new Promise(async (resolve, reject) => {
+			try {
+				const result: any = await this.service.listClientTickets(userId);
+				if (result.error) throw result;
+				resolve({ status: defines.status.requestOK, message: locale.controller.done, data: result });
+			} catch (error) {
+				reject(error);
+			}
+		}).catch((e: IErrorObject) => coddyger.catchReturn(e, controllerLabel, 'listClientTickets'));
+	}
+
+	/** Détail d'un ticket côté client (contrôle de propriété). */
+	getClientTicket(ticketId: string, userId: string) {
+		return new Promise(async (resolve, reject) => {
+			try {
+				const result: any = await this.service.getTicketDetail(ticketId, userId, false);
+				if (result.notFound) {
+					return resolve({ status: defines.status.notFound, message: locale.notfound('Ticket'), data: null });
+				}
+				if (result.forbidden) {
+					return resolve({ status: defines.status.forbidden, message: locale.controller.notAuthorized, data: null });
+				}
+				if (result.error) throw result;
+				resolve({
+					status: defines.status.requestOK,
+					message: locale.controller.done,
+					data: { ticket: result.ticket, messages: result.messages }
+				});
+			} catch (error) {
+				reject(error);
+			}
+		}).catch((e: IErrorObject) => coddyger.catchReturn(e, controllerLabel, 'getClientTicket'));
+	}
+
+	/** Ajoute un message client à un ticket. */
+	addClientMessage(payloads: { ticketId: string; userId: string; body: string; attachment?: string }) {
+		return new Promise(async (resolve, reject) => {
+			try {
+				const result: any = await this.service.addClientMessage(payloads);
+				if (result.notFound) {
+					return resolve({ status: defines.status.notFound, message: locale.notfound('Ticket'), data: null });
+				}
+				if (result.forbidden) {
+					return resolve({ status: defines.status.forbidden, message: locale.controller.notAuthorized, data: null });
+				}
+				if (result.error) {
+					return resolve({
+						status: defines.status.badRequest,
+						message: typeof result.data === 'string' ? result.data : locale.controller.notValidStatus,
+						data: null
+					});
+				}
+				resolve({ status: defines.status.requestOK, message: locale.controller.done, data: { message: result.message } });
+			} catch (error) {
+				reject(error);
+			}
+		}).catch((e: IErrorObject) => coddyger.catchReturn(e, controllerLabel, 'addClientMessage'));
+	}
+
+	/** Marque les messages support/bot comme lus pour le client. */
+	markRead(ticketId: string, userId: string) {
+		return new Promise(async (resolve, reject) => {
+			try {
+				const result: any = await this.service.markReadByClient(ticketId, userId);
+				if (result.notFound) {
+					return resolve({ status: defines.status.notFound, message: locale.notfound('Ticket'), data: null });
+				}
+				if (result.forbidden) {
+					return resolve({ status: defines.status.forbidden, message: locale.controller.notAuthorized, data: null });
+				}
+				if (result.error) throw result;
+				resolve({ status: defines.status.requestOK, message: locale.controller.done, data: { ok: true } });
+			} catch (error) {
+				reject(error);
+			}
+		}).catch((e: IErrorObject) => coddyger.catchReturn(e, controllerLabel, 'markRead'));
+	}
+
+	/** FAQ en dur (10 Q/R). */
+	getFaq() {
+		return new Promise(async (resolve, reject) => {
+			try {
+				resolve({ status: defines.status.requestOK, message: locale.controller.done, data: this.service.getFaq() });
+			} catch (error) {
+				reject(error);
+			}
+		}).catch((e: IErrorObject) => coddyger.catchReturn(e, controllerLabel, 'getFaq'));
+	}
+
+	/** Assistant IA (Groq). */
+	askAssistant(payloads: { message: string; history?: Array<{ role: string; content: string }> }) {
+		return new Promise(async (resolve, reject) => {
+			try {
+				const result: any = await this.service.askAssistant(payloads);
+				if (result.unavailable) {
+					return resolve({
+						status: defines.status.unavailable,
+						message: 'Assistant indisponible pour le moment',
+						data: null
+					});
+				}
+				if (result.error) {
+					return resolve({
+						status: defines.status.unavailable,
+						message: 'Assistant indisponible pour le moment',
+						data: null
+					});
+				}
+				resolve({ status: defines.status.requestOK, message: locale.controller.done, data: { reply: result.reply } });
+			} catch (error) {
+				reject(error);
+			}
+		}).catch((e: IErrorObject) => coddyger.catchReturn(e, controllerLabel, 'askAssistant'));
+	}
+
+	/* ---------------------------------------------------------------------- */
+	/* Côté admin                                                             */
+	/* ---------------------------------------------------------------------- */
+
+	/** Liste paginée pour YOYO ADMIN. */
+	adminList(payloads: { page?: number; pageSize?: number; status?: string; q?: string }) {
+		return new Promise(async (resolve, reject) => {
+			try {
+				const result: any = await this.service.listAdminTickets(payloads);
+				if (result.error) throw result;
+				// Métadonnées de pagination dans `message`, lignes dans `data` (convention du projet).
+				resolve({ status: defines.status.requestOK, message: result.data, data: result.rows });
+			} catch (error) {
+				reject(error);
+			}
+		}).catch((e: IErrorObject) => coddyger.catchReturn(e, controllerLabel, 'adminList'));
+	}
+
+	/** Détail d'un ticket côté admin (client peuplé). */
+	adminGetTicket(ticketId: string) {
+		return new Promise(async (resolve, reject) => {
+			try {
+				const result: any = await this.service.getTicketDetail(ticketId, undefined, true);
+				if (result.notFound) {
+					return resolve({ status: defines.status.notFound, message: locale.notfound('Ticket'), data: null });
+				}
+				if (result.error) throw result;
+				resolve({
+					status: defines.status.requestOK,
+					message: locale.controller.done,
+					data: { ticket: result.ticket, messages: result.messages }
+				});
+			} catch (error) {
+				reject(error);
+			}
+		}).catch((e: IErrorObject) => coddyger.catchReturn(e, controllerLabel, 'adminGetTicket'));
+	}
+
+	/** Réponse du support + notification client. */
+	adminReply(payloads: { ticketId: string; adminId: string; body: string }) {
+		return new Promise(async (resolve, reject) => {
+			try {
+				const result: any = await this.service.adminReply(payloads);
+				if (result.notFound) {
+					return resolve({ status: defines.status.notFound, message: locale.notfound('Ticket'), data: null });
+				}
+				if (result.error) {
+					return resolve({
+						status: defines.status.badRequest,
+						message: typeof result.data === 'string' ? result.data : locale.controller.notValidStatus,
+						data: null
+					});
+				}
+				resolve({ status: defines.status.requestOK, message: locale.controller.done, data: { message: result.message } });
+			} catch (error) {
+				reject(error);
+			}
+		}).catch((e: IErrorObject) => coddyger.catchReturn(e, controllerLabel, 'adminReply'));
+	}
+
+	/** Met à jour le statut / l'assignation d'un ticket. */
+	adminUpdate(ticketId: string, patch: { status?: string; assignedTo?: string }) {
+		return new Promise(async (resolve, reject) => {
+			try {
+				const result: any = await this.service.adminUpdateTicket(ticketId, patch);
+				if (result.notFound) {
+					return resolve({ status: defines.status.notFound, message: locale.notfound('Ticket'), data: null });
+				}
+				if (result.error) throw result;
+				resolve({ status: defines.status.requestOK, message: locale.controller.done, data: { ticket: result.ticket } });
+			} catch (error) {
+				reject(error);
+			}
+		}).catch((e: IErrorObject) => coddyger.catchReturn(e, controllerLabel, 'adminUpdate'));
+	}
+}
