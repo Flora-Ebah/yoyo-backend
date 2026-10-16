@@ -4,6 +4,13 @@ import { env, LoggerService, LogLevel } from 'coddyger';
 
 const helperLabel = 'SocketIOHelper';
 
+/**
+ * Room Socket.IO partagée par les agents du support (back-office).
+ * Déclarée en dur ici (plutôt qu'importée du module support) pour éviter un cycle
+ * d'imports main → helpers → support → main.
+ */
+const SUPPORT_AGENTS_ROOM = 'support:agents';
+
 export class SocketIOHelper {
 	private io: SocketIOServer;
 
@@ -69,6 +76,40 @@ export class SocketIOHelper {
         socket.emit('identified', result);
         if (typeof ack === 'function') {
           ack(result);
+        }
+      });
+
+      // Assistance — un agent (back-office) rejoint la room partagée des agents pour recevoir en
+      // temps réel les nouveaux tickets / messages. On exige un jeton d'ADMINISTRATION (signé par
+      // `jwt.secretAuth`) : un client ne doit jamais entrer dans cette room ni voir les demandes
+      // d'autrui.
+      socket.on('support:join-agents', (payload: any, ack?: (result: any) => void) => {
+        const raw: string = (typeof payload === 'string' ? payload : payload?.token) ?? '';
+        const adminId: string | null = raw ? SocketIOHelper.resolveAdminId(String(raw)) : null;
+        if (adminId) {
+          socket.join(SUPPORT_AGENTS_ROOM);
+          (socket.data as any).isAgent = true;
+        }
+        const result = { ok: Boolean(adminId) };
+        socket.emit('support:agents-joined', result);
+        if (typeof ack === 'function') ack(result);
+      });
+
+      // Assistance — indicateur « en train d'écrire » (éphémère, non persisté).
+      // Sécurité : un agent authentifié peut viser la room d'UN client (`toUserId`) ; tout autre
+      // socket ne peut que prévenir les agents (room commune). Un client ne peut donc pas usurper
+      // l'identité du support ni écrire vers la room d'un autre utilisateur.
+      socket.on('support:typing', (payload: any) => {
+        try {
+          if (!payload || !payload.ticketId) return;
+          const data = { ticketId: String(payload.ticketId), typing: payload.typing !== false };
+          if ((socket.data as any).isAgent && payload.toUserId) {
+            socket.to(String(payload.toUserId)).emit('support:typing', data);
+          } else {
+            socket.to(SUPPORT_AGENTS_ROOM).emit('support:typing', data);
+          }
+        } catch {
+          // best-effort
         }
       });
 
@@ -140,6 +181,23 @@ export class SocketIOHelper {
 
       return typeof id === 'string' && id.trim().length > 0 ? id : null;
     } catch (error) {
+      return null;
+    }
+  }
+
+  /**
+   * Vérifie un jeton d'ADMINISTRATION (signé par `jwt.secretAuth` uniquement) et en extrait l'id.
+   * Sert à autoriser l'entrée dans la room des agents du support : un jeton client (signé par
+   * `jwt.secret`) est rejeté.
+   */
+  private static resolveAdminId(raw: string): string | null {
+    try {
+      const token = raw.startsWith('Bearer ') ? raw.split(' ')[1] : raw;
+      if (!env.jwt.secretAuth) return null;
+      const payload: any = jwt.verify(token, env.jwt.secretAuth);
+      const id = payload?._id;
+      return typeof id === 'string' && id.trim().length > 0 ? id : null;
+    } catch {
       return null;
     }
   }

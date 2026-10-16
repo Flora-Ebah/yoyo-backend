@@ -5,6 +5,10 @@ import { ClientSet } from '../client';
 import { Events, IPushNotification, PushNotificationService } from '../push-notification';
 import { SubscriptionService } from '../subscription/subscription.service';
 import { PaymentService } from '../payment/payment.service';
+import { getSocketIO } from '../../main';
+
+/** Room Socket.IO partagée par les agents du support (back-office). */
+export const SUPPORT_AGENTS_ROOM = 'support:agents';
 
 /**
  * FAQ — 10 questions/réponses du §04 du cahier des charges, EN DUR.
@@ -92,6 +96,28 @@ export class SupportService {
 		return t.length > max ? t.slice(0, max) + '…' : t;
 	}
 
+	/**
+	 * Émet un événement d'assistance temps réel vers une ou plusieurs rooms Socket.IO.
+	 * Best-effort : sans socket (ou en cas d'erreur) on n'interrompt jamais le flux HTTP.
+	 * Même mécanisme que `push.service` (room d'identité = `userId`).
+	 */
+	private emitSupport(rooms: Array<string | undefined>, event: string, payload: any): void {
+		try {
+			const io = getSocketIO()?.getIo();
+			if (!io) return;
+			for (const room of rooms) {
+				if (room) io.to(String(room)).emit(event, payload);
+			}
+		} catch (error) {
+			LoggerService.log({
+				type: LogLevel.Warn,
+				content: error,
+				location: this.serviceLabel,
+				method: 'emitSupport'
+			});
+		}
+	}
+
 	/* -------------------------------------------------------------------------
 	 * Côté client
 	 * ----------------------------------------------------------------------- */
@@ -132,6 +158,13 @@ export class SupportService {
 				read: false
 			} as ISupportMessage);
 			if (message?.error) throw message;
+
+			// Temps réel : nouveau ticket visible immédiatement dans la liste des agents.
+			this.emitSupport([SUPPORT_AGENTS_ROOM], 'support:message', {
+				ticketId: String(ticket._id),
+				message: this.toMessageDto(message),
+				newTicket: true
+			});
 
 			return { ticket, message };
 		} catch (error) {
@@ -250,7 +283,14 @@ export class SupportService {
 			// ce qui suffit à ce que Mongoose rafraîchisse `updatedAt`.
 			await this.tickets.update({ _id: payloads.ticketId }, { status: ticket.status });
 
-			return { message: this.toMessageDto(message) };
+			const dto = this.toMessageDto(message);
+			// Temps réel : vers les agents (liste + conversation côté back-office).
+			this.emitSupport([SUPPORT_AGENTS_ROOM], 'support:message', {
+				ticketId: String(payloads.ticketId),
+				message: dto
+			});
+
+			return { message: dto };
 		} catch (error) {
 			return { error: true, data: error };
 		}
@@ -407,7 +447,14 @@ export class SupportService {
 				method: 'adminReply'
 			});
 
-			return { message: this.toMessageDto(message) };
+			const dto = this.toMessageDto(message);
+			// Temps réel : au client (sa conversation ouverte) et aux autres agents.
+			this.emitSupport([ticket.userId, SUPPORT_AGENTS_ROOM], 'support:message', {
+				ticketId: String(payloads.ticketId),
+				message: dto
+			});
+
+			return { message: dto };
 		} catch (error) {
 			return { error: true, data: error };
 		}
@@ -455,6 +502,14 @@ export class SupportService {
 			});
 
 			const updated: any = await this.tickets.selectOne({ _id: ticketId });
+
+			// Temps réel : statut/assignation au client et aux agents.
+			this.emitSupport([ticket.userId, SUPPORT_AGENTS_ROOM], 'support:status', {
+				ticketId: String(ticketId),
+				status: updated?.status,
+				assignedTo: updated?.assignedTo ? String(updated.assignedTo) : null
+			});
+
 			return { ticket: updated };
 		} catch (error) {
 			return { error: true, data: error };
@@ -744,7 +799,15 @@ export class SupportService {
 				method: 'createTicketFromAssistant'
 			});
 
-			return { ticket, message: this.toMessageDto(lastMessage) };
+			const dto = this.toMessageDto(lastMessage);
+			// Temps réel : nouveau ticket (issu de l'assistant) visible côté agents.
+			this.emitSupport([SUPPORT_AGENTS_ROOM], 'support:message', {
+				ticketId: String(ticket._id),
+				message: dto,
+				newTicket: true
+			});
+
+			return { ticket, message: dto };
 		} catch (error) {
 			return { error: true, data: error };
 		}
