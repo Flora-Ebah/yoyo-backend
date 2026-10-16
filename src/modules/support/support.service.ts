@@ -250,7 +250,7 @@ export class SupportService {
 			// ce qui suffit à ce que Mongoose rafraîchisse `updatedAt`.
 			await this.tickets.update({ _id: payloads.ticketId }, { status: ticket.status });
 
-			return { message };
+			return { message: this.toMessageDto(message) };
 		} catch (error) {
 			return { error: true, data: error };
 		}
@@ -407,10 +407,25 @@ export class SupportService {
 				method: 'adminReply'
 			});
 
-			return { message };
+			return { message: this.toMessageDto(message) };
 		} catch (error) {
 			return { error: true, data: error };
 		}
+	}
+
+	/**
+	 * Normalise un message pour le client : expose `attachmentUrl` (URL `/file/<nom>`)
+	 * au lieu du nom de fichier brut `attachment`. Même forme que la liste des messages,
+	 * pour que l'image s'affiche immédiatement après l'envoi (sans rechargement).
+	 */
+	private toMessageDto(m: any) {
+		return {
+			_id: m._id,
+			sender: m.sender,
+			body: m.body,
+			attachmentUrl: m.attachment ? `/file/${m.attachment}` : undefined,
+			createdAt: m.createdAt
+		};
 	}
 
 	/** Met à jour le statut et/ou l'assignation d'un ticket. */
