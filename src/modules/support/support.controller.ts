@@ -148,11 +148,38 @@ export class SupportController {
 						data: null
 					});
 				}
-				resolve({ status: defines.status.requestOK, message: locale.controller.done, data: { reply: result.reply } });
+				resolve({
+					status: defines.status.requestOK,
+					message: locale.controller.done,
+					data: { reply: result.reply, escalate: result.escalate === true, category: result.category || 'autre' }
+				});
 			} catch (error) {
 				reject(error);
 			}
 		}).catch((e: IErrorObject) => coddyger.catchReturn(e, controllerLabel, 'askAssistant'));
+	}
+
+	/** Crée un ticket pré-rempli à partir d'une conversation avec l'assistant (escalade). */
+	createFromAssistant(payloads: { userId: string; history: Array<{ role: string; content: string }>; category?: string }) {
+		return new Promise(async (resolve, reject) => {
+			try {
+				const result: any = await this.service.createTicketFromAssistant(payloads);
+				if (result.error) {
+					return resolve({
+						status: defines.status.badRequest,
+						message: typeof result.data === 'string' ? result.data : locale.controller.notValidStatus,
+						data: null
+					});
+				}
+				resolve({
+					status: defines.status.created,
+					message: locale.controller.successSave,
+					data: { ticket: result.ticket, message: result.message }
+				});
+			} catch (error) {
+				reject(error);
+			}
+		}).catch((e: IErrorObject) => coddyger.catchReturn(e, controllerLabel, 'createFromAssistant'));
 	}
 
 	/* ---------------------------------------------------------------------- */

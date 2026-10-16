@@ -172,7 +172,10 @@ export class SupportMessageSet extends MongoDbDao<ISupportMessage & Document> im
 	/** Messages d'un ticket, en ordre chronologique. */
 	selectHug(params?: any): Promise<Array<Document> | any> {
 		return new Promise(async (resolve, reject) => {
-			let doc = await this.defaultModel.find(params).sort({ createdAt: 1 }).lean();
+			// Tri stable : `createdAt` puis `_id` (ObjectId monotone croissant) départage les
+			// messages créés dans la même milliseconde — p. ex. le transcript importé depuis
+			// l'assistant, enregistré en rafale.
+			let doc = await this.defaultModel.find(params).sort({ createdAt: 1, _id: 1 }).lean();
 
 			if (!doc) {
 				reject(doc);

@@ -589,7 +589,14 @@ export class SupportService {
 
 	/**
 	 * Assistant IA (Groq). Clé lue dans `process.env.IA_CLE` (repli `GROQ_API_KEY`).
-	 * Renvoie `{ reply }` ou `{ unavailable: true }` si la clé est absente, ou `{ error }` réseau.
+	 *
+	 * Réponse structurée en JSON : `{ reply, escalate, category }`.
+	 * - `escalate` passe à `true` quand l'assistant ne peut PAS résoudre (problème compte /
+	 *   paiement / marchand nécessitant un conseiller humain) → l'app propose alors de
+	 *   transférer toute la conversation à un conseiller (création de ticket pré-rempli).
+	 * - `category` : catégorie de ticket suggérée pour ce transfert.
+	 *
+	 * Renvoie `{ unavailable: true }` si la clé est absente, ou `{ error }` en cas d'échec réseau.
 	 */
 	async askAssistant(payloads: { message: string; history?: Array<{ role: string; content: string }> }): Promise<any> {
 		const apiKey = process.env.IA_CLE || process.env.GROQ_API_KEY;
@@ -600,8 +607,16 @@ export class SupportService {
 		try {
 			const faqResume = SUPPORT_FAQ.map((f) => `Q: ${f.q}\nR: ${f.a}`).join('\n');
 			const systemPrompt =
-				'Tu es l’assistant YoYo La Carte. Réponds en français, brièvement, sur la base de la FAQ. ' +
-				'Si tu ne sais pas ou si c’est un problème de compte/paiement/marchand, invite à Contacter YOYO.\n\n' +
+				'Tu es l’assistant YoYo La Carte. Réponds en français, brièvement, sur la base de la FAQ.\n\n' +
+				'Tu réponds UNIQUEMENT par un objet JSON valide, sans texte autour, avec exactement ces clés :\n' +
+				'- "reply" (string) : ta réponse au client, en français.\n' +
+				'- "escalate" (boolean) : true si tu ne peux pas résoudre le problème, ou s’il s’agit d’un ' +
+				'problème de compte, de paiement/abonnement non activé, ou de litige avec un marchand qui exige ' +
+				'un conseiller humain. Sinon false.\n' +
+				'- "category" (string) : l’une de "scan", "abonnement_paiement", "marchand", "compte", "autre" — ' +
+				'la catégorie la plus adaptée si le client devait ouvrir une demande.\n\n' +
+				'Quand escalate vaut true, dans "reply" invite poliment le client à transférer la conversation ' +
+				'à un conseiller (ne lui demande pas de tout retaper).\n\n' +
 				'FAQ de référence :\n' +
 				faqResume;
 
@@ -618,7 +633,8 @@ export class SupportService {
 					model: process.env.IA_MODELE || 'openai/gpt-oss-20b',
 					messages: [{ role: 'system', content: systemPrompt }, ...history, { role: 'user', content: payloads.message }],
 					temperature: 0.3,
-					reasoning_effort: 'low'
+					reasoning_effort: 'low',
+					response_format: { type: 'json_object' }
 				},
 				{
 					headers: {
@@ -629,8 +645,8 @@ export class SupportService {
 				}
 			);
 
-			const reply: string = response?.data?.choices?.[0]?.message?.content ?? '';
-			return { reply: reply.trim() };
+			const raw: string = (response?.data?.choices?.[0]?.message?.content ?? '').trim();
+			return this.parseAssistantReply(raw);
 		} catch (error) {
 			LoggerService.log({
 				type: LogLevel.Error,
@@ -638,6 +654,98 @@ export class SupportService {
 				location: this.serviceLabel,
 				method: 'askAssistant'
 			});
+			return { error: true, data: error };
+		}
+	}
+
+	/**
+	 * Parse la réponse JSON de l'assistant en `{ reply, escalate, category }`, de façon tolérante :
+	 * si le modèle renvoie du texte brut (ou un JSON malformé), on retombe sur `reply = texte`,
+	 * `escalate = false` — jamais d'échec visible pour le client.
+	 */
+	private parseAssistantReply(raw: string): { reply: string; escalate: boolean; category: string } {
+		const fallback = (reply: string) => ({ reply: reply.trim(), escalate: false, category: 'autre' });
+		if (!raw) return fallback('');
+		try {
+			// Tolère un éventuel bloc ```json … ``` autour de l'objet.
+			const cleaned = raw.replace(/^```(?:json)?/i, '').replace(/```$/, '').trim();
+			const parsed = JSON.parse(cleaned);
+			const reply = typeof parsed.reply === 'string' ? parsed.reply.trim() : '';
+			if (!reply) return fallback(raw);
+			const category = CATEGORIES.indexOf(parsed.category) !== -1 ? parsed.category : 'autre';
+			return { reply, escalate: parsed.escalate === true, category };
+		} catch {
+			return fallback(raw);
+		}
+	}
+
+	/**
+	 * Crée un ticket pré-rempli à partir d'une conversation avec l'assistant IA (escalade).
+	 * Toute la conversation est reprise dans le fil (messages `client` / `bot`) pour que le
+	 * conseiller dispose du contexte complet, sans que le client ait à tout retaper.
+	 *
+	 * L'ordre d'affichage est garanti par le tri stable `createdAt`+`_id` de `selectHug`
+	 * (les messages sont enregistrés en rafale, donc souvent dans la même milliseconde).
+	 */
+	async createTicketFromAssistant(payloads: {
+		userId: string;
+		history: Array<{ role: string; content: string }>;
+		category?: string;
+	}): Promise<any> {
+		try {
+			const history = Array.isArray(payloads.history)
+				? payloads.history.filter((m) => m && typeof m.content === 'string' && m.content.trim())
+				: [];
+			if (history.length === 0) {
+				return { error: true, data: 'Conversation vide.' };
+			}
+
+			const category = CATEGORIES.indexOf(payloads.category as string) !== -1 ? (payloads.category as string) : 'autre';
+			const reference = await this.generateReference();
+
+			const ticket: any = await this.tickets.save({
+				_id: coddyger.string.generateObjectId(),
+				reference,
+				userId: payloads.userId,
+				category,
+				status: 'open'
+			} as ISupportTicket);
+			if (ticket?.error) throw ticket;
+
+			// En-tête de contexte pour le conseiller, puis la conversation telle quelle.
+			const header: any = await this.messages.save({
+				_id: coddyger.string.generateObjectId(),
+				ticketId: ticket._id,
+				sender: 'bot',
+				body: '— Conversation transférée depuis l’assistant IA —',
+				read: false
+			} as ISupportMessage);
+			if (header?.error) throw header;
+
+			let lastMessage: any = header;
+			for (const turn of history) {
+				const sender = turn.role === 'assistant' ? 'bot' : 'client';
+				const saved: any = await this.messages.save({
+					_id: coddyger.string.generateObjectId(),
+					ticketId: ticket._id,
+					sender,
+					senderId: sender === 'client' ? payloads.userId : undefined,
+					body: turn.content.trim(),
+					read: false
+				} as ISupportMessage);
+				if (saved?.error) throw saved;
+				lastMessage = saved;
+			}
+
+			LoggerService.log({
+				type: LogLevel.Info,
+				content: `[AUDIT][SUPPORT] Ticket créé depuis l’assistant — ticket=${reference} (${ticket._id}) userId=${payloads.userId} messages=${history.length}`,
+				location: this.serviceLabel,
+				method: 'createTicketFromAssistant'
+			});
+
+			return { ticket, message: this.toMessageDto(lastMessage) };
+		} catch (error) {
 			return { error: true, data: error };
 		}
 	}

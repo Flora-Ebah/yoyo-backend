@@ -128,6 +128,50 @@ const defaultRoute: any = (fastify: any, options, done) => {
 		}
 	});
 
+	// Créer un ticket depuis une conversation avec l'assistant (escalade) — déclaré avant
+	// `/tickets/:id` pour ne pas être capturé par le param `:id`.
+	fastify.route({
+		schema: {
+			tags,
+			summary: 'Créer une demande depuis l’assistant IA',
+			description:
+				'Crée un ticket pré-rempli reprenant toute la conversation avec l’assistant (messages ' +
+				'`client`/`bot`), pour transfert à un conseiller sans ressaisie. Propriétaire déduit du jeton.',
+			body: {
+				type: 'object',
+				properties: {
+					category: { type: 'string', enum: CATEGORIES },
+					history: {
+						type: 'array',
+						minItems: 1,
+						items: {
+							type: 'object',
+							properties: {
+								role: { type: 'string' },
+								content: { type: 'string' }
+							},
+							required: ['role', 'content'],
+							additionalProperties: false
+						}
+					}
+				},
+				required: ['history'],
+				additionalProperties: false
+			}
+		},
+		method: 'POST',
+		url: `${routePath}/tickets/from-assistant`,
+		preHandler: TokenMiddleware.verify,
+		handler: (request, reply) => {
+			const body: any = request.body;
+			const user: any = request.user;
+			return coddyger.api(
+				reply,
+				Controller.createFromAssistant({ userId: user._id, history: body.history, category: body.category })
+			);
+		}
+	});
+
 	// Détail d'un ticket du client
 	fastify.route({
 		schema: {
