@@ -193,6 +193,22 @@ export class SupportController {
 		}).catch((e: IErrorObject) => coddyger.catchReturn(e, controllerLabel, 'adminGetTicket'));
 	}
 
+	/** Contexte client d'un ticket (abonnement, économies, ancienneté) pour le panneau agent. */
+	adminGetTicketContext(ticketId: string) {
+		return new Promise(async (resolve, reject) => {
+			try {
+				const result: any = await this.service.getTicketContext(ticketId);
+				if (result.notFound) {
+					return resolve({ status: defines.status.notFound, message: locale.notfound('Ticket'), data: null });
+				}
+				if (result.error) throw result;
+				resolve({ status: defines.status.requestOK, message: locale.controller.done, data: result.context });
+			} catch (error) {
+				reject(error);
+			}
+		}).catch((e: IErrorObject) => coddyger.catchReturn(e, controllerLabel, 'adminGetTicketContext'));
+	}
+
 	/** Réponse du support + notification client. */
 	adminReply(payloads: { ticketId: string; adminId: string; body: string }) {
 		return new Promise(async (resolve, reject) => {

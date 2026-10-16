@@ -1155,6 +1155,40 @@ export class PaymentService {
   }
 
   /**
+   * Dernière réduction VALIDÉE (`success`) d'un client : la plus récente, avec le montant de la
+   * réduction (recalculé via `computeDiscount`, même formule que `redeem`), le nom du marchand
+   * (boutique `to` peuplée) et la date. `null` si le client n'a aucun ticket validé.
+   *
+   * @returns `{ amount, merchant?, date? } | null`
+   */
+  async getClientLastSaving(clientId: string): Promise<{ amount: number; merchant?: string; date?: string } | null> {
+    try {
+      const model: any = (this.dao as any).defaultModel;
+      const last: any = await model
+        .findOne({ from: clientId, status: 'success' }, 'amount discountPercentage completedAt createdAt to')
+        .sort({ completedAt: -1 })
+        .populate('to', '_id name')
+        .lean();
+
+      if (!last) {
+        return null;
+      }
+
+      const amount = Number(last.amount);
+      const { discount } = this.computeDiscount(Number.isFinite(amount) ? amount : 0, Number(last.discountPercentage ?? 0));
+      const at = last.completedAt ?? last.createdAt;
+
+      return {
+        amount: discount,
+        merchant: last.to?.name ?? undefined,
+        date: at ? new Date(at).toISOString() : undefined
+      };
+    } catch (error) {
+      return null;
+    }
+  }
+
+  /**
    * Consommation des réductions du jour par rapport au quota (`redeemLimits.maxPerDay`), lue par
    * l'app Client pour la pastille « N aujourd'hui ». Même comptage que le quota de `redeem`.
    * `dayLimit` / `monthLimit` à 0 = illimité (pas de quota mensuel à ce jour).

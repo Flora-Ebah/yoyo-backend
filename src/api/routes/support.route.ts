@@ -275,7 +275,29 @@ const defaultRoute: any = (fastify: any, options, done) => {
 		url: `${routePath}/admin/tickets/:id`,
 		preHandler: TokenMiddleware.verifyAdmin,
 		handler: (request, reply) => coddyger.api(reply, Controller.adminGetTicket(String(request.params.id)))
-	});
+		});
+
+		// Contexte client d'un ticket (panneau latéral agent)
+		fastify.route({
+			schema: {
+				tags: adminTags,
+				summary: 'Contexte client d’un ticket (admin)',
+				description:
+					'Condensé affiché à côté de la conversation : identité du client, abonnement actif ' +
+					'(nom du plan, statut, jours restants), économies cumulées + dernière réduction validée, ' +
+					'et libellé des scans (« Illimités » sous abonnement actif, sinon « — »).',
+				params: {
+					type: 'object',
+					properties: { id: { type: 'string' } },
+					required: ['id'],
+					additionalProperties: false
+				}
+			},
+			method: 'GET',
+			url: `${routePath}/admin/tickets/:id/context`,
+			preHandler: TokenMiddleware.verifyAdmin,
+			handler: (request, reply) => coddyger.api(reply, Controller.adminGetTicketContext(String(request.params.id)))
+		});
 
 	// Réponse du support (+ notification client)
 	fastify.route({

@@ -3,6 +3,8 @@ import { ISupportMessage, ISupportTicket } from './support.interface';
 import { SupportMessageSet, SupportTicketSet } from './support.model';
 import { ClientSet } from '../client';
 import { Events, IPushNotification, PushNotificationService } from '../push-notification';
+import { SubscriptionService } from '../subscription/subscription.service';
+import { PaymentService } from '../payment/payment.service';
 
 /**
  * FAQ — 10 questions/réponses du §04 du cahier des charges, EN DUR.
@@ -458,6 +460,105 @@ export class SupportService {
 			const byCategory: Record<string, number> = {};
 			for (const c of byCat as Array<{ _id: string; n: number }>) byCategory[c._id] = c.n;
 			return { stats: { total, open, in_progress: inProgress, resolved, byCategory } };
+		} catch (error) {
+			return { error: true, data: error };
+		}
+	}
+
+	/**
+	 * Contexte client d'un ticket (panneau latéral de l'agent, à côté de la conversation).
+	 *
+	 * Compose, pour le CLIENT PROPRIÉTAIRE du ticket, un condensé utile à l'agent de support :
+	 * identité, abonnement actif, économies cumulées + dernière réduction, et libellé des scans.
+	 *
+	 * Réutilise les services existants :
+	 *  - abonnement : `SubscriptionService.getCurrentSubscriptionWithPlanDetails` (abonnement actif
+	 *    non expiré, nom du plan peuplé, `daysRemaining` déjà calculé) ;
+	 *  - économies : `PaymentService.getClientSavings` (total des réductions validées) et
+	 *    `PaymentService.getClientLastSaving` (dernière réduction validée).
+	 *
+	 * Robuste : chaque brique manquante retombe sur `null` / valeurs vides sans faire échouer le tout.
+	 * `{ notFound: true }` si le ticket n'existe pas.
+	 */
+	async getTicketContext(ticketId: string): Promise<any> {
+		try {
+			if (!coddyger.string.isValidObjectId(ticketId)) {
+				return { notFound: true };
+			}
+
+			const ticket: any = await this.tickets.selectOne({ _id: ticketId });
+			if (!ticket || ticket.error) {
+				return { notFound: true };
+			}
+
+			const userId = ticket.userId;
+
+			// Identité du client (best-effort : null si introuvable).
+			let user: any = null;
+			try {
+				const clientDao: any = new ClientSet();
+				const client: any = await clientDao.selectOne(
+					{ _id: userId },
+					'_id firstname lastname email createdAt'
+				);
+				if (client && !client.error) {
+					user = {
+						_id: client._id,
+						firstname: client.firstname,
+						lastname: client.lastname,
+						email: client.email,
+						createdAt: client.createdAt
+					};
+				}
+			} catch {
+				user = null;
+			}
+
+			// Abonnement ACTIF du client (null si aucun).
+			let subscription: { planName: string; status: string; daysRemaining: number } | null = null;
+			try {
+				const current: any = await new SubscriptionService().getCurrentSubscriptionWithPlanDetails(String(userId));
+				if (current) {
+					subscription = {
+						planName: current.planId?.name ?? '',
+						status: current.status ?? 'active',
+						daysRemaining: Number(current.daysRemaining) || 0
+					};
+				}
+			} catch {
+				subscription = null;
+			}
+
+			// Économies cumulées + dernière réduction validée.
+			let savings: { total: number; last: { amount: number; merchant?: string; date?: string } | null } = {
+				total: 0,
+				last: null
+			};
+			try {
+				const paymentService = new PaymentService();
+				const [totals, last] = await Promise.all([
+					paymentService.getClientSavings(String(userId)),
+					paymentService.getClientLastSaving(String(userId))
+				]);
+				savings = {
+					total: Number(totals?.total) || 0,
+					last: last ?? null
+				};
+			} catch {
+				savings = { total: 0, last: null };
+			}
+
+			// Scans illimités sous abonnement actif, sinon néant.
+			const scans = subscription ? 'Illimités' : '—';
+
+			return {
+				context: {
+					user,
+					subscription,
+					savings,
+					scans
+				}
+			};
 		} catch (error) {
 			return { error: true, data: error };
 		}
