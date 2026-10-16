@@ -186,16 +186,19 @@ export class SocketIOHelper {
   }
 
   /**
-   * Vérifie un jeton d'ADMINISTRATION (signé par `jwt.secretAuth` uniquement) et en extrait l'id.
-   * Sert à autoriser l'entrée dans la room des agents du support : un jeton client (signé par
-   * `jwt.secret`) est rejeté.
+   * Vérifie un jeton d'ADMINISTRATION et en extrait l'id.
+   *
+   * Le jeton d'accès admin est signé avec `jwt.secret` (comme les jetons client) mais porte
+   * `isAdmin: true` dans son payload — exactement ce que contrôle `TokenMiddleware.verifyAdmin`.
+   * On exige donc une signature valide ET `isAdmin === true` : un jeton client (sans `isAdmin`)
+   * est rejeté et ne peut pas entrer dans la room des agents du support.
    */
   private static resolveAdminId(raw: string): string | null {
     try {
       const token = raw.startsWith('Bearer ') ? raw.split(' ')[1] : raw;
-      if (!env.jwt.secretAuth) return null;
-      const payload: any = jwt.verify(token, env.jwt.secretAuth);
-      const id = payload?._id;
+      const payload: any = SocketIOHelper.verifyWithEitherSecret(token);
+      if (!payload || payload.isAdmin !== true) return null;
+      const id = payload._id;
       return typeof id === 'string' && id.trim().length > 0 ? id : null;
     } catch {
       return null;
