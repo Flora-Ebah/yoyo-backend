@@ -594,7 +594,7 @@ export class SupportService {
 				const clientDao: any = new ClientSet();
 				const client: any = await clientDao.selectOne(
 					{ _id: userId },
-					'_id firstname lastname email createdAt'
+					'_id firstname lastname email contact createdAt status'
 				);
 				if (client && !client.error) {
 					user = {
@@ -602,7 +602,9 @@ export class SupportService {
 						firstname: client.firstname,
 						lastname: client.lastname,
 						email: client.email,
-						createdAt: client.createdAt
+						contact: client.contact,
+						createdAt: client.createdAt,
+						status: client.status
 					};
 				}
 			} catch {
@@ -654,6 +656,48 @@ export class SupportService {
 					scans
 				}
 			};
+		} catch (error) {
+			return { error: true, data: error };
+		}
+	}
+
+	/**
+	 * Historique des scans / transactions du client propriétaire d'un ticket (paginé).
+	 * Réutilise `PaymentService.getClientTransactions`. `{ notFound: true }` si le ticket n'existe pas.
+	 */
+	async adminGetClientTransactions(ticketId: string, page = 1, pageSize = 20): Promise<any> {
+		try {
+			if (!coddyger.string.isValidObjectId(ticketId)) return { notFound: true };
+			const ticket: any = await this.tickets.selectOne({ _id: ticketId }, '_id userId');
+			if (!ticket || ticket.error) return { notFound: true };
+
+			const result: any = await new PaymentService().getClientTransactions(String(ticket.userId), { page, pageSize });
+			if (result?.error) throw result;
+			const meta: any = result?.data ?? {};
+			return {
+				rows: result?.rows ?? [],
+				totalRows: meta.totalRows,
+				totalPages: meta.totalPages,
+				page
+			};
+		} catch (error) {
+			return { error: true, data: error };
+		}
+	}
+
+	/**
+	 * Historique des abonnements du client propriétaire d'un ticket (récents d'abord).
+	 * Réutilise `SubscriptionService.getUserSubscriptionHistory`.
+	 */
+	async adminGetClientSubscriptions(ticketId: string): Promise<any> {
+		try {
+			if (!coddyger.string.isValidObjectId(ticketId)) return { notFound: true };
+			const ticket: any = await this.tickets.selectOne({ _id: ticketId }, '_id userId');
+			if (!ticket || ticket.error) return { notFound: true };
+
+			const history: any = await new SubscriptionService().getUserSubscriptionHistory(String(ticket.userId));
+			const rows: any[] = Array.isArray(history) ? history : history?.rows ?? [];
+			return { rows };
 		} catch (error) {
 			return { error: true, data: error };
 		}

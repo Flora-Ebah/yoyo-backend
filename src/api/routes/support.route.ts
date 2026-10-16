@@ -343,6 +343,41 @@ const defaultRoute: any = (fastify: any, options, done) => {
 			handler: (request, reply) => coddyger.api(reply, Controller.adminGetTicketContext(String(request.params.id)))
 		});
 
+	// Historique scans/transactions du client d'un ticket
+	fastify.route({
+		schema: {
+			tags: adminTags,
+			summary: 'Historique scans/transactions du client (admin)',
+			params: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'], additionalProperties: false },
+			query: {
+				type: 'object',
+				properties: { page: { type: 'number' }, pageSize: { type: 'number' } },
+				required: [],
+				additionalProperties: false
+			}
+		},
+		method: 'GET',
+		url: `${routePath}/admin/tickets/:id/transactions`,
+		preHandler: TokenMiddleware.verifyAdmin,
+		handler: (request, reply) => {
+			const q: any = request.query;
+			return coddyger.api(reply, Controller.adminGetClientTransactions(String(request.params.id), q.page, q.pageSize));
+		}
+	});
+
+	// Historique des abonnements du client d'un ticket
+	fastify.route({
+		schema: {
+			tags: adminTags,
+			summary: 'Historique des abonnements du client (admin)',
+			params: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'], additionalProperties: false }
+		},
+		method: 'GET',
+		url: `${routePath}/admin/tickets/:id/subscriptions`,
+		preHandler: TokenMiddleware.verifyAdmin,
+		handler: (request, reply) => coddyger.api(reply, Controller.adminGetClientSubscriptions(String(request.params.id)))
+	});
+
 	// Réponse du support (+ notification client)
 	fastify.route({
 		schema: {

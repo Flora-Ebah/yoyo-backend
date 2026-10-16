@@ -236,6 +236,38 @@ export class SupportController {
 		}).catch((e: IErrorObject) => coddyger.catchReturn(e, controllerLabel, 'adminGetTicketContext'));
 	}
 
+	/** Historique scans/transactions du client d'un ticket (panneau agent). */
+	adminGetClientTransactions(ticketId: string, page?: number, pageSize?: number) {
+		return new Promise(async (resolve, reject) => {
+			try {
+				const result: any = await this.service.adminGetClientTransactions(ticketId, page || 1, pageSize || 20);
+				if (result.notFound) {
+					return resolve({ status: defines.status.notFound, message: locale.notfound('Ticket'), data: null });
+				}
+				if (result.error) throw result;
+				resolve({ status: defines.status.requestOK, message: locale.controller.done, data: result });
+			} catch (error) {
+				reject(error);
+			}
+		}).catch((e: IErrorObject) => coddyger.catchReturn(e, controllerLabel, 'adminGetClientTransactions'));
+	}
+
+	/** Historique des abonnements du client d'un ticket (panneau agent). */
+	adminGetClientSubscriptions(ticketId: string) {
+		return new Promise(async (resolve, reject) => {
+			try {
+				const result: any = await this.service.adminGetClientSubscriptions(ticketId);
+				if (result.notFound) {
+					return resolve({ status: defines.status.notFound, message: locale.notfound('Ticket'), data: null });
+				}
+				if (result.error) throw result;
+				resolve({ status: defines.status.requestOK, message: locale.controller.done, data: result.rows });
+			} catch (error) {
+				reject(error);
+			}
+		}).catch((e: IErrorObject) => coddyger.catchReturn(e, controllerLabel, 'adminGetClientSubscriptions'));
+	}
+
 	/** Réponse du support + notification client. */
 	adminReply(payloads: { ticketId: string; adminId: string; body: string }) {
 		return new Promise(async (resolve, reject) => {
