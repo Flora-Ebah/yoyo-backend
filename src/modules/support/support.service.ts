@@ -596,9 +596,14 @@ export class SupportService {
 			const response: any = await axios.post(
 				'/openai/v1/chat/completions',
 				{
-					model: 'llama-3.3-70b-versatile',
+					// Modèle Groq actif : `llama-3.3-70b-versatile` a été retiré du catalogue.
+					// `gpt-oss-20b` est un modèle à raisonnement — `reasoning_effort: 'low'`
+					// garde la réponse finale dans `message.content` (sinon les tokens partent
+					// dans `message.reasoning` et `content` revient vide).
+					model: process.env.IA_MODELE || 'openai/gpt-oss-20b',
 					messages: [{ role: 'system', content: systemPrompt }, ...history, { role: 'user', content: payloads.message }],
-					temperature: 0.3
+					temperature: 0.3,
+					reasoning_effort: 'low'
 				},
 				{
 					headers: {
