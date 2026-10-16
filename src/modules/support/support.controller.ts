@@ -215,11 +215,24 @@ export class SupportController {
 		}).catch((e: IErrorObject) => coddyger.catchReturn(e, controllerLabel, 'adminReply'));
 	}
 
-	/** Met à jour le statut / l'assignation d'un ticket. */
-	adminUpdate(ticketId: string, patch: { status?: string; assignedTo?: string }) {
+	/** Compteurs basiques (§06) pour le back-office. */
+	adminStats() {
 		return new Promise(async (resolve, reject) => {
 			try {
-				const result: any = await this.service.adminUpdateTicket(ticketId, patch);
+				const result: any = await this.service.adminStats();
+				if (result.error) throw result;
+				resolve({ status: defines.status.requestOK, message: locale.controller.done, data: result.stats });
+			} catch (error) {
+				reject(error);
+			}
+		}).catch((e: IErrorObject) => coddyger.catchReturn(e, controllerLabel, 'adminStats'));
+	}
+
+	/** Met à jour le statut / l'assignation d'un ticket. */
+	adminUpdate(ticketId: string, patch: { status?: string; assignedTo?: string }, adminId?: string) {
+		return new Promise(async (resolve, reject) => {
+			try {
+				const result: any = await this.service.adminUpdateTicket(ticketId, patch, adminId);
 				if (result.notFound) {
 					return resolve({ status: defines.status.notFound, message: locale.notfound('Ticket'), data: null });
 				}

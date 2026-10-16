@@ -250,6 +250,15 @@ const defaultRoute: any = (fastify: any, options, done) => {
 		}
 	});
 
+	// Compteurs basiques (§06)
+	fastify.route({
+		schema: { tags: adminTags, summary: 'Compteurs des demandes (admin)' },
+		method: 'GET',
+		url: `${routePath}/admin/stats`,
+		preHandler: TokenMiddleware.verifyAdmin,
+		handler: (request, reply) => coddyger.api(reply, Controller.adminStats())
+	});
+
 	// Détail d'un ticket (client peuplé)
 	fastify.route({
 		schema: {
@@ -330,7 +339,7 @@ const defaultRoute: any = (fastify: any, options, done) => {
 			const body: any = request.body;
 			return coddyger.api(
 				reply,
-				Controller.adminUpdate(String(request.params.id), { status: body.status, assignedTo: body.assignedTo })
+				Controller.adminUpdate(String(request.params.id), { status: body.status, assignedTo: body.assignedTo === 'me' ? (request.user as any)._id : body.assignedTo }, (request.user as any)._id)
 			);
 		}
 	});

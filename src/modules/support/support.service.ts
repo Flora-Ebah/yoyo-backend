@@ -397,6 +397,14 @@ export class SupportService {
 				});
 			}
 
+			// Journal d'audit (§07 CDC) : trace de l'action administrateur.
+			LoggerService.log({
+				type: LogLevel.Info,
+				content: `[AUDIT][SUPPORT] Réponse agent — ticket=${ticket.reference} (${payloads.ticketId}) adminId=${payloads.adminId}`,
+				location: this.serviceLabel,
+				method: 'adminReply'
+			});
+
 			return { message };
 		} catch (error) {
 			return { error: true, data: error };
@@ -404,7 +412,7 @@ export class SupportService {
 	}
 
 	/** Met à jour le statut et/ou l'assignation d'un ticket. */
-	async adminUpdateTicket(ticketId: string, patch: { status?: string; assignedTo?: string }): Promise<any> {
+	async adminUpdateTicket(ticketId: string, patch: { status?: string; assignedTo?: string }, adminId?: string): Promise<any> {
 		try {
 			if (!coddyger.string.isValidObjectId(ticketId)) {
 				return { notFound: true };
@@ -421,8 +429,35 @@ export class SupportService {
 			const result: any = await this.tickets.update({ _id: ticketId }, update);
 			if (result?.error) throw result;
 
+			// Journal d'audit (§07 CDC) : trace de l'action administrateur.
+			LoggerService.log({
+				type: LogLevel.Info,
+				content: `[AUDIT][SUPPORT] MAJ ticket=${ticket.reference} (${ticketId})${patch.status ? ' status=' + patch.status : ''}${patch.assignedTo !== undefined ? ' assignedTo=' + patch.assignedTo : ''} adminId=${adminId ?? '?'}`,
+				location: this.serviceLabel,
+				method: 'adminUpdateTicket'
+			});
+
 			const updated: any = await this.tickets.selectOne({ _id: ticketId });
 			return { ticket: updated };
+		} catch (error) {
+			return { error: true, data: error };
+		}
+	}
+
+	/** Compteurs basiques pour le back-office (§06 CDC) : total + par statut + par catégorie. */
+	async adminStats(): Promise<any> {
+		try {
+			const model: any = (this.tickets as any).defaultModel;
+			const [total, open, inProgress, resolved, byCat] = await Promise.all([
+				model.countDocuments({}),
+				model.countDocuments({ status: 'open' }),
+				model.countDocuments({ status: 'in_progress' }),
+				model.countDocuments({ status: 'resolved' }),
+				model.aggregate([{ $group: { _id: '$category', n: { $sum: 1 } } }])
+			]);
+			const byCategory: Record<string, number> = {};
+			for (const c of byCat as Array<{ _id: string; n: number }>) byCategory[c._id] = c.n;
+			return { stats: { total, open, in_progress: inProgress, resolved, byCategory } };
 		} catch (error) {
 			return { error: true, data: error };
 		}
