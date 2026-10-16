@@ -25,6 +25,8 @@ export interface ISupportTicket {
 	status?: SupportStatus;
 	/** Admin en charge du ticket (optionnel). */
 	assignedTo?: any;
+	/** Ticket basculé automatiquement par l'assistant IA (en attente d'un conseiller tant que non attribué). */
+	escalated?: boolean;
 	createdAt?: Date;
 	updatedAt?: Date;
 }

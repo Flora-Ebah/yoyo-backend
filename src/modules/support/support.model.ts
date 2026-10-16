@@ -23,7 +23,9 @@ const ticketSchema = new mongoose.Schema<ISupportTicket>(
 			enum: ['open', 'in_progress', 'resolved'],
 			default: 'open'
 		},
-		assignedTo: { type: Schema.Types.ObjectId, ref: 'Admin' }
+		assignedTo: { type: Schema.Types.ObjectId, ref: 'Admin' },
+		// Basculé par l'assistant IA : en attente d'attribution tant qu'aucun agent n'a pris la main.
+		escalated: { type: Boolean, default: false }
 	},
 	{ timestamps: true }
 );

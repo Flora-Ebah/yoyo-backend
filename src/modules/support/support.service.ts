@@ -367,6 +367,7 @@ export class SupportService {
 					category: t.category,
 					status: t.status,
 					assignedTo: t.assignedTo ?? null,
+					escalated: t.escalated ?? false,
 					lastMessage: last ? this.truncate(last.body) : '',
 					createdAt: t.createdAt,
 					updatedAt: t.updatedAt
@@ -490,8 +491,30 @@ export class SupportService {
 			if (patch.status) update.status = patch.status;
 			if (patch.assignedTo !== undefined) update.assignedTo = patch.assignedTo;
 
+			// Première attribution (personne → un agent) : on matérialise la prise en charge par un
+			// message dans le fil, pour une transition visible côté client (fin de l'attente).
+			const firstAssignment =
+				patch.assignedTo !== undefined && patch.assignedTo !== null && !ticket.assignedTo;
+
 			const result: any = await this.tickets.update({ _id: ticketId }, update);
 			if (result?.error) throw result;
+
+			if (firstAssignment) {
+				const takeover: any = await this.messages.save({
+					_id: coddyger.string.generateObjectId(),
+					ticketId,
+					sender: 'support',
+					senderId: patch.assignedTo,
+					body: 'Un conseiller a pris en charge votre demande.',
+					read: false
+				} as ISupportMessage);
+				if (!takeover?.error) {
+					this.emitSupport([ticket.userId, SUPPORT_AGENTS_ROOM], 'support:message', {
+						ticketId: String(ticketId),
+						message: this.toMessageDto(takeover)
+					});
+				}
+			}
 
 			// Journal d'audit (§07 CDC) : trace de l'action administrateur.
 			LoggerService.log({
@@ -520,16 +543,18 @@ export class SupportService {
 	async adminStats(): Promise<any> {
 		try {
 			const model: any = (this.tickets as any).defaultModel;
-			const [total, open, inProgress, resolved, byCat] = await Promise.all([
+			const [total, open, inProgress, resolved, awaiting, byCat] = await Promise.all([
 				model.countDocuments({}),
 				model.countDocuments({ status: 'open' }),
 				model.countDocuments({ status: 'in_progress' }),
 				model.countDocuments({ status: 'resolved' }),
+				// Basculés par l'assistant et pas encore attribués : la file « en attente d'un conseiller ».
+				model.countDocuments({ escalated: true, status: 'open', $or: [{ assignedTo: { $exists: false } }, { assignedTo: null }] }),
 				model.aggregate([{ $group: { _id: '$category', n: { $sum: 1 } } }])
 			]);
 			const byCategory: Record<string, number> = {};
 			for (const c of byCat as Array<{ _id: string; n: number }>) byCategory[c._id] = c.n;
-			return { stats: { total, open, in_progress: inProgress, resolved, byCategory } };
+			return { stats: { total, open, in_progress: inProgress, resolved, awaiting, byCategory } };
 		} catch (error) {
 			return { error: true, data: error };
 		}
@@ -763,7 +788,8 @@ export class SupportService {
 				reference,
 				userId: payloads.userId,
 				category,
-				status: 'open'
+				status: 'open',
+				escalated: true
 			} as ISupportTicket);
 			if (ticket?.error) throw ticket;
 
