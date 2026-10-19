@@ -356,6 +356,29 @@ export class SupportService {
 			const rows: any[] = data.rows;
 			delete data.rows;
 
+			// Peuplement groupé des clients (nom/prénom/email) — une seule requête pour toute la page,
+			// afin que la liste admin affiche le nom de l'auteur (sinon « — »).
+			const userMap: Record<string, any> = {};
+			try {
+				const userIds = Array.from(new Set(rows.map((t: any) => String(t.userId)).filter(Boolean)));
+				if (userIds.length > 0) {
+					const clientDao: any = new ClientSet();
+					const clients: any = await clientDao.selectHug({ _id: { $in: userIds } });
+					if (Array.isArray(clients)) {
+						for (const c of clients) {
+							userMap[String(c._id)] = {
+								_id: c._id,
+								firstname: c.firstname,
+								lastname: c.lastname,
+								email: c.email
+							};
+						}
+					}
+				}
+			} catch {
+				/* best-effort : la liste reste utilisable même sans noms peuplés */
+			}
+
 			// Aperçu du dernier message de chaque ticket.
 			const enriched: any[] = [];
 			for (const t of rows) {
@@ -364,6 +387,7 @@ export class SupportService {
 					_id: t._id,
 					reference: t.reference,
 					userId: t.userId,
+					user: userMap[String(t.userId)] ?? null,
 					category: t.category,
 					status: t.status,
 					assignedTo: t.assignedTo ?? null,
