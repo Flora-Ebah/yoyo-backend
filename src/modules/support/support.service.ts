@@ -356,11 +356,23 @@ export class SupportService {
 			const rows: any[] = data.rows;
 			delete data.rows;
 
+			// Normalise un userId (peut être un ObjectId, une string, ou un document déjà peuplé)
+			// en identifiant 24-hex VALIDE — sinon `null`. Indispensable : un `$in` avec une valeur
+			// non castable (« [object Object] ») lève une CastError qui fait tomber le process.
+			const toUserId = (u: any): string | null => {
+				if (!u) return null;
+				if (typeof u === 'object' && u._id) u = u._id;
+				const s = String(u);
+				return coddyger.string.isValidObjectId(s) ? s : null;
+			};
+
 			// Peuplement groupé des clients (nom/prénom/email) — une seule requête pour toute la page,
 			// afin que la liste admin affiche le nom de l'auteur (sinon « — »).
 			const userMap: Record<string, any> = {};
 			try {
-				const userIds = Array.from(new Set(rows.map((t: any) => String(t.userId)).filter(Boolean)));
+				const userIds = Array.from(
+					new Set(rows.map((t: any) => toUserId(t.userId)).filter((id: string | null): id is string => !!id))
+				);
 				if (userIds.length > 0) {
 					const clientDao: any = new ClientSet();
 					const clients: any = await clientDao.selectHug({ _id: { $in: userIds } });
@@ -382,12 +394,13 @@ export class SupportService {
 			// Aperçu du dernier message de chaque ticket.
 			const enriched: any[] = [];
 			for (const t of rows) {
+				const uid = toUserId(t.userId);
 				const last: any = await (this.messages as any).selectLatestWithParams({ ticketId: t._id });
 				enriched.push({
 					_id: t._id,
 					reference: t.reference,
-					userId: t.userId,
-					user: userMap[String(t.userId)] ?? null,
+					userId: uid ?? t.userId,
+					user: (uid && userMap[uid]) ?? null,
 					category: t.category,
 					status: t.status,
 					assignedTo: t.assignedTo ?? null,
