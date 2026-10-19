@@ -75,6 +75,34 @@ export class BoutiqueManagerController {
     }).catch((e: IErrorObject) => coddyger.catchReturn(e, controllerLabel, 'listByBoutique'));
   }
 
+  updateManager(id: string, patch: { phone?: string; name?: string }, actorId: string, isAdmin: boolean = false) {
+    return new Promise(async (resolve, reject) => {
+      try {
+        const result: any = await this.service.updateManager(id, patch, actorId, isAdmin);
+        if (!result.success) {
+          return resolve({ status: defines.status.badRequest, message: result.message, data: null });
+        }
+        resolve({ status: defines.status.requestOK, message: 'Gérant mis à jour', data: result.data });
+      } catch (error) {
+        reject(error);
+      }
+    }).catch((e: IErrorObject) => coddyger.catchReturn(e, controllerLabel, 'updateManager'));
+  }
+
+  regenerateCode(id: string, actorId: string, isAdmin: boolean = false) {
+    return new Promise(async (resolve, reject) => {
+      try {
+        const result: any = await this.service.regenerateCode(id, actorId, isAdmin);
+        if (!result.success) {
+          return resolve({ status: defines.status.badRequest, message: result.message, data: null });
+        }
+        resolve({ status: defines.status.requestOK, message: 'Code régénéré', data: result.data });
+      } catch (error) {
+        reject(error);
+      }
+    }).catch((e: IErrorObject) => coddyger.catchReturn(e, controllerLabel, 'regenerateCode'));
+  }
+
   remove(id: string, ownerId: string, isAdmin: boolean = false) {
     return new Promise(async (resolve, reject) => {
       try {

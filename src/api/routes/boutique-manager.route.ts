@@ -64,6 +64,63 @@ const defaultRoute: any = (fastify: any, options, done) => {
     }
   });
 
+  // [PROPRIÉTAIRE / ADMIN] Modifier un gérant (téléphone et/ou nom).
+  fastify.route({
+    schema: {
+      tags,
+      summary: 'Modifier un gérant (téléphone / nom)',
+      params: {
+        type: 'object',
+        properties: { id: { type: 'string' } },
+        required: ['id'],
+        additionalProperties: false
+      },
+      body: {
+        type: 'object',
+        properties: {
+          phone: { type: 'string' },
+          name: { type: 'string', minLength: 2, maxLength: 80 }
+        },
+        required: [],
+        additionalProperties: false
+      }
+    },
+    method: 'PATCH',
+    url: `${routePath}/:id`,
+    preHandler: TokenMiddleware.verify,
+    handler: (request, reply) => {
+      const user: any = request.user;
+      const id: any = request.params.id;
+      const body: any = request.body;
+      // Admin (back-office) : n'importe quel gérant ; propriétaire (yoyo-pro) : les siens (contrôlé dans le service).
+      const Q = Controller.updateManager(id, { phone: body.phone, name: body.name }, user._id, !!user.isAdmin);
+      return coddyger.api(reply, Q);
+    }
+  });
+
+  // [PROPRIÉTAIRE / ADMIN] Régénérer le code d'accès d'un gérant.
+  fastify.route({
+    schema: {
+      tags,
+      summary: 'Régénérer le code d’accès d’un gérant',
+      params: {
+        type: 'object',
+        properties: { id: { type: 'string' } },
+        required: ['id'],
+        additionalProperties: false
+      }
+    },
+    method: 'POST',
+    url: `${routePath}/:id/regenerate-code`,
+    preHandler: TokenMiddleware.verify,
+    handler: (request, reply) => {
+      const user: any = request.user;
+      const id: any = request.params.id;
+      const Q = Controller.regenerateCode(id, user._id, !!user.isAdmin);
+      return coddyger.api(reply, Q);
+    }
+  });
+
   // [PROPRIÉTAIRE] Retirer un gérant.
   fastify.route({
     schema: {

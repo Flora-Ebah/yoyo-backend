@@ -133,6 +133,105 @@ export class BoutiqueManagerService {
     };
   }
 
+  /**
+   * Modifie un gérant (téléphone et/ou nom). Un ADMIN peut modifier n'importe quel gérant ;
+   * un propriétaire (yoyo-pro) uniquement les siens. Met à jour le compte client ET le lien.
+   */
+  async updateManager(
+    id: string,
+    patch: { phone?: string; name?: string },
+    actorId: string,
+    isAdmin: boolean = false
+  ): Promise<any> {
+    const link: any = await this.dao.selectOne({ _id: id });
+    if (!link || link.error) {
+      return { success: false, message: 'Gérant introuvable.' };
+    }
+    if (!isAdmin && String(link.owner) !== String(actorId)) {
+      return { success: false, message: "Vous ne pouvez pas modifier ce gérant." };
+    }
+
+    const clientPatch: any = {};
+    const linkPatch: any = {};
+
+    if (patch.phone != null && String(patch.phone).trim()) {
+      const formattedPhone = this.clientService.formatIvorianPhoneNumber(String(patch.phone).trim());
+      const validation = this.clientService.validateIvorianPhoneNumber(formattedPhone);
+      if (!validation.isValid) {
+        return { success: false, message: validation.message || 'Numéro de téléphone invalide.' };
+      }
+      // Contrôle d'unicité seulement si le numéro change réellement (sinon il s'auto-détecterait).
+      if (formattedPhone !== String(link.managerPhone)) {
+        const existing: any = await this.clientService.checkExistingCredentials(undefined, formattedPhone);
+        const existingId = existing?.data?._id ? String(existing.data._id) : undefined;
+        if (existing.exists && existingId !== String(link.manager)) {
+          return { success: false, message: 'Ce numéro est déjà utilisé par un compte.' };
+        }
+      }
+      clientPatch.contact = formattedPhone;
+      linkPatch.managerPhone = formattedPhone;
+    }
+
+    if (patch.name != null && String(patch.name).trim()) {
+      const cleanName = this.clientService.formatName(String(patch.name).trim()) || 'Gérant';
+      const parts = cleanName.split(' ').filter(Boolean);
+      const firstname = parts[0] || 'Gérant';
+      const lastname = parts.length > 1 ? parts.slice(1).join(' ') : firstname;
+      clientPatch.firstname = firstname;
+      clientPatch.lastname = lastname;
+      linkPatch.managerName = firstname;
+    }
+
+    if (Object.keys(clientPatch).length === 0) {
+      return { success: false, message: 'Aucune modification fournie.' };
+    }
+
+    try {
+      await this.clientService.update(String(link.manager), clientPatch);
+    } catch {
+      return { success: false, message: 'Impossible de mettre à jour le compte du gérant.' };
+    }
+    if (Object.keys(linkPatch).length > 0) {
+      await this.dao.update({ _id: id }, linkPatch);
+    }
+
+    return {
+      success: true,
+      data: {
+        _id: id,
+        manager: link.manager,
+        managerName: linkPatch.managerName ?? link.managerName,
+        managerPhone: linkPatch.managerPhone ?? link.managerPhone
+      }
+    };
+  }
+
+  /**
+   * Régénère le code d'accès (mot de passe) d'un gérant. Un ADMIN peut le faire pour n'importe
+   * quel gérant ; un propriétaire uniquement les siens. Renvoie le nouveau code EN CLAIR une fois
+   * (jamais stocké en clair) pour qu'il le transmette au gérant.
+   */
+  async regenerateCode(id: string, actorId: string, isAdmin: boolean = false): Promise<any> {
+    const link: any = await this.dao.selectOne({ _id: id });
+    if (!link || link.error) {
+      return { success: false, message: 'Gérant introuvable.' };
+    }
+    if (!isAdmin && String(link.owner) !== String(actorId)) {
+      return { success: false, message: "Vous ne pouvez pas réinitialiser le code de ce gérant." };
+    }
+
+    const accessCode = String(Math.floor(100000 + Math.random() * 900000));
+    try {
+      await this.clientService.update(String(link.manager), {
+        password: await coddyger.string.encryptPassword(accessCode)
+      } as any);
+    } catch {
+      return { success: false, message: 'Impossible de régénérer le code du gérant.' };
+    }
+
+    return { success: true, data: { accessCode } };
+  }
+
   /** Tous les gérants d'un propriétaire (toutes ses boutiques). */
   async listByOwner(ownerId: string): Promise<any[]> {
     const rows: any = await this.dao.selectHug({ owner: ownerId, status: { $nin: ['removed'] } });
