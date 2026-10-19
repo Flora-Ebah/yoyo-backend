@@ -20,8 +20,11 @@ const schema = new mongoose.Schema<IAuditLog>(
 	{ timestamps: true }
 );
 
-// Lecture triée par date décroissante : index dédié.
-schema.index({ createdAt: -1 });
+// Rétention automatique (TTL) : MongoDB purge les entrées plus vieilles que
+// `AUDIT_RETENTION_DAYS` (défaut 365 j). L'index ascendant sur `createdAt` sert
+// aussi au tri décroissant de la lecture (parcours inversé), donc un seul index suffit.
+const RETENTION_DAYS = Math.max(1, Number(process.env.AUDIT_RETENTION_DAYS) || 365);
+schema.index({ createdAt: 1 }, { expireAfterSeconds: RETENTION_DAYS * 24 * 60 * 60 });
 
 const model = mongoose.model<IAuditLog>('AuditLog', schema);
 
