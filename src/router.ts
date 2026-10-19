@@ -13,10 +13,15 @@ import { swaggerConfig, swaggerUiConfig, isSwaggerEnabled } from './config/swagg
 import { FileUpload } from './api/middleware';
 import { sendStoredFile } from './helpers/file-upload.helper';
 import { getSocketIO } from './main';
+import { AuditService } from './modules/audit';
 
 const packageJsonPath = path.join(__dirname, '.', '..', 'package.json');
 const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
 const prefix = `/${env.server.apiVersion}${env.server.serverPath}`;
+
+// Service du journal d'audit (singleton module). Utilisé par le hook `onResponse` global.
+const auditService = new AuditService();
+const AUDITED_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 
 export default class Router {
 	public router: FastifyInstance;
@@ -150,6 +155,39 @@ export default class Router {
 		this.router.addHook('onResponse', (request, reply, done) => {
 			if (reply.statusCode >= 400) {
 				console.log(`${request.method} ${request.url} :: ${reply.statusCode}`);
+			}
+			done();
+		});
+
+		// Journal d'audit centralisé — capture AUTOMATIQUE des mutations administrateur.
+		// Best-effort et hors du chemin critique : on `done()` immédiatement, l'écriture part en
+		// tâche de fond (record encapsule son propre try/catch). Ne journalise que les méthodes qui
+		// changent l'état, et uniquement quand l'appelant est un admin authentifié (`isAdmin`).
+		this.router.addHook('onResponse', (request: any, reply: any, done) => {
+			try {
+				const method = request.method;
+				const user = request.user;
+				if (AUDITED_METHODS.has(method) && user && user.isAdmin === true) {
+					const rawUrl = String(request.url || '').split('?')[0];
+					const pathOnly = rawUrl.startsWith(prefix) ? rawUrl.slice(prefix.length) : rawUrl;
+					const segments = pathOnly.split('/').filter(Boolean);
+					const targetId = request.params && request.params.id ? String(request.params.id) : undefined;
+					void auditService.record({
+						actorId: user._id,
+						actorEmail: user.email,
+						actorType: 'admin',
+						method,
+						path: pathOnly || rawUrl,
+						subject: segments[0] || undefined,
+						targetId,
+						statusCode: reply.statusCode,
+						success: reply.statusCode < 400,
+						ip: request.ip,
+						userAgent: request.headers?.['user-agent']
+					});
+				}
+			} catch {
+				// best-effort : jamais bloquant
 			}
 			done();
 		});
