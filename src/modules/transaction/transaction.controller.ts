@@ -1,5 +1,6 @@
-import coddyger, { IErrorObject, defines } from 'coddyger';
+import coddyger, { IErrorObject, defines, LogLevel } from 'coddyger';
 import { locale } from '../../public';
+import { logEvent } from '../../config/logger';
 import { PaymentProvider, TransactionService } from './transaction.service';
 import { ITransaction } from './transaction.interface';
 import { NotificationHelper } from '../../helpers/notification.helper';
@@ -467,6 +468,13 @@ export class TransactionController {
         else if (!result.found) message = 'Session inconnue';
         else if (result.alreadySettled) message = 'Notification déjà traitée';
         else if (result.amountMismatch || result.referenceMismatch || result.unreadableStatus) message = 'Notification non validée';
+
+        logEvent({
+          type: LogLevel.Info,
+          content: `Webhook Wave ${event?.type ?? '?'} (session ${event?.data?.id ?? '?'}) : ${message}`,
+          location: controllerLabel,
+          method: 'waveWebhook'
+        });
 
         resolve({ status: defines.status.requestOK, message, data: null });
       } catch (error) {

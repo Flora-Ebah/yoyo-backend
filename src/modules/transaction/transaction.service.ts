@@ -580,6 +580,18 @@ export class TransactionService {
 
     const session: any = await this.waveHelper.getCheckoutSession(String(transaction.paymentToken));
 
+    // Trace systématique de l'état lu chez Wave : seul moyen de diagnostiquer un échec côté
+    // Wave (« Le paiement a échoué »), dont le motif n'est visible que dans `last_payment_error`.
+    const paymentError = session?.last_payment_error;
+    logEvent({
+      type: paymentError ? LogLevel.Warn : LogLevel.Info,
+      content: `Session Wave ${session?.id ?? transaction.paymentToken} (transaction ${transaction._id}) : ` +
+        `checkout_status=${session?.checkout_status}, payment_status=${session?.payment_status}` +
+        (paymentError ? `, erreur=${paymentError.code ?? '?'} — ${paymentError.message ?? ''}` : ''),
+      location: this.serviceLabel,
+      method
+    });
+
     if (String(session?.client_reference ?? '') !== String(transaction._id)) {
       logEvent({
         type: LogLevel.Error,
@@ -617,15 +629,6 @@ export class TransactionService {
     // Session encore ouverte : rien de tranché, on ne touche pas à la transaction. Un échec de
     // paiement (`payment_status: cancelled`) peut encore être suivi d'un succès dans la session.
     if (providerStatus === 'pending') {
-      if (session?.last_payment_error?.code) {
-        logEvent({
-          type: LogLevel.Warn,
-          content: `Tentative Wave échouée pour la transaction ${transaction._id} : ` +
-            `${session.last_payment_error.code} — ${session.last_payment_error.message ?? ''}`,
-          location: this.serviceLabel,
-          method
-        });
-      }
       return { found: true, transaction, providerStatus };
     }
 
@@ -921,6 +924,14 @@ export class TransactionService {
             }
           };
         }
+
+        logEvent({
+          type: LogLevel.Info,
+          content: `Session Wave ${session.id} créée pour la transaction ${transaction._id} ` +
+            `(${session.amount} ${session.currency}, expire ${session.when_expires ?? '?'})`,
+          location: this.serviceLabel,
+          method: 'processPaymentInitiation'
+        });
 
         transaction.paymentUrl = session.wave_launch_url;
         transaction.paymentToken = session.id;
