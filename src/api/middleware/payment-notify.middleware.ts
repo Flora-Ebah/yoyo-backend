@@ -1,4 +1,5 @@
-import coddyger, { defines, LoggerService, LogLevel } from 'coddyger';
+import coddyger, { defines, LogLevel } from 'coddyger';
+import { logEvent } from '../../config/logger';
 
 const middlewareLabel: string = 'PaymentNotifyMiddleware';
 
@@ -37,7 +38,7 @@ export class PaymentNotifyMiddleware {
 			return;
 		}
 
-		LoggerService.log({
+		logEvent({
 			type: LogLevel.Warn,
 			content: `Notification de paiement rejetée : IP source ${sourceIp} hors allowlist`,
 			location: middlewareLabel,

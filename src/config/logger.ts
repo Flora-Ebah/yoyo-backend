@@ -32,16 +32,32 @@ const PREFIX: Record<string, string> = {
 
 export interface LogEvent {
 	type: LogLevel;
-	content: string;
+	/** Texte, ou objet sérialisé en JSON (comme le fait `LoggerService`). */
+	content: unknown;
 	location: string;
 	method: string;
 }
 
+/** Les erreurs perdent leur message avec un simple `JSON.stringify` (propriétés non énumérables). */
+const stringify = (value: unknown): string => {
+	if (value instanceof Error) {
+		return value.stack ?? value.message;
+	}
+
+	try {
+		return JSON.stringify(value);
+	} catch {
+		return String(value);
+	}
+};
+
 export const logEvent = ({ type, content, location, method }: LogEvent): void => {
 	// Conservé : sans effet aujourd'hui, mais redevient la seule source utile une fois réparé.
-	LoggerService.log({ type, content, location, method });
+	const text = typeof content === 'string' ? content : stringify(content);
 
-	const line = `${new Date().toISOString()}[${PREFIX[type] ?? 'info'}] ${location}.${method} :: ${content}`;
+	LoggerService.log({ type, content: text, location, method });
+
+	const line = `${new Date().toISOString()}[${PREFIX[type] ?? 'info'}] ${location}.${method} :: ${text}`;
 
 	if (type === LogLevel.Error || type === LogLevel.Fatal) {
 		console.error(line);

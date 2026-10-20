@@ -3,7 +3,8 @@ import { ITransaction } from './transaction.interface';
 import { TransactionSet } from './transaction.model';
 import { PlanSet } from '../plan';
 import { ClientSet } from '../client';
-import coddyger, { IData, IErrorObject, LoggerService, LogLevel } from 'coddyger';
+import coddyger, { IData, IErrorObject, LogLevel } from 'coddyger';
+import { logEvent } from '../../config/logger';
 import { SubscriptionService } from '../subscription';
 import { locale } from '../../public/locale/locale';
 import { PaymentHelper } from '../../helpers/payment.helper';
@@ -203,7 +204,7 @@ export class TransactionService {
 					{ path: 'plan', model: 'Plan', select: 'name label' }
 				]);
 			} catch (populateError) {
-				LoggerService.log({
+				logEvent({
 					type: LogLevel.Warn,
 					content: populateError,
 					location: this.serviceLabel,
@@ -216,7 +217,7 @@ export class TransactionService {
         rows
       };
     } catch (error) {
-      LoggerService.log({ 
+      logEvent({ 
         type: LogLevel.Error, 
         content: error, 
         location: this.serviceLabel, 
@@ -235,7 +236,7 @@ export class TransactionService {
       const result:any = await this.dao.selectHug(params);
       return result;
     } catch (error) {
-      LoggerService.log({ 
+      logEvent({ 
         type: LogLevel.Error, 
         content: error, 
         location: this.serviceLabel, 
@@ -254,7 +255,7 @@ export class TransactionService {
     try {
       return await this.dao.selectOne({ _id: id, status: { $nin: ['removed', 'archived'] } });
     } catch (error) {
-      LoggerService.log({ 
+      logEvent({ 
         type: LogLevel.Error, 
         content: error, 
         location: this.serviceLabel, 
@@ -304,7 +305,7 @@ export class TransactionService {
       }
       return result;
     } catch (error) {
-      LoggerService.log({ 
+      logEvent({ 
         type: LogLevel.Error, 
         content: error || 'Erreur inconnue', 
         location: this.serviceLabel, 
@@ -328,7 +329,7 @@ export class TransactionService {
       }
       return this.getById(id);
     } catch (error) {
-      LoggerService.log({ 
+      logEvent({ 
         type: LogLevel.Error, 
         content: error || 'Erreur inconnue', 
         location: this.serviceLabel, 
@@ -350,7 +351,7 @@ export class TransactionService {
         throw new Error(result.error || 'Erreur lors de la suppression');
       }
     } catch (error) {
-      LoggerService.log({ 
+      logEvent({ 
         type: LogLevel.Error, 
         content: error || 'Erreur inconnue', 
         location: this.serviceLabel, 
@@ -392,7 +393,7 @@ export class TransactionService {
 
       return paymentResult;
     } catch (error) {
-      LoggerService.log({ 
+      logEvent({ 
         type: LogLevel.Error, 
         content: error || 'Erreur inconnue', 
         location: this.serviceLabel, 
@@ -480,7 +481,7 @@ export class TransactionService {
     const transaction: any = await this.getOne({ notifyToken });
 
     if (!transaction) {
-      LoggerService.log({
+      logEvent({
         type: LogLevel.Warn,
         content: `Notification de paiement rejetée : notifyToken inconnu`,
         location: this.serviceLabel,
@@ -526,7 +527,7 @@ export class TransactionService {
     // Contrôle du montant : bloque l'activation sur un sous-paiement.
     if (providerStatus === 'SUCCESS' && response?.amount !== undefined) {
       if (Number(response.amount) !== Number(transaction.amount)) {
-        LoggerService.log({
+        logEvent({
           type: LogLevel.Error,
           content: `Règlement rejeté pour la transaction ${transaction._id} : montant divergent ` +
             `(prestataire ${response.amount} / attendu ${transaction.amount})`,
@@ -538,7 +539,7 @@ export class TransactionService {
     }
 
     if (!providerStatus) {
-      LoggerService.log({
+      logEvent({
         type: LogLevel.Error,
         content: `Statut prestataire illisible pour la transaction ${transaction._id}`,
         location: this.serviceLabel,
@@ -568,7 +569,7 @@ export class TransactionService {
    */
   private async settleWaveTransaction(transaction: any, method: string): Promise<any> {
     if (!transaction.paymentToken) {
-      LoggerService.log({
+      logEvent({
         type: LogLevel.Error,
         content: `Transaction Wave ${transaction._id} sans identifiant de session`,
         location: this.serviceLabel,
@@ -580,7 +581,7 @@ export class TransactionService {
     const session: any = await this.waveHelper.getCheckoutSession(String(transaction.paymentToken));
 
     if (String(session?.client_reference ?? '') !== String(transaction._id)) {
-      LoggerService.log({
+      logEvent({
         type: LogLevel.Error,
         content: `Règlement Wave rejeté pour la transaction ${transaction._id} : référence de session divergente`,
         location: this.serviceLabel,
@@ -596,7 +597,7 @@ export class TransactionService {
       const sameCurrency = String(session.currency ?? '').toUpperCase() === String(transaction.currency ?? '').toUpperCase();
 
       if (!sameAmount || !sameCurrency) {
-        LoggerService.log({
+        logEvent({
           type: LogLevel.Error,
           content: `Règlement Wave rejeté pour la transaction ${transaction._id} : montant divergent ` +
             `(prestataire ${session.amount} ${session.currency} / attendu ${transaction.amount} ${transaction.currency})`,
@@ -617,7 +618,7 @@ export class TransactionService {
     // paiement (`payment_status: cancelled`) peut encore être suivi d'un succès dans la session.
     if (providerStatus === 'pending') {
       if (session?.last_payment_error?.code) {
-        LoggerService.log({
+        logEvent({
           type: LogLevel.Warn,
           content: `Tentative Wave échouée pour la transaction ${transaction._id} : ` +
             `${session.last_payment_error.code} — ${session.last_payment_error.message ?? ''}`,
@@ -655,7 +656,7 @@ export class TransactionService {
     const transaction: any = await this.getOne({ paymentMethod: 'wave', paymentToken: String(sessionId) });
 
     if (!transaction) {
-      LoggerService.log({
+      logEvent({
         type: LogLevel.Warn,
         content: `Événement Wave ${event?.id ?? ''} ignoré : session ${sessionId} inconnue`,
         location: this.serviceLabel,
@@ -681,7 +682,7 @@ export class TransactionService {
     const transaction: any = await this.getOne({ returnToken });
 
     if (!transaction) {
-      LoggerService.log({
+      logEvent({
         type: LogLevel.Warn,
         content: `Retour de paiement ignoré : returnToken inconnu`,
         location: this.serviceLabel,
@@ -757,7 +758,7 @@ export class TransactionService {
                   continue;
                 }
               } else {
-                LoggerService.log({
+                logEvent({
                   type: LogLevel.Warn,
                   content: `Session Wave ${transaction.paymentToken} non expirée (status=${expireError?.status ?? 'n/a'})`,
                   location: this.serviceLabel,
@@ -964,7 +965,7 @@ export class TransactionService {
       // diagnostic impossible. On le journalise explicitement ici.
       const omDetail = error?.data ?? error?.message ?? error;
       const providerLabel = PROVIDER_LABELS[transaction?.paymentMethod as PaymentProvider] ?? 'Orange Money';
-      LoggerService.log({
+      logEvent({
         type: LogLevel.Error,
         content: `Échec de l'initiation du paiement ${providerLabel} (orderId=${transaction?._id}, amount=${plan?.price}, status=${error?.status ?? 'n/a'}): ${typeof omDetail === 'object' ? JSON.stringify(omDetail) : omDetail}`,
         location: this.serviceLabel,
@@ -1334,14 +1335,14 @@ export class TransactionService {
           continue;
         }
         await sponsorService.sponsor(boutiqueId, userId, sponsorPlanId);
-        LoggerService.log({
+        logEvent({
           type: LogLevel.Info,
           content: `Mise en avant activée pour la boutique ${boutiqueId} (transaction ${transactionId})`,
           location: this.serviceLabel,
           method: 'activateBoutiqueSponsor'
         });
       } catch (error) {
-        LoggerService.log({
+        logEvent({
           type: LogLevel.Error,
           content: `Échec d'activation de la mise en avant pour la boutique ${boutiqueId} (transaction ${transactionId}): ${error}`,
           location: this.serviceLabel,
@@ -1355,7 +1356,7 @@ export class TransactionService {
       try {
         const active = await sponsorService.activeForBoutique(boutiqueId);
         if (!active) {
-          LoggerService.log({
+          logEvent({
             type: LogLevel.Error,
             content: `Boutique ${boutiqueId} non sponsorisée après activation (transaction ${transactionId}) — nouvelle tentative`,
             location: this.serviceLabel,
@@ -1364,7 +1365,7 @@ export class TransactionService {
           await sponsorService.sponsor(boutiqueId, userId, sponsorPlanId);
         }
       } catch (error) {
-        LoggerService.log({
+        logEvent({
           type: LogLevel.Error,
           content: `Échec de la re-tentative d'activation pour la boutique ${boutiqueId} (transaction ${transactionId}): ${error}`,
           location: this.serviceLabel,
@@ -1427,14 +1428,14 @@ export class TransactionService {
             );
             
             if (result.success) {
-              LoggerService.log({
+              logEvent({
                 type: LogLevel.Info,
                 content: `Renouvellement programmé avec succès pour la transaction ${transactionId}`,
                 location: this.serviceLabel,
                 method: 'updateTransactionStatus'
               });
             } else {
-              LoggerService.log({
+              logEvent({
                 type: LogLevel.Error,
                 content: `Erreur lors de la programmation du renouvellement: ${result.message}`,
                 location: this.serviceLabel,
@@ -1444,7 +1445,7 @@ export class TransactionService {
               await this.subscriptionService.createSubscription(transaction.user, transaction.plan);
             }
           } catch (error) {
-            LoggerService.log({
+            logEvent({
               type: LogLevel.Error,
               content: `Exception lors de la programmation du renouvellement pour la transaction ${transactionId}: ${error}`,
               location: this.serviceLabel,
@@ -1497,7 +1498,7 @@ export class TransactionService {
         rows
       };
     } catch (error) {
-      LoggerService.log({ 
+      logEvent({ 
         type: LogLevel.Error, 
         content: error || 'Erreur inconnue', 
         location: this.serviceLabel, 
@@ -1522,7 +1523,7 @@ export class TransactionService {
       
       return Array.isArray(result) ? result : [];
     } catch (error) {
-      LoggerService.log({ 
+      logEvent({ 
         type: LogLevel.Error, 
         content: error || 'Erreur inconnue', 
         location: this.serviceLabel, 
@@ -1708,7 +1709,7 @@ export class TransactionService {
 
       return { ...current, byPaymentMethod, trends };
     } catch (error) {
-      LoggerService.log({
+      logEvent({
         type: LogLevel.Error,
         content: error || 'Erreur inconnue',
         location: this.serviceLabel,
@@ -1801,7 +1802,7 @@ export class TransactionService {
 
       return { interval, series };
     } catch (error) {
-      LoggerService.log({
+      logEvent({
         type: LogLevel.Error,
         content: error || 'Erreur inconnue',
         location: this.serviceLabel,
@@ -1828,7 +1829,7 @@ export class TransactionService {
       // Si la transaction a été créée il y a plus d'une minute, c'est une transaction existante
       return true;
     } catch (error) {
-      LoggerService.log({ 
+      logEvent({ 
         type: LogLevel.Error, 
         content: error || 'Erreur inconnue', 
         location: this.serviceLabel, 
@@ -1856,7 +1857,7 @@ export class TransactionService {
 
       return transactions || [];
     } catch (error) {
-      LoggerService.log({
+      logEvent({
         type: LogLevel.Error,
         content: `Erreur lors de la récupération des transactions de renouvellement programmé: ${error}`,
         location: this.serviceLabel,

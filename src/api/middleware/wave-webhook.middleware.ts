@@ -1,4 +1,5 @@
-import coddyger, { defines, LoggerService, LogLevel } from 'coddyger';
+import coddyger, { defines, LogLevel } from 'coddyger';
+import { logEvent } from '../../config/logger';
 import { WaveHelper } from '../../helpers/wave.helper';
 
 const middlewareLabel: string = 'WaveWebhookMiddleware';
@@ -43,7 +44,7 @@ export class WaveWebhookMiddleware {
 	}
 
 	private static refuse(reply, reason: string) {
-		LoggerService.log({
+		logEvent({
 			type: LogLevel.Warn,
 			content: `Webhook Wave rejeté : ${reason}`,
 			location: middlewareLabel,
