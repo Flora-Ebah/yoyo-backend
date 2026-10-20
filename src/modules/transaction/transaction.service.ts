@@ -618,8 +618,9 @@ export class TransactionService {
     if (providerStatus === 'pending') {
       if (session?.last_payment_error?.code) {
         LoggerService.log({
-          type: LogLevel.Info,
-          content: `Tentative Wave échouée pour la transaction ${transaction._id} : ${session.last_payment_error.code}`,
+          type: LogLevel.Warn,
+          content: `Tentative Wave échouée pour la transaction ${transaction._id} : ` +
+            `${session.last_payment_error.code} — ${session.last_payment_error.message ?? ''}`,
           location: this.serviceLabel,
           method
         });
