@@ -18,6 +18,7 @@ const schema = new mongoose.Schema<ITransaction>({
   paymentDate: { type: Date, required: true },
   paymentId: { type: String, required: true },
   paymentUrl: { type: String, required: true },
+  // Orange Money : `pay_token`. Wave : identifiant de la session de paiement (`cos-…`).
   paymentToken: { type: String },
   notifyToken: { type: String },
   // Jeton aléatoire transporté dans `return_url` / `cancel_url` : il identifie la transaction
@@ -45,6 +46,8 @@ schema.index({ paymentMethod: 1 });
 schema.index({ paymentId: 1 });
 schema.index({ paymentUrl: 1 });
 schema.index({ returnToken: 1 });
+// Résolution des webhooks Wave par identifiant de session.
+schema.index({ paymentToken: 1 });
 
 export class TransactionSet extends MongoDbDao<ITransaction & Document> implements IData<ITransaction & Document> {
   defaultModel = model;

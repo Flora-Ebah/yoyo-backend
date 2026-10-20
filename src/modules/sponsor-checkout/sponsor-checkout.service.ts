@@ -1,7 +1,7 @@
 import coddyger from 'coddyger';
 import { PartnerSet } from '../partner/partner.model';
 import { SponsorPlanService } from '../sponsor-plan/sponsor-plan.service';
-import { TransactionService } from '../transaction/transaction.service';
+import { DEFAULT_PAYMENT_PROVIDER, PaymentProvider, TransactionService } from '../transaction/transaction.service';
 
 /**
  * [MISE EN AVANT] Parcours marchand self-service : un marchand souscrit lui-même à une formule
@@ -30,9 +30,10 @@ export class SponsorCheckoutService {
    * @param merchantId Marchand authentifié (request.user._id)
    * @param boutiqueId Boutique à mettre en avant
    * @param sponsorPlanId Formule de mise en avant choisie
+   * @param paymentMethod Prestataire choisi (Orange Money par défaut)
    * @returns { ok, status, message, data } — data porte l'URL de paiement et la référence
    */
-  async checkout(merchantId: string, boutiqueId: string, sponsorPlanId: string): Promise<any> {
+  async checkout(merchantId: string, boutiqueId: string, sponsorPlanId: string, paymentMethod: PaymentProvider = DEFAULT_PAYMENT_PROVIDER): Promise<any> {
     // Validation des identifiants
     if (!coddyger.string.isValidObjectId(boutiqueId)) {
       // TODO DIAGNOSTIC TEMPORAIRE - à retirer
@@ -70,7 +71,7 @@ export class SponsorCheckoutService {
     }
 
     // Délégation à l'infrastructure de paiement partagée.
-    const result: any = await this.transactions.createSponsorTransaction(merchantId, boutiqueId, formula);
+    const result: any = await this.transactions.createSponsorTransaction(merchantId, boutiqueId, formula, paymentMethod);
 
     if (!result || result.success === false) {
       // TODO DIAGNOSTIC TEMPORAIRE - à retirer : on remonte le motif réel (étape + réponse OM nettoyée,
@@ -99,6 +100,8 @@ export class SponsorCheckoutService {
         currency: tx.currency,
         paymentStatus: tx.paymentStatus,
         paymentUrl: tx.paymentUrl,
+        // L'app Pro en déduit le mode d'ouverture (WebView pour Orange Money, navigateur pour Wave).
+        paymentMethod: tx.paymentMethod,
         isFree: !!tx.isFree,
         boutiqueId: String(boutiqueId),
         sponsorPlanId: String(sponsorPlanId)
@@ -117,8 +120,9 @@ export class SponsorCheckoutService {
    * @param merchantId Marchand authentifié (request.user._id)
    * @param boutiqueIds Boutiques à mettre en avant (au moins une)
    * @param sponsorPlanId Formule de mise en avant choisie
+   * @param paymentMethod Prestataire choisi (Orange Money par défaut)
    */
-  async checkoutMulti(merchantId: string, boutiqueIds: string[], sponsorPlanId: string): Promise<any> {
+  async checkoutMulti(merchantId: string, boutiqueIds: string[], sponsorPlanId: string, paymentMethod: PaymentProvider = DEFAULT_PAYMENT_PROVIDER): Promise<any> {
     const ids = Array.isArray(boutiqueIds) ? boutiqueIds.map((v) => String(v)) : [];
 
     if (ids.length === 0) {
@@ -161,7 +165,7 @@ export class SponsorCheckoutService {
     }
 
     // Délégation : une seule transaction, montant total = prix × N.
-    const result: any = await this.transactions.createSponsorTransactionMulti(merchantId, uniqueIds, formula);
+    const result: any = await this.transactions.createSponsorTransactionMulti(merchantId, uniqueIds, formula, paymentMethod);
 
     if (!result || result.success === false) {
       return {
@@ -188,6 +192,7 @@ export class SponsorCheckoutService {
         currency: tx.currency,
         paymentStatus: tx.paymentStatus,
         paymentUrl: tx.paymentUrl,
+        paymentMethod: tx.paymentMethod,
         isFree: !!tx.isFree,
         boutiqueIds: uniqueIds.map(String),
         sponsorPlanId: String(sponsorPlanId)

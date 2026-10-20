@@ -137,6 +137,13 @@ describe('[Sécurité] Gardes des routes', () => {
 			expect(find(routes, 'POST', '/transactions/payment-callback')).to.be.undefined;
 		});
 
+		// La liste globale expose les transactions (et les coordonnées) de tous les clients.
+		it('GET /transactions est réservée aux administrateurs', () => {
+			const route = find(routes, 'GET', '/transactions');
+			expect(route, 'route GET /transactions introuvable').to.not.be.undefined;
+			expect(route!.preHandler).to.equal(TokenMiddleware.verifyAdmin);
+		});
+
 		it('payment-notify est filtrée par le middleware dédié', () => {
 			const route = find(routes, 'POST', '/transactions/payment-notify');
 			expect(route).to.not.be.undefined;

@@ -1,6 +1,7 @@
 import coddyger from 'coddyger';
 import { SponsorCheckoutController } from '../../modules/sponsor-checkout/sponsor-checkout.controller';
 import { TransactionController } from '../../modules/transaction/transaction.controller';
+import { PAYMENT_PROVIDERS } from '../../modules/transaction/transaction.service';
 import { TokenMiddleware } from '../middleware';
 
 const routePath = '/boutique-sponsors';
@@ -34,7 +35,9 @@ const defaultRoute: any = (fastify: any, options, done) => {
         type: 'object',
         properties: {
           boutiqueId: { type: 'string' },
-          sponsorPlanId: { type: 'string' }
+          sponsorPlanId: { type: 'string' },
+          // Facultatif : les versions de l'app Pro antérieures à Wave ne l'envoient pas.
+          paymentMethod: { type: 'string', enum: [...PAYMENT_PROVIDERS], default: 'orange-money' }
         },
         required: ['boutiqueId', 'sponsorPlanId'],
         additionalProperties: false
@@ -48,7 +51,7 @@ const defaultRoute: any = (fastify: any, options, done) => {
       const body: any = request.body;
       return coddyger.api(
         reply,
-        Controller.checkout(String(merchant._id), String(body.boutiqueId), String(body.sponsorPlanId))
+        Controller.checkout(String(merchant._id), String(body.boutiqueId), String(body.sponsorPlanId), body.paymentMethod)
       );
     }
   });
@@ -66,7 +69,8 @@ const defaultRoute: any = (fastify: any, options, done) => {
         type: 'object',
         properties: {
           boutiqueIds: { type: 'array', items: { type: 'string' }, minItems: 1 },
-          sponsorPlanId: { type: 'string' }
+          sponsorPlanId: { type: 'string' },
+          paymentMethod: { type: 'string', enum: [...PAYMENT_PROVIDERS], default: 'orange-money' }
         },
         required: ['boutiqueIds', 'sponsorPlanId'],
         additionalProperties: false
@@ -80,7 +84,7 @@ const defaultRoute: any = (fastify: any, options, done) => {
       const body: any = request.body;
       return coddyger.api(
         reply,
-        Controller.checkoutMulti(String(merchant._id), body.boutiqueIds, String(body.sponsorPlanId))
+        Controller.checkoutMulti(String(merchant._id), body.boutiqueIds, String(body.sponsorPlanId), body.paymentMethod)
       );
     }
   });

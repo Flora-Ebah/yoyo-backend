@@ -1,5 +1,6 @@
 import coddyger, { IErrorObject, defines } from 'coddyger';
 import { SponsorCheckoutService } from './sponsor-checkout.service';
+import { PaymentProvider } from '../transaction/transaction.service';
 
 const controllerLabel: string = 'SponsorCheckoutController';
 
@@ -47,10 +48,10 @@ export class SponsorCheckoutController {
   /**
    * Initie le paiement d'une mise en avant pour la boutique du marchand connecté.
    */
-  checkout(merchantId: string, boutiqueId: string, sponsorPlanId: string) {
+  checkout(merchantId: string, boutiqueId: string, sponsorPlanId: string, paymentMethod?: PaymentProvider) {
     return new Promise(async (resolve, reject) => {
       try {
-        const result: any = await this.service.checkout(merchantId, boutiqueId, sponsorPlanId);
+        const result: any = await this.service.checkout(merchantId, boutiqueId, sponsorPlanId, paymentMethod);
 
         if (!result.ok) {
           return resolve({
@@ -76,10 +77,10 @@ export class SponsorCheckoutController {
   /**
    * [YO Boost] Initie le paiement UNIQUE d'une mise en avant pour N boutiques du marchand connecté.
    */
-  checkoutMulti(merchantId: string, boutiqueIds: string[], sponsorPlanId: string) {
+  checkoutMulti(merchantId: string, boutiqueIds: string[], sponsorPlanId: string, paymentMethod?: PaymentProvider) {
     return new Promise(async (resolve, reject) => {
       try {
-        const result: any = await this.service.checkoutMulti(merchantId, boutiqueIds, sponsorPlanId);
+        const result: any = await this.service.checkoutMulti(merchantId, boutiqueIds, sponsorPlanId, paymentMethod);
 
         if (!result.ok) {
           return resolve({

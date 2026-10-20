@@ -91,6 +91,14 @@ export const collectConfigurationIssues = (source: NodeJS.ProcessEnv = process.e
 		}
 	}
 
+	// Wave activé (clé présente) sans secret de webhook : aucune notification ne pourrait être
+	// authentifiée, toutes seraient refusées et les paiements resteraient en attente.
+	if ((source.WAVE_API_KEY ?? '').trim() && !(source.WAVE_WEBHOOK_SECRET ?? '').trim()) {
+		issues.push(
+			"WAVE_API_KEY est définie mais pas WAVE_WEBHOOK_SECRET : les webhooks Wave ne peuvent pas être authentifiés."
+		);
+	}
+
 	return issues;
 };
 

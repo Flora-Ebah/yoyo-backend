@@ -7,6 +7,17 @@ import coddyger, { IData, IErrorObject, LoggerService, LogLevel } from 'coddyger
 import { SubscriptionService } from '../subscription';
 import { locale } from '../../public/locale/locale';
 import { PaymentHelper } from '../../helpers/payment.helper';
+import { WaveHelper } from '../../helpers/wave.helper';
+
+/** Prestataires de paiement proposés au client. Orange Money reste le défaut historique. */
+export const PAYMENT_PROVIDERS = ['orange-money', 'wave'] as const;
+export type PaymentProvider = typeof PAYMENT_PROVIDERS[number];
+export const DEFAULT_PAYMENT_PROVIDER: PaymentProvider = 'orange-money';
+
+const PROVIDER_LABELS: Record<PaymentProvider, string> = {
+  'orange-money': 'Orange Money',
+  wave: 'Wave'
+};
 
 // Type pour le retour de la fonction
 type ErrorResult = {
@@ -26,7 +37,8 @@ function sanitizeOmBody(body: any): any {
   if (body == null) return null;
   if (typeof body === 'string') return body.slice(0, 500);
   if (typeof body !== 'object') return body;
-  const allowed = ['code', 'message', 'description', 'error', 'error_description', 'status', 'statusCode', 'detail', 'title'];
+  // `error_code` / `error_message` : forme des erreurs Wave.
+  const allowed = ['code', 'message', 'description', 'error', 'error_description', 'error_code', 'error_message', 'status', 'statusCode', 'detail', 'title'];
   const out: any = {};
   for (const key of allowed) {
     if (body[key] !== undefined && typeof body[key] !== 'object') out[key] = body[key];
@@ -49,6 +61,7 @@ export class TransactionService {
   private readonly serviceLabel = 'TransactionService';
   private readonly subscriptionService: SubscriptionService;
   private readonly paymentHelper: PaymentHelper;
+  private readonly waveHelper: WaveHelper;
 
   constructor() {
     this.dao = new TransactionSet();
@@ -57,6 +70,32 @@ export class TransactionService {
     this.planDao = new PlanSet();
     this.subscriptionService = new SubscriptionService();
     this.paymentHelper = new PaymentHelper();
+    this.waveHelper = new WaveHelper();
+  }
+
+  /**
+   * Prestataires réellement utilisables sur cet environnement. Les applications s'en servent
+   * pour n'afficher que les moyens de paiement disponibles.
+   * @returns Liste des prestataires configurés
+   */
+  static availableProviders(): PaymentProvider[] {
+    return PAYMENT_PROVIDERS.filter((provider: PaymentProvider) =>
+      provider === 'wave' ? WaveHelper.isConfigured() : true
+    );
+  }
+
+  /**
+   * Refuse un prestataire inconnu ou non configuré, avant toute écriture.
+   * @param provider Prestataire demandé
+   * @returns Un échec métier, ou null si le prestataire est utilisable
+   */
+  private rejectUnavailableProvider(provider: PaymentProvider): ErrorResult & { status: number } | null {
+    if (TransactionService.availableProviders().includes(provider)) {
+      return null;
+    }
+
+    const message = `Le paiement par ${PROVIDER_LABELS[provider] ?? provider} n'est pas disponible pour le moment.`;
+    return { success: false, status: 400, error: new Error(message), message };
   }
 
   /**
@@ -69,6 +108,7 @@ export class TransactionService {
 		query?: string;
 		status?: string;
 		paymentStatus?: string;
+		paymentMethod?: string;
 		from?: string;
 		to?: string;
 	}): Promise<any> {
@@ -78,6 +118,7 @@ export class TransactionService {
 			let query: string = payloads.query ?? '';
 			let status: any = payloads.status ?? '';
 			let paymentStatus: any = payloads.paymentStatus ?? '';
+			let paymentMethod: any = payloads.paymentMethod ?? '';
 			let from: string = payloads.from ?? '';
 			let to: string = payloads.to ?? '';
 
@@ -93,6 +134,11 @@ export class TransactionService {
 
 			if (!coddyger.string.isEmpty(paymentStatus)) {
 				params.paymentStatus = paymentStatus;
+			}
+
+			// Prestataire (Orange Money / Wave). Valeur déjà bornée par l'enum de la route.
+			if (!coddyger.string.isEmpty(paymentMethod)) {
+				params.paymentMethod = String(paymentMethod);
 			}
 
 			if (!coddyger.string.isEmpty(from) || !coddyger.string.isEmpty(to)) {
@@ -381,6 +427,20 @@ export class TransactionService {
    */
   async checkPaymentStatus(payloads: { id: string, amount: number, payToken: string }): Promise<any> {
     try {
+      // Wave : on passe par le chemin commun de règlement (idempotent, contrôle du montant, de
+      // la devise et de la référence). Orange Money conserve son chemin historique ci-dessous.
+      const current: any = await this.dao.selectOne({ _id: payloads.id });
+
+      if (current?.paymentMethod === 'wave') {
+        await this.settleTransaction(current, 'checkPaymentStatus');
+
+        const settled: any = await this.dao.selectOne({ _id: payloads.id });
+        return {
+          ...settled,
+          isPaid: settled?.paymentStatus === 'success',
+        };
+      }
+
       const response = await this.paymentHelper.checkTransactionStatus({
         orderId: payloads.id,
         amount: payloads.amount,
@@ -450,6 +510,10 @@ export class TransactionService {
       return { found: true, transaction, alreadySettled: true };
     }
 
+    if (transaction.paymentMethod === 'wave') {
+      return this.settleWaveTransaction(transaction, method);
+    }
+
     // Source de vérité : le prestataire, interrogé avec les valeurs de la base.
     const response = await this.paymentHelper.checkTransactionStatus({
       orderId: String(transaction._id),
@@ -489,6 +553,117 @@ export class TransactionService {
     );
 
     return { found: true, transaction: settled, providerStatus };
+  }
+
+  /**
+   * Variante Wave de `settleTransaction` : le statut est lu sur la session de paiement Wave,
+   * retrouvée par l'identifiant stocké en base (`paymentToken`), jamais par une valeur reçue.
+   *
+   * Contrôles avant activation : la session doit porter NOTRE référence de transaction, et le
+   * montant comme la devise réglés doivent correspondre à ceux de la base.
+   *
+   * @param transaction Transaction Wave déjà résolue en base
+   * @param method Nom de la méthode appelante, pour la journalisation
+   * @returns La transaction telle qu'établie après vérification
+   */
+  private async settleWaveTransaction(transaction: any, method: string): Promise<any> {
+    if (!transaction.paymentToken) {
+      LoggerService.log({
+        type: LogLevel.Error,
+        content: `Transaction Wave ${transaction._id} sans identifiant de session`,
+        location: this.serviceLabel,
+        method
+      });
+      return { found: true, transaction, unreadableStatus: true };
+    }
+
+    const session: any = await this.waveHelper.getCheckoutSession(String(transaction.paymentToken));
+
+    if (String(session?.client_reference ?? '') !== String(transaction._id)) {
+      LoggerService.log({
+        type: LogLevel.Error,
+        content: `Règlement Wave rejeté pour la transaction ${transaction._id} : référence de session divergente`,
+        location: this.serviceLabel,
+        method
+      });
+      return { found: true, transaction, referenceMismatch: true };
+    }
+
+    const providerStatus = WaveHelper.toPaymentStatus(session);
+
+    if (providerStatus === 'success') {
+      const sameAmount = Number(session.amount) === Number(transaction.amount);
+      const sameCurrency = String(session.currency ?? '').toUpperCase() === String(transaction.currency ?? '').toUpperCase();
+
+      if (!sameAmount || !sameCurrency) {
+        LoggerService.log({
+          type: LogLevel.Error,
+          content: `Règlement Wave rejeté pour la transaction ${transaction._id} : montant divergent ` +
+            `(prestataire ${session.amount} ${session.currency} / attendu ${transaction.amount} ${transaction.currency})`,
+          location: this.serviceLabel,
+          method
+        });
+        return { found: true, transaction, amountMismatch: true };
+      }
+
+      // Référence Wave du paiement (visible dans l'app Wave du client) : utile au support et
+      // à la recherche admin, qui porte déjà sur `txnId`.
+      if (session.transaction_id) {
+        await this.update(String(transaction._id), { txnId: String(session.transaction_id) });
+      }
+    }
+
+    // Session encore ouverte : rien de tranché, on ne touche pas à la transaction. Un échec de
+    // paiement (`payment_status: cancelled`) peut encore être suivi d'un succès dans la session.
+    if (providerStatus === 'pending') {
+      if (session?.last_payment_error?.code) {
+        LoggerService.log({
+          type: LogLevel.Info,
+          content: `Tentative Wave échouée pour la transaction ${transaction._id} : ${session.last_payment_error.code}`,
+          location: this.serviceLabel,
+          method
+        });
+      }
+      return { found: true, transaction, providerStatus };
+    }
+
+    const settled = await this.updateTransactionStatus(String(transaction._id), providerStatus);
+
+    return { found: true, transaction: settled, providerStatus };
+  }
+
+  /**
+   * Traite un événement webhook Wave dont la signature a déjà été vérifiée en amont.
+   *
+   * Même en signé, le contenu de l'événement n'est qu'un déclencheur : seul l'identifiant de
+   * session sert, à retrouver la transaction, dont le statut est ensuite relu chez Wave.
+   * Wave peut livrer un événement en double ou dans le désordre : `settleTransaction` est
+   * idempotent et ne dépend pas de l'ordre d'arrivée.
+   *
+   * @param event Événement Wave (`{ id, type, data }`)
+   * @returns `{ ignored }` pour un événement hors périmètre, sinon le résultat du règlement
+   */
+  async settleWaveEvent(event: any): Promise<any> {
+    const type = String(event?.type ?? '');
+    const sessionId = event?.data?.id;
+
+    if (!type.startsWith('checkout.session.') || !sessionId) {
+      return { ignored: true, type };
+    }
+
+    const transaction: any = await this.getOne({ paymentMethod: 'wave', paymentToken: String(sessionId) });
+
+    if (!transaction) {
+      LoggerService.log({
+        type: LogLevel.Warn,
+        content: `Événement Wave ${event?.id ?? ''} ignoré : session ${sessionId} inconnue`,
+        location: this.serviceLabel,
+        method: 'settleWaveEvent'
+      });
+      return { found: false };
+    }
+
+    return this.settleTransaction(transaction, 'settleWaveEvent');
   }
 
   /**
@@ -548,7 +723,7 @@ export class TransactionService {
    * @param planId ID du plan
    * @returns Résultat de l'archivage
    */
-  private async archiveExistingTransactions(userId: string, planId: string): Promise<Result<void>> {
+  private async archiveExistingTransactions(userId: string, planId: string): Promise<Result<{ settledCount: number }>> {
     try {
       const existingTransactions: any = await this.dao.select({
         params: {
@@ -559,10 +734,38 @@ export class TransactionService {
         }
       });
 
+      // Sessions Wave réglées entre-temps : réglées au lieu d'être archivées.
+      let settledCount = 0;
+
       if (existingTransactions.rows && existingTransactions.rows.length > 0) {
         console.log(`Archivage de ${existingTransactions.rows.length} transaction(s) non terminée(s)`);
-        
+
         for (const transaction of existingTransactions.rows) {
+          // Wave : une session reste payable jusqu'à son expiration. On l'expire avant d'archiver
+          // la transaction, sans quoi le client pourrait encore régler un paiement que plus rien
+          // n'attend. Wave répond 409 si la session est déjà terminée : elle a pu être payée
+          // juste avant, on la règle alors au lieu de l'annuler.
+          if (transaction.paymentMethod === 'wave' && transaction.paymentStatus === 'pending' && transaction.paymentToken) {
+            try {
+              await this.waveHelper.expireCheckoutSession(String(transaction.paymentToken));
+            } catch (expireError: any) {
+              if (expireError?.status === 409) {
+                const settlement: any = await this.settleTransaction(transaction, 'archiveExistingTransactions');
+                if (settlement?.transaction?.paymentStatus === 'success') {
+                  settledCount += 1;
+                  continue;
+                }
+              } else {
+                LoggerService.log({
+                  type: LogLevel.Warn,
+                  content: `Session Wave ${transaction.paymentToken} non expirée (status=${expireError?.status ?? 'n/a'})`,
+                  location: this.serviceLabel,
+                  method: 'archiveExistingTransactions'
+                });
+              }
+            }
+          }
+
           try {
             const updateResult = await this.dao.update({ _id: transaction._id }, {
               status: 'archived',
@@ -579,8 +782,8 @@ export class TransactionService {
           }
         }
       }
-      
-      return { success: true, data: undefined };
+
+      return { success: true, data: { settledCount } };
     } catch (error) {
       return {
         success: false,
@@ -652,17 +855,19 @@ export class TransactionService {
    * @param plan Informations du plan
    * @param isScheduledRenewal Indique si c'est un renouvellement programmé
    * @param currentSubscriptionId ID de l'abonnement actuel
+   * @param paymentMethod Prestataire choisi par le client
    * @returns Objet transaction
    */
-  private createTransactionObject(transactionId: string, userId: string, plan: any, isScheduledRenewal?: boolean, currentSubscriptionId?: string): ITransaction {
+  private createTransactionObject(transactionId: string, userId: string, plan: any, isScheduledRenewal?: boolean, currentSubscriptionId?: string, paymentMethod: PaymentProvider = DEFAULT_PAYMENT_PROVIDER): ITransaction {
     const transaction: ITransaction = {
       _id: transactionId,
       user: userId,
       plan: plan._id,
       amount: plan.price,
-      currency: plan.currency,
+      // Wave impose une devise ISO réelle (XOF) ; la devise du plan peut valoir `OUV` en recette OM.
+      currency: paymentMethod === 'wave' ? WaveHelper.currency() : plan.currency,
       status: 'active',
-      paymentMethod: 'orange-money',
+      paymentMethod,
       paymentStatus: 'pending',
       paymentDate: new Date(),
       paymentId: transactionId.toString(),
@@ -687,6 +892,39 @@ export class TransactionService {
       // transaction, qui est partiellement devinable (horodatage + compteur d'ObjectId).
       const returnToken = crypto.randomBytes(16).toString('hex');
       transaction.returnToken = returnToken;
+
+      // Wave : session de paiement. `success_url` / `error_url` réutilisent la page de retour
+      // commune ; la session est retrouvée ensuite par son identifiant, stocké dans `paymentToken`.
+      if (transaction.paymentMethod === 'wave') {
+        const session: any = await this.waveHelper.createCheckoutSession({
+          amount: plan.price,
+          currency: transaction.currency,
+          clientReference: transaction._id!.toString(),
+          successUrl: this.buildReturnUrl(returnToken, false),
+          errorUrl: this.buildReturnUrl(returnToken, true),
+        });
+
+        if (!session?.id || !session?.wave_launch_url) {
+          console.error('Réponse de paiement Wave invalide:', session);
+          return {
+            success: false,
+            error: new Error('Impossible d\'initier le paiement'),
+            message: 'Impossible d\'initier le paiement',
+            debug: {
+              stage: 'wave_initiate',
+              reason: 'no_launch_url',
+              orderId: transaction?._id?.toString(),
+              amount: plan?.price,
+              omBody: sanitizeOmBody(session)
+            }
+          };
+        }
+
+        transaction.paymentUrl = session.wave_launch_url;
+        transaction.paymentToken = session.id;
+
+        return { success: true, data: transaction };
+      }
 
       const paymentDetails: any = await this.initiatePayment({
         orderId: transaction._id!.toString(),
@@ -724,9 +962,10 @@ export class TransactionService {
       // PaymentHelper) était jusqu'ici avalé et remplacé par un message générique, rendant le
       // diagnostic impossible. On le journalise explicitement ici.
       const omDetail = error?.data ?? error?.message ?? error;
+      const providerLabel = PROVIDER_LABELS[transaction?.paymentMethod as PaymentProvider] ?? 'Orange Money';
       LoggerService.log({
         type: LogLevel.Error,
-        content: `Échec de l'initiation du paiement Orange Money (orderId=${transaction?._id}, amount=${plan?.price}, status=${error?.status ?? 'n/a'}): ${typeof omDetail === 'object' ? JSON.stringify(omDetail) : omDetail}`,
+        content: `Échec de l'initiation du paiement ${providerLabel} (orderId=${transaction?._id}, amount=${plan?.price}, status=${error?.status ?? 'n/a'}): ${typeof omDetail === 'object' ? JSON.stringify(omDetail) : omDetail}`,
         location: this.serviceLabel,
         method: 'processPaymentInitiation'
       });
@@ -752,10 +991,17 @@ export class TransactionService {
    * @param planId ID du plan
    * @param isScheduledRenewal Indique si c'est un renouvellement programmé
    * @param currentSubscriptionId ID de l'abonnement actuel (pour les renouvellements)
+   * @param paymentMethod Prestataire choisi par le client (Orange Money par défaut, pour les
+   *   versions des applications qui ne transmettent pas encore ce choix)
    * @returns Transaction créée
    */
-  async createPlanTransaction(userId: string, planId: string, isScheduledRenewal?: boolean, currentSubscriptionId?: string): Promise<any> {
+  async createPlanTransaction(userId: string, planId: string, isScheduledRenewal?: boolean, currentSubscriptionId?: string, paymentMethod: PaymentProvider = DEFAULT_PAYMENT_PROVIDER): Promise<any> {
     try {
+      const unavailable = this.rejectUnavailableProvider(paymentMethod);
+      if (unavailable) {
+        return unavailable;
+      }
+
       // Étape 1: Valider l'abonnement utilisateur (sauf pour les renouvellements programmés)
       if (!isScheduledRenewal) {
         const subscriptionValidation = await this.validateUserSubscription(userId);
@@ -794,6 +1040,15 @@ export class TransactionService {
         if (!archiveResult.success) {
           return archiveResult;
         }
+
+        // Un paiement Wave précédent vient d'aboutir pendant l'archivage : l'abonnement est
+        // désormais actif, on n'en fait pas payer un second.
+        if (archiveResult.data.settledCount > 0) {
+          const revalidation = await this.validateUserSubscription(userId);
+          if (!revalidation.success) {
+            return revalidation;
+          }
+        }
       }
       
       // Étape 3: Valider et récupérer le plan
@@ -811,7 +1066,7 @@ export class TransactionService {
       const transactionId = transactionIdResult.data;
       
       // Étape 5: Créer l'objet transaction
-      const transaction = this.createTransactionObject(transactionId, userId, plan, isScheduledRenewal, currentSubscriptionId);
+      const transaction = this.createTransactionObject(transactionId, userId, plan, isScheduledRenewal, currentSubscriptionId, paymentMethod);
 
       // Étape 5bis: Plan gratuit (prix <= 0) — aucun paiement à initier.
       // On marque la transaction comme réglée et on crée directement l'abonnement.
@@ -883,12 +1138,18 @@ export class TransactionService {
    * @param merchantId Marchand connecté (devient `user` de la transaction, pour le contrôle de propriété)
    * @param boutiqueId Boutique à mettre en avant
    * @param formula Formule de mise en avant (module sponsor-plan) déjà résolue en base
+   * @param paymentMethod Prestataire choisi par le marchand
    * @returns { success, data } avec l'URL de paiement, ou { success:false, message }
    */
-  async createSponsorTransaction(merchantId: string, boutiqueId: string, formula: any): Promise<any> {
+  async createSponsorTransaction(merchantId: string, boutiqueId: string, formula: any, paymentMethod: PaymentProvider = DEFAULT_PAYMENT_PROVIDER): Promise<any> {
     try {
+      const unavailable = this.rejectUnavailableProvider(paymentMethod);
+      if (unavailable) {
+        return unavailable;
+      }
+
       const price = Number(formula?.price) > 0 ? Number(formula.price) : 0;
-      const currency = process.env.OM_CURRENCY || 'OUV';
+      const currency = paymentMethod === 'wave' ? WaveHelper.currency() : (process.env.OM_CURRENCY || 'OUV');
 
       const transactionIdResult = this.generateTransactionId();
       if (!transactionIdResult.success) {
@@ -902,7 +1163,7 @@ export class TransactionService {
         amount: price,
         currency,
         status: 'active',
-        paymentMethod: 'orange-money',
+        paymentMethod,
         paymentStatus: 'pending',
         paymentDate: new Date(),
         paymentId: transactionId.toString(),
@@ -961,17 +1222,23 @@ export class TransactionService {
    * @param merchantId Marchand connecté (devient `user` de la transaction)
    * @param boutiqueIds Boutiques à mettre en avant (au moins une)
    * @param formula Formule de mise en avant déjà résolue en base
+   * @param paymentMethod Prestataire choisi par le marchand
    */
-  async createSponsorTransactionMulti(merchantId: string, boutiqueIds: string[], formula: any): Promise<any> {
+  async createSponsorTransactionMulti(merchantId: string, boutiqueIds: string[], formula: any, paymentMethod: PaymentProvider = DEFAULT_PAYMENT_PROVIDER): Promise<any> {
     try {
       const ids = Array.isArray(boutiqueIds) ? boutiqueIds.map(String) : [];
       if (ids.length === 0) {
         return { success: false, status: 400, message: 'Aucune boutique à mettre en avant.' };
       }
 
+      const unavailable = this.rejectUnavailableProvider(paymentMethod);
+      if (unavailable) {
+        return unavailable;
+      }
+
       const unitPrice = Number(formula?.price) > 0 ? Number(formula.price) : 0;
       const price = unitPrice * ids.length; // montant TOTAL = prix unitaire × N boutiques
-      const currency = process.env.OM_CURRENCY || 'OUV';
+      const currency = paymentMethod === 'wave' ? WaveHelper.currency() : (process.env.OM_CURRENCY || 'OUV');
 
       const transactionIdResult = this.generateTransactionId();
       if (!transactionIdResult.success) {
@@ -985,7 +1252,7 @@ export class TransactionService {
         amount: price,
         currency,
         status: 'active',
-        paymentMethod: 'orange-money',
+        paymentMethod,
         paymentStatus: 'pending',
         paymentDate: new Date(),
         paymentId: transactionId.toString(),
@@ -1284,8 +1551,12 @@ export class TransactionService {
    * Construit le filtre Mongo commun aux widgets (statut de paiement, plage de dates sur
    * createdAt, recherche sur le client / les identifiants de paiement).
    */
-  private async buildTransactionMatch(filters?: { paymentStatus?: string; from?: string; to?: string; query?: string }): Promise<any> {
+  private async buildTransactionMatch(filters?: { paymentStatus?: string; paymentMethod?: string; from?: string; to?: string; query?: string }): Promise<any> {
     const params: any = { status: { $nin: ['removed', 'archived'] } };
+
+    if (!coddyger.string.isEmpty(filters?.paymentMethod ?? '')) {
+      params.paymentMethod = String(filters!.paymentMethod);
+    }
 
     const paymentStatus = filters?.paymentStatus ?? '';
     const from = filters?.from ?? '';
@@ -1377,7 +1648,7 @@ export class TransactionService {
    * lorsqu'une plage de dates explicite est fournie.
    * @returns Statistiques des transactions
    */
-  async getTransactionStats(filters?: { paymentStatus?: string; from?: string; to?: string; query?: string }): Promise<any> {
+  async getTransactionStats(filters?: { paymentStatus?: string; paymentMethod?: string; from?: string; to?: string; query?: string }): Promise<any> {
     try {
       // La methode count n'est pas disponible sur toutes les versions du DAO coddyger.
       // On calcule les compteurs a partir des lignes brutes pour eviter les 500.
@@ -1386,6 +1657,17 @@ export class TransactionService {
       const transactions: ITransaction[] = Array.isArray(rows) ? rows : [];
 
       const current = this.summarizeTransactions(transactions);
+
+      // Ventilation par prestataire (Orange Money, Wave, gratuit…) pour le back-office.
+      const byPaymentMethod: Record<string, any> = {};
+      const groups = new Map<string, ITransaction[]>();
+      for (const t of transactions) {
+        const key = t.paymentMethod || 'inconnu';
+        groups.set(key, [...(groups.get(key) ?? []), t]);
+      }
+      groups.forEach((list, key) => {
+        byPaymentMethod[key] = this.summarizeTransactions(list);
+      });
 
       // Tendances période-sur-période : compare la plage courante à la plage équivalente
       // qui la précède immédiatement. Calculé uniquement si `from` et `to` sont fournis.
@@ -1404,6 +1686,7 @@ export class TransactionService {
 
         const prevParams = await this.buildTransactionMatch({
           paymentStatus: filters?.paymentStatus,
+          paymentMethod: filters?.paymentMethod,
           query: filters?.query,
           from: prevStart.toISOString(),
           to: prevEnd.toISOString()
@@ -1422,7 +1705,7 @@ export class TransactionService {
         };
       }
 
-      return { ...current, trends };
+      return { ...current, byPaymentMethod, trends };
     } catch (error) {
       LoggerService.log({
         type: LogLevel.Error,

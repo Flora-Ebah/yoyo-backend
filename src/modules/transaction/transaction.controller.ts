@@ -1,6 +1,6 @@
 import coddyger, { IErrorObject, defines } from 'coddyger';
 import { locale } from '../../public';
-import { TransactionService } from './transaction.service';
+import { PaymentProvider, TransactionService } from './transaction.service';
 import { ITransaction } from './transaction.interface';
 import { NotificationHelper } from '../../helpers/notification.helper';
 import { NotificationCategory } from '../../services/notification';
@@ -24,7 +24,7 @@ export class TransactionController {
    * Récupère tous les éléments
    * @returns Liste des éléments
    */
-  getAll(payloads: { page?: number; pageSize?: number; query?: string; status?: string; paymentStatus?: string; from?: string; to?: string }) {
+  getAll(payloads: { page?: number; pageSize?: number; query?: string; status?: string; paymentStatus?: string; paymentMethod?: string; from?: string; to?: string }) {
     return new Promise(async (resolve, reject) => {
       try {
         const items = await this.service.getAll(payloads);
@@ -126,9 +126,10 @@ export class TransactionController {
    * @param planId ID du plan
    * @param isScheduledRenewal Indique si c'est un renouvellement programmé
    * @param currentSubscriptionId ID de l'abonnement actuel (pour les renouvellements)
+   * @param paymentMethod Prestataire choisi par le client (Orange Money par défaut)
    * @returns Transaction créée avec URL de paiement
    */
-  createPlanTransaction(userId: string, planId: string, isScheduledRenewal?: boolean, currentSubscriptionId?: string) {
+  createPlanTransaction(userId: string, planId: string, isScheduledRenewal?: boolean, currentSubscriptionId?: string, paymentMethod?: PaymentProvider) {
     return new Promise(async (resolve, reject) => {
       try {
         // Vérification des paramètres
@@ -149,7 +150,7 @@ export class TransactionController {
         }
 
         // Création ou récupération de la transaction
-        const transaction:any = await this.service.createPlanTransaction(userId, planId, isScheduledRenewal, currentSubscriptionId);
+        const transaction:any = await this.service.createPlanTransaction(userId, planId, isScheduledRenewal, currentSubscriptionId, paymentMethod);
 
         // Échec MÉTIER (ex. « Abonnement actuel non trouvé ou non valide », plan invalide…) :
         // le service renvoie { success:false, message }. Il faut le remonter tel quel avec un statut
@@ -338,7 +339,7 @@ export class TransactionController {
    * Récupère les statistiques des transactions
    * @returns Statistiques des transactions
    */
-  getTransactionStats(filters?: { paymentStatus?: string; from?: string; to?: string; query?: string }) {
+  getTransactionStats(filters?: { paymentStatus?: string; paymentMethod?: string; from?: string; to?: string; query?: string }) {
     return new Promise(async (resolve, reject) => {
       try {
         // Récupération des statistiques
@@ -429,6 +430,51 @@ export class TransactionController {
     }).catch((e: IErrorObject) => {
       console.error(e);
       return coddyger.catchReturn(e, controllerLabel, 'paymentNotify');
+    });
+  }
+
+  /**
+   * Liste les prestataires de paiement utilisables sur cet environnement.
+   * @returns Les identifiants des prestataires (ex. ['orange-money', 'wave'])
+   */
+  getPaymentProviders() {
+    return Promise.resolve({
+      status: defines.status.requestOK,
+      message: locale.controller.done,
+      data: TransactionService.availableProviders()
+    });
+  }
+
+  /**
+   * Webhook Wave (`checkout.session.*`). La signature a déjà été vérifiée par le middleware.
+   *
+   * Codes de réponse choisis pour piloter les renvois de Wave, qui réessaie pendant 3 jours
+   * tant qu'il ne reçoit pas de 2xx :
+   * - 200 pour tout ce qu'un renvoi ne changerait pas (événement hors périmètre, session
+   *   inconnue, montant ou référence divergents — ces derniers sont journalisés pour le support) ;
+   * - 5xx uniquement si Wave est momentanément injoignable pour relire la session, afin
+   *   qu'il renvoie l'événement plus tard.
+   *
+   * @param event Événement Wave déjà authentifié
+   */
+  waveWebhook(event: any) {
+    return new Promise(async (resolve, reject) => {
+      try {
+        const result: any = await this.service.settleWaveEvent(event);
+
+        let message = 'Notification Wave traitée';
+        if (result.ignored) message = 'Événement ignoré';
+        else if (!result.found) message = 'Session inconnue';
+        else if (result.alreadySettled) message = 'Notification déjà traitée';
+        else if (result.amountMismatch || result.referenceMismatch || result.unreadableStatus) message = 'Notification non validée';
+
+        resolve({ status: defines.status.requestOK, message, data: null });
+      } catch (error) {
+        reject(error);
+      }
+    }).catch((e: IErrorObject) => {
+      console.error(e);
+      return coddyger.catchReturn(e, controllerLabel, 'waveWebhook');
     });
   }
 

@@ -1,7 +1,8 @@
 /**
- * Page de retour navigateur après un paiement Orange Money.
+ * Page de retour navigateur après un paiement Orange Money ou Wave.
  *
- * Orange redirige le client vers `return_url` (ou `cancel_url`) une fois la saisie terminée.
+ * Le prestataire redirige le client vers `return_url` / `success_url` (ou `cancel_url` /
+ * `error_url`) une fois la saisie terminée.
  * Cette page est purement informative : le statut qu'elle affiche vient toujours d'une
  * revérification auprès du prestataire, jamais de l'URL.
  */
@@ -61,7 +62,7 @@ const copy: Record<PaymentReturnOutcome, { title: string; lead: string; note: st
   },
   pending: {
     title: 'Paiement en cours de confirmation',
-    lead: 'Orange Money n\'a pas encore confirmé votre paiement. Cela prend généralement quelques secondes.',
+    lead: 'Le service de paiement n\'a pas encore confirmé votre paiement. Cela prend généralement quelques secondes.',
     note: 'Cette page se met à jour toute seule. Si le montant a été débité, votre abonnement sera activé automatiquement, même en fermant cette page.'
   },
   failed: {

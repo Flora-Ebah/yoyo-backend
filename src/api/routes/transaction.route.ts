@@ -2,6 +2,7 @@ import coddyger from 'coddyger';
 import { TransactionController } from '../../modules/transaction/transaction.controller';
 import { TokenMiddleware, PaymentNotifyMiddleware } from '../middleware';
 import { renderPaymentReturnPage } from '../../modules/transaction/payment-return.view';
+import { PAYMENT_PROVIDERS } from '../../modules/transaction/transaction.service';
 
 const routePath = '/transactions';
 const Controller: TransactionController = new TransactionController();
@@ -20,6 +21,7 @@ const defaultRoute: any = (fastify: any, options, done) => {
           pageSize: { type: 'number' },
           status: { type: 'string' },
           paymentStatus: { type: 'string' },
+          paymentMethod: { type: 'string', enum: [...PAYMENT_PROVIDERS] },
           from: { type: 'string' },
           to: { type: 'string' },
           q: { type: 'string' },
@@ -30,17 +32,21 @@ const defaultRoute: any = (fastify: any, options, done) => {
     },
     method: 'GET',
     url: `${routePath}`,
-    preHandler: TokenMiddleware.verify,
+    // Liste de TOUTES les transactions (avec nom, e-mail et contact des clients) : réservée au
+    // back-office. Elle était en `verify`, donc lisible par n'importe quel compte connecté ;
+    // aucune application mobile ne l'appelle (les clients passent par `user-history`).
+    preHandler: TokenMiddleware.verifyAdmin,
     handler: (request, reply) => {
       let page: any = request.query.page || 1;
       let pageSize: any = request.query.pageSize;
       let status: any = request.query.status;
       let paymentStatus: any = request.query.paymentStatus;
+      let paymentMethod: any = request.query.paymentMethod;
       let from: any = request.query.from;
       let to: any = request.query.to;
       let query: any = request.query.q;
 
-      let Q = Controller.getAll({ page, pageSize, status, paymentStatus, from, to, query });
+      let Q = Controller.getAll({ page, pageSize, status, paymentStatus, paymentMethod, from, to, query });
       return coddyger.api(reply, Q);
     }
   });
@@ -139,7 +145,9 @@ const defaultRoute: any = (fastify: any, options, done) => {
         properties: {
           planId: { type: 'string' },
           isScheduledRenewal: { type: 'boolean' },
-          currentSubscriptionId: { type: 'string' }
+          currentSubscriptionId: { type: 'string' },
+          // Facultatif : les versions de l'app antérieures à Wave ne l'envoient pas.
+          paymentMethod: { type: 'string', enum: [...PAYMENT_PROVIDERS], default: 'orange-money' }
         },
         required: ['planId'],
         additionalProperties: false
@@ -151,14 +159,30 @@ const defaultRoute: any = (fastify: any, options, done) => {
     handler: (request, reply) => {
       const body = request.body;
       const user = request.user;
-      
+
       let Q = Controller.createPlanTransaction(
         user._id,
         body.planId,
         body.isScheduledRenewal,
-        body.currentSubscriptionId
+        body.currentSubscriptionId,
+        body.paymentMethod
       );
       return coddyger.api(reply, Q);
+    }
+  });
+
+  // Moyens de paiement disponibles : les applications n'affichent que ceux-ci.
+  fastify.route({
+    schema: {
+      tags,
+      summary: 'Moyens de paiement disponibles',
+      description: "Liste les prestataires de paiement configurés sur cet environnement (ex. orange-money, wave)"
+    },
+    method: 'GET',
+    url: `${routePath}/payment-providers`,
+    preHandler: TokenMiddleware.verify,
+    handler: (request, reply) => {
+      return coddyger.api(reply, Controller.getPaymentProviders());
     }
   });
 
@@ -265,6 +289,7 @@ const defaultRoute: any = (fastify: any, options, done) => {
         type: 'object',
         properties: {
           paymentStatus: { type: 'string' },
+          paymentMethod: { type: 'string', enum: [...PAYMENT_PROVIDERS] },
           from: { type: 'string' },
           to: { type: 'string' },
           q: { type: 'string' }
@@ -278,11 +303,12 @@ const defaultRoute: any = (fastify: any, options, done) => {
     preHandler: TokenMiddleware.verifyAdmin,
     handler: (request, reply) => {
       const paymentStatus: any = request.query.paymentStatus;
+      const paymentMethod: any = request.query.paymentMethod;
       const from: any = request.query.from;
       const to: any = request.query.to;
       const query: any = request.query.q;
 
-      let Q = Controller.getTransactionStats({ paymentStatus, from, to, query });
+      let Q = Controller.getTransactionStats({ paymentStatus, paymentMethod, from, to, query });
       return coddyger.api(reply, Q);
     }
   });
