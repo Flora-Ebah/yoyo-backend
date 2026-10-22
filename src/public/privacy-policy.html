@@ -4,284 +4,199 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Politique de confidentialité — YOYO</title>
-  <meta name="description" content="Politique de confidentialité de YOYO.">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <meta name="description" content="Politique de confidentialité de YOYO : données collectées, utilisation, protection et droits.">
   <style>
-    /* Charte YoYo : orange #FF6100, Plus Jakarta Sans, cartes plates sans ombre, coins 8 px.
-       Page autonome (aucune dépendance externe hors police) : elle sert aussi de texte de secours
-       embarqué dans l'app YoYo Pro, où la classe `in-app` masque la navigation du site. */
+    /* Reprend la charte des PDF de CGU YOYO (version 2026.1) : orange #E85D25, Liberation Sans /
+       Arial, titres d'article soulignés, puces carrées orange, tableaux à en-tête orange.
+       La feuille reste blanche quel que soit le thème de l'app, comme le document signé. */
     :root {
-      --primary: #FF6100;
-      --primary-soft: #FFF1E8;
-      --text: #11181C;
-      --text-secondary: #666666;
-      --bg: #FFFFFF;
-      --bg-secondary: #F5F5F5;
-      --card: #FFFFFF;
-      --border: #E0E0E0;
-      --warn-bg: #FFF8E6;
-      --warn-border: #FFD98A;
-      --danger: #D92D20;
-      --danger-bg: #FEF0EF;
-      --radius: 8px;
+      --orange: #E85D25;
+      --text: #222222;
+      --muted: #6B6B6B;
+      --line: #E2E2E2;
+      --paper: #FFFFFF;
+      color-scheme: light;
     }
-    @media (prefers-color-scheme: dark) {
-      :root:not([data-theme="light"]) {
-        --primary-soft: #3A2010;
-        --text: #ECEDEE;
-        --text-secondary: #9BA1A6;
-        --bg: #151718;
-        --bg-secondary: #1E2022;
-        --card: #1E2022;
-        --border: #2E3135;
-        --warn-bg: #2E2410;
-        --warn-border: #5C4718;
-        --danger: #FF6B5E;
-        --danger-bg: #331614;
-      }
-    }
-    :root[data-theme="dark"] {
-      --primary-soft: #3A2010;
-      --text: #ECEDEE;
-      --text-secondary: #9BA1A6;
-      --bg: #151718;
-      --bg-secondary: #1E2022;
-      --card: #1E2022;
-      --border: #2E3135;
-      --warn-bg: #2E2410;
-      --warn-border: #5C4718;
-      --danger: #FF6B5E;
-      --danger-bg: #331614;
-    }
-
     * { box-sizing: border-box; }
-    html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; }
+    html, body { margin: 0; padding: 0; }
     body {
-      margin: 0;
-      background: var(--bg);
+      background: #F2F2F2;
       color: var(--text);
-      font-family: "Plus Jakarta Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      font-size: 15px;
-      line-height: 1.65;
+      font-family: "Liberation Sans", Arial, Helvetica, sans-serif;
+      font-size: 14px;
+      line-height: 1.5;
+      -webkit-text-size-adjust: 100%;
     }
-    a { color: var(--primary); text-decoration: none; }
-    a:hover { text-decoration: underline; }
+    .doc {
+      background: var(--paper);
+      max-width: 820px;
+      margin: 24px auto;
+      padding: 28px 40px 24px;
+    }
+    /* Dans l'app, la feuille occupe toute la largeur de la fenêtre. */
+    html.in-app .doc { margin: 0; max-width: none; min-height: 100vh; padding: 16px 16px 20px; }
 
-    .topbar {
-      position: sticky; top: 0; z-index: 10;
-      background: var(--bg); border-bottom: 1px solid var(--border);
+    .letterhead {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding-bottom: 12px;
+      border-bottom: 2px solid var(--orange);
     }
-    .topbar-inner {
-      max-width: 1080px; margin: 0 auto; padding: 14px 16px;
-      display: flex; align-items: center; justify-content: space-between; gap: 16px;
-    }
-    .brand { font-weight: 800; font-size: 20px; color: var(--primary); letter-spacing: -0.02em; }
-    .brand small { color: var(--text-secondary); font-weight: 600; font-size: 13px; margin-left: 6px; }
-    .topbar nav { display: flex; gap: 18px; font-size: 14px; font-weight: 500; }
-    .topbar nav a { color: var(--text-secondary); }
-    .topbar nav a { white-space: nowrap; }
-    @media (max-width: 480px) { .topbar nav { gap: 12px; font-size: 13px; } .brand small { display: none; } }
+    .letterhead img { width: 150px; max-width: 45%; height: auto; display: block; }
+    .company { text-align: right; font-size: 11px; line-height: 1.35; color: var(--muted); }
+    .company strong { color: var(--text); }
+    .company a { color: var(--orange); font-weight: 700; text-decoration: none; }
 
-    .hero { background: var(--bg-secondary); border-bottom: 1px solid var(--border); }
-    .hero-inner { max-width: 1080px; margin: 0 auto; padding: 40px 16px 32px; }
-    .eyebrow {
-      display: inline-block; font-size: 12px; font-weight: 700; text-transform: uppercase;
-      letter-spacing: 0.06em; color: var(--primary); background: var(--primary-soft);
-      padding: 4px 10px; border-radius: 999px;
+    h1 {
+      color: var(--orange);
+      font-size: 21px;
+      line-height: 1.25;
+      text-align: center;
+      margin: 26px 0 8px;
     }
-    h1 { font-size: clamp(26px, 5vw, 38px); line-height: 1.2; margin: 14px 0 10px; letter-spacing: -0.02em; }
-    .lead { color: var(--text-secondary); font-size: 16px; max-width: 680px; margin: 0; }
-    .doc-meta { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 18px; }
-    .chip {
-      font-size: 13px; font-weight: 600; color: var(--text-secondary);
-      background: var(--card); border: 1px solid var(--border); border-radius: 999px; padding: 4px 12px;
-    }
+    .sub { color: var(--muted); font-size: 12.5px; text-align: center; margin: 0 0 2px; }
+    .sub + :not(.sub) { margin-top: 26px; }
 
-    .layout {
-      max-width: 1080px; margin: 0 auto; padding: 32px 16px 56px;
-      display: grid; grid-template-columns: 1fr; gap: 32px;
+    h2 {
+      color: var(--orange);
+      font-size: 14.5px;
+      line-height: 1.3;
+      text-transform: uppercase;
+      margin: 24px 0 10px;
+      padding-bottom: 3px;
+      border-bottom: 1px solid var(--orange);
     }
-    @media (min-width: 900px) {
-      .layout { grid-template-columns: 260px 1fr; }
-      .toc { position: sticky; top: 84px; align-self: start; }
-    }
-    .toc {
-      background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px;
-    }
-    .toc summary { font-weight: 700; cursor: pointer; list-style: none; }
-    .toc summary::-webkit-details-marker { display: none; }
-    .toc ol { margin: 12px 0 0; padding-left: 20px; font-size: 14px; }
-    .toc li { margin: 6px 0; }
-    .toc li::marker { color: var(--primary); font-weight: 700; }
-
-    article { min-width: 0; }
-    section { scroll-margin-top: 84px; padding-bottom: 8px; }
-    section + section { border-top: 1px solid var(--border); padding-top: 8px; }
-    h2 { display: flex; align-items: center; gap: 12px; font-size: 20px; line-height: 1.3; margin: 24px 0 12px; }
-    .num {
-      flex-shrink: 0; width: 32px; height: 32px; border-radius: var(--radius);
-      display: grid; place-items: center; font-size: 14px; font-weight: 800;
-      color: var(--primary); background: var(--primary-soft);
-    }
-    h3 { font-size: 16px; margin: 20px 0 6px; }
-    p { margin: 0 0 12px; }
-    ul { margin: 0 0 12px; padding-left: 22px; }
-    li { margin: 4px 0; }
-    li::marker { color: var(--primary); }
+    p { margin: 0 0 9px; text-align: justify; hyphens: auto; -webkit-hyphens: auto; }
+    p.right { text-align: right; }
     strong { font-weight: 700; }
+    .num { color: var(--orange); font-weight: 700; margin-right: 2px; }
+    main a { color: var(--orange); font-weight: 700; text-decoration: none; }
 
-    .callout {
-      border: 1px solid var(--border); border-left: 4px solid var(--primary);
-      background: var(--primary-soft); border-radius: var(--radius); padding: 14px 16px; margin: 14px 0;
-    }
-    .callout.warn { background: var(--warn-bg); border-color: var(--warn-border); border-left-color: #F79009; }
-    .callout.danger { background: var(--danger-bg); border-color: var(--danger-bg); border-left-color: var(--danger); }
-    .callout p:last-child, .callout ul:last-child { margin-bottom: 0; }
-    .callout-title { font-weight: 700; margin-bottom: 4px; }
-
-    .grid { display: grid; grid-template-columns: 1fr; gap: 12px; margin: 12px 0; }
-    @media (min-width: 640px) { .grid { grid-template-columns: 1fr 1fr; } }
-    .card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 16px; }
-    .card .term { color: var(--primary); font-weight: 700; margin-bottom: 2px; }
-    .card p { margin: 0; font-size: 14px; color: var(--text-secondary); }
-
-    .steps { counter-reset: step; list-style: none; padding: 0; }
-    .steps li { counter-increment: step; position: relative; padding-left: 40px; margin: 10px 0; }
-    .steps li::before {
-      content: counter(step); position: absolute; left: 0; top: 0;
-      width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center;
-      font-size: 13px; font-weight: 800; color: #FFFFFF; background: var(--primary);
+    ul { list-style: none; margin: 0 0 9px; padding: 0 0 0 16px; }
+    li { position: relative; margin: 0 0 5px; padding-left: 14px; text-align: justify; hyphens: auto; -webkit-hyphens: auto; }
+    li::before {
+      content: "";
+      position: absolute;
+      left: 0;
+      top: 0.6em;
+      width: 5px;
+      height: 5px;
+      background: var(--orange);
     }
 
-
-    .site-footer { border-top: 1px solid var(--border); background: var(--bg-secondary); }
-    .site-footer-inner {
-      max-width: 1080px; margin: 0 auto; padding: 20px 16px; font-size: 14px; color: var(--text-secondary);
-      display: flex; flex-wrap: wrap; gap: 12px 24px; justify-content: space-between;
+    /* Encadré « L'essentiel en bref » des CGU utilisateurs. */
+    .summary {
+      background: #FDF1EB;
+      border: 1px solid var(--orange);
+      border-left-width: 4px;
+      padding: 10px 12px 6px;
+      margin: 24px 0 18px;
+      font-size: 13px;
     }
-    .site-footer nav { display: flex; gap: 18px; }
+    .summary-title { font-weight: 700; margin-bottom: 6px; text-align: left; }
+    .summary ul { padding-left: 0; }
+    .summary li { margin-bottom: 4px; }
+    .summary li::before { background: var(--text); }
 
-    /* Affichage dans l'app : l'écran fournit déjà le titre, la navigation et les boutons. */
-    .in-app .topbar, .in-app .hero, .in-app .toc, .in-app .site-footer { display: none; }
-    .in-app .layout { display: block; padding: 4px 16px 24px; }
-    .in-app section:first-of-type h2 { margin-top: 8px; }
+    .table-wrap { overflow-x: auto; margin: 6px 0 14px; -webkit-overflow-scrolling: touch; }
+    table { width: 100%; border-collapse: collapse; font-size: 12px; line-height: 1.35; }
+    th {
+      background: var(--orange);
+      color: #FFFFFF;
+      font-weight: 700;
+      text-align: left;
+      padding: 6px 8px;
+      border: 1px solid var(--orange);
+    }
+    td { padding: 6px 8px; border: 1px solid var(--line); vertical-align: top; min-width: 90px; }
+    td:empty::after { content: "\00a0"; }
+    /* Cadres de signature : espace laissé pour signer, comme sur le PDF. */
+    td.sign { padding-bottom: 48px; line-height: 1.6; }
+    td.sign .sign-label { display: inline-block; margin-top: 18px; }
+
+    .legal-footer {
+      margin-top: 30px;
+      padding-top: 10px;
+      border-top: 1px solid var(--orange);
+      text-align: center;
+      font-size: 10.5px;
+      line-height: 1.45;
+      color: var(--muted);
+    }
+    .legal-footer strong { color: var(--orange); }
+    .legal-footer a { color: inherit; text-decoration: none; }
+
+    @media (max-width: 480px) {
+      .doc { margin: 0; padding: 16px 16px 20px; }
+      h1 { font-size: 19px; }
+      ul { padding-left: 4px; }
+    }
   </style>
 </head>
 <body>
-  <header class="topbar">
-    <div class="topbar-inner">
-      <span class="brand">YOYO</span>
-      <nav>
-        <a href="terms-of-service.html">Conditions générales</a>
-        <a href="https://www.yoyolacarte.com">yoyolacarte.com</a>
-      </nav>
-    </div>
-  </header>
-
-  <div class="hero">
-    <div class="hero-inner">
-      <span class="eyebrow">Légal</span>
-      <h1>Politique de confidentialité</h1>
-      <p class="lead">La carte de fidélité universelle qui transforme chaque sortie en économie.</p>
-      <div class="doc-meta">
-        <span class="chip">Dernière mise à jour : juillet 2026</span>
+  <div class="doc">
+    <header class="letterhead">
+      <img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAASwAAABkCAMAAAAL3/3yAAAAwFBMVEX9/v3oWhXkZyrphlTncznnekbpYxvsl2zbWRbzx6/22cn55dbwtZXuqIfaZiz66+XlWyL20rnuonroSwfwu6PpjGLYeEraXCTbYhjZSwnbdDfahlXrk1zblGvaiWP689zyzcPxwprZa0TmbEfmnIPcp4vckV3ZtpziTCLhfmbngzrco3374rvvsHreemDcnIDkPwDfSiLZOAH40J8AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABb+UZqAAAAQHRSTlP/////////////////////////////////////////////////////////////////////AAAAAAAAAAAAAAAALzVnLAAAFapJREFUeNrtXYmWpCjTTVAUcU9NNZeq6m1mvu3f3//d/ghABUUlq6rPzHdOM901ldmmXm4sQERAnk6/2vMtzS6MhixO3p7+5Nc4YEGQi09EU2Zx1wGaNn36o8k5uLPPRbPscNxfOSeEc/7t/Fy3zpTjJ5tr37WfBedccN40BPAU+XN05QWiaeAHa38SV0nBycD7vi+GiPBOPPVJXhFS9T3g4y+fguZLcSW86ouekKjoaeL/SdFxEtEKAAHP1yD9GVxl/8MHjloFGkIKSgpvtjJOKBKMHyacXLvyEyTHG4JKTsgwFICmT/wl19OqAJJR8ICn+Am2mPyNDygLUoFMqooWle9TMh5RCvz28uOo//cPo6l70NNKyq3H+0L3E1+uCkQjofQST1F+ur8qkCulViBMAuKMqBdbGYArimFAkrlshJ8/CudbP8iO8l6aN8iO+rGVFFERaYZR8qBb19fPJiuWesWJbpxCI52Hvbd9QVEPlRWq8YH0H1T9P67gEUC/uVQO8FyoLj5sJXBdVBSg5+hRtPR58smKBVqh9Qo1BO0Q0FF22OkWe0FppTke2+NjcDrprpSaV3yIIlRe+q320Cu4sEC2SD/0iqqBdJ/s3aURkrlR1Y50C7mSTX6Y6x+cFB8bCWeqJF34ANSt7oCtpKMaD5mlh7yJT7ZCkymN75ittghHdGQmC+nahZeqtvnvv/E1WUBXeMBWQulN6nlBJ3ciRcd3Z1tvCo3/MMB47yQrpKz00CuDLGXNPNviKclfAgYtCC5xniVO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" alt="YOYO — Ta carte de fidélité magique !">
+      <div class="company">
+        <strong>YOYO AFRICA SARL</strong><br>
+        Abidjan, Côte d'Ivoire<br>
+        <a href="https://www.yoyolacarte.com">www.yoyolacarte.com</a>
       </div>
-    </div>
+    </header>
+
+    <main>
+<h1>POLITIQUE DE CONFIDENTIALITÉ</h1>
+<p class="sub">Dernière mise à jour : juillet 2026</p>
+<h2>INTRODUCTION</h2>
+<p>Chez YOYO, ta confidentialité est notre priorité. Cette politique explique comment nous collectons, utilisons et protégeons tes données personnelles.</p>
+<h2>ARTICLE 1 — DONNÉES QUE NOUS COLLECTONS</h2>
+<p>Nous collectons les données suivantes :</p>
+<ul>
+<li>Informations d'identité (nom, prénom, date de naissance)</li>
+<li>Informations de contact (téléphone, email, adresse)</li>
+<li>Informations bancaires pour les paiements Mobile Money</li>
+<li>Historique de tes scans et réductions utilisées</li>
+<li>Données de localisation (optionnel)</li>
+</ul>
+<h2>ARTICLE 2 — COMMENT NOUS UTILISONS TES DONNÉES</h2>
+<p>Tes données sont utilisées pour :</p>
+<ul>
+<li>Gérer ton compte et ton abonnement</li>
+<li>Traiter tes paiements</li>
+<li>T'envoyer des offres et mises à jour pertinentes</li>
+<li>Améliorer nos services</li>
+<li>Respecter nos obligations légales</li>
+</ul>
+<h2>ARTICLE 3 — PROTECTION DE TES DONNÉES</h2>
+<p>YOYO utilise le chiffrement et les meilleures pratiques de sécurité pour protéger tes données personnelles. Tes données ne sont jamais vendues ou partagées avec des tiers commerciaux.</p>
+<h2>ARTICLE 4 — DONNÉES NON VENDUES</h2>
+<p>Contrairement à beaucoup d'autres applications, YOYO ne vend jamais tes données. Ton historique d'achat et tes informations personnelles restent confidentiels.</p>
+<h2>ARTICLE 5 — PARTAGE DE DONNÉES</h2>
+<p>Nous partageons tes données uniquement avec :</p>
+<ul>
+<li>Les fournisseurs de services de paiement (Orange Money, Wave)</li>
+<li>Les autorités légales si requis par la loi</li>
+<li>Tes données de localisation avec les marchands seulement si tu l'actives</li>
+</ul>
+<h2>ARTICLE 6 — TES DROITS</h2>
+<p>Tu as le droit de :</p>
+<ul>
+<li>Accéder à tes données personnelles</li>
+<li>Corriger tes informations</li>
+<li>Demander la suppression de tes données</li>
+<li>T'opposer au traitement de tes données</li>
+</ul>
+<h2>ARTICLE 7 — CONTACTE-NOUS</h2>
+<p>Pour toute question concernant ta confidentialité, envoie un email à <a href="mailto:support@yoyolacarte.com">support@yoyolacarte.com</a></p>
+    </main>
+
+    <footer class="legal-footer">
+      <strong>YOYO AFRICA</strong> — Société à Responsabilité Limitée au capital de 5 000 000 FCFA — RCCM : CI-ABJ-03-2025-B12-03467<br>
+      Siège social : Boulevard FHB, Immeuble Papici Top Bureau, 2e étage, Abidjan, Côte d'Ivoire<br>
+      <a href="mailto:digital@yoyolacarte.com">digital@yoyolacarte.com</a> &nbsp;|&nbsp; <a href="https://www.yoyolacarte.com">www.yoyolacarte.com</a>
+    </footer>
   </div>
-
-  <main class="layout">
-    <details class="toc" open>
-      <summary>Sommaire</summary>
-      <ol style="list-style: none; padding-left: 0;">
-        <li><a href="#introduction">Introduction</a></li>
-        <li><a href="#collecte">1. Données que nous collectons</a></li>
-        <li><a href="#utilisation">2. Comment nous utilisons tes données</a></li>
-        <li><a href="#protection">3. Protection de tes données</a></li>
-        <li><a href="#non-vendues">4. Données non vendues</a></li>
-        <li><a href="#partage">5. Partage de données</a></li>
-        <li><a href="#droits">6. Tes droits</a></li>
-        <li><a href="#contact">7. Contacte-nous</a></li>
-      </ol>
-    </details>
-
-    <article>
-      <section id="introduction">
-        <h2>Introduction</h2>
-        <p>Chez YOYO, ta confidentialité est notre priorité. Cette politique explique comment nous collectons, utilisons et protégeons tes données personnelles.</p>
-      </section>
-
-      <section id="collecte">
-        <h2><span class="num">1</span>Données que nous collectons</h2>
-        <p>Nous collectons les données suivantes :</p>
-        <ul>
-          <li>Informations d'identité (nom, prénom, date de naissance)</li>
-          <li>Informations de contact (téléphone, email, adresse)</li>
-          <li>Informations bancaires pour les paiements Mobile Money</li>
-          <li>Historique de tes scans et réductions utilisées</li>
-          <li>Données de localisation (optionnel)</li>
-        </ul>
-      </section>
-
-      <section id="utilisation">
-        <h2><span class="num">2</span>Comment nous utilisons tes données</h2>
-        <p>Tes données sont utilisées pour :</p>
-        <ul>
-          <li>Gérer ton compte et ton abonnement</li>
-          <li>Traiter tes paiements</li>
-          <li>T'envoyer des offres et mises à jour pertinentes</li>
-          <li>Améliorer nos services</li>
-          <li>Respecter nos obligations légales</li>
-        </ul>
-      </section>
-
-      <section id="protection">
-        <h2><span class="num">3</span>Protection de tes données</h2>
-        <p>YOYO utilise le chiffrement et les meilleures pratiques de sécurité pour protéger tes données personnelles. Tes données ne sont jamais vendues ou partagées avec des tiers commerciaux.</p>
-      </section>
-
-      <section id="non-vendues">
-        <h2><span class="num">4</span>Données non vendues</h2>
-        <p>Contrairement à beaucoup d'autres applications, YOYO ne vend jamais tes données. Ton historique d'achat et tes informations personnelles restent confidentiels.</p>
-      </section>
-
-      <section id="partage">
-        <h2><span class="num">5</span>Partage de données</h2>
-        <p>Nous partageons tes données uniquement avec :</p>
-        <ul>
-          <li>Les fournisseurs de services de paiement (Orange Money, Wave)</li>
-          <li>Les autorités légales si requis par la loi</li>
-          <li>Tes données de localisation avec les marchands seulement si tu l'actives</li>
-        </ul>
-      </section>
-
-      <section id="droits">
-        <h2><span class="num">6</span>Tes droits</h2>
-        <p>Tu as le droit de :</p>
-        <ul>
-          <li>Accéder à tes données personnelles</li>
-          <li>Corriger tes informations</li>
-          <li>Demander la suppression de tes données</li>
-          <li>T'opposer au traitement de tes données</li>
-        </ul>
-      </section>
-
-      <section id="contact">
-        <h2><span class="num">7</span>Contacte-nous</h2>
-        <p>Pour toute question concernant ta confidentialité, envoie un email à <a href="mailto:support@yoyolacarte.com">support@yoyolacarte.com</a></p>
-      </section>
-    </article>
-  </main>
-
-  <footer class="site-footer">
-    <div class="site-footer-inner">
-      <span>© YOYO — Ta carte de fidélité magique</span>
-      <nav>
-        <a href="terms-of-service.html">Conditions générales</a>
-        <a href="privacy-policy.html">Confidentialité</a>
-      </nav>
-    </div>
-  </footer>
 </body>
 </html>
