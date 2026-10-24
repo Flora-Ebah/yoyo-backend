@@ -113,6 +113,8 @@ export class FileUpload {
     if (head.subarray(0, 4).toString('ascii') === 'GIF8') return 'image/gif';
     if (head.subarray(0, 4).toString('ascii') === 'RIFF' && head.subarray(8, 12).toString('ascii') === 'WEBP') return 'image/webp';
     if (head.subarray(0, 2).toString('ascii') === 'BM') return 'image/bmp';
+    if (head.subarray(0, 4).toString('hex') === '00000100') return 'image/x-icon';
+    if (['49492a00', '4d4d002a'].includes(head.subarray(0, 4).toString('hex'))) return 'image/tiff';
     if (head.subarray(4, 8).toString('ascii') === 'ftyp' && /^(heic|heix|hevc|mif1|msf1|avif)/.test(head.subarray(8, 12).toString('ascii'))) {
       return 'image/heic';
     }

@@ -152,6 +152,15 @@ describe('Remarques testeurs — app Client', () => {
 			});
 		});
 
+		it('reconnaît une icône ICO et un TIFF', async () => {
+			await withFile(Buffer.from('0000010001001010', 'hex'), async (p) => {
+				expect(await FileUpload.sniffImageType(p)).to.equal('image/x-icon');
+			});
+			await withFile(Buffer.from('49492a0008000000', 'hex'), async (p) => {
+				expect(await FileUpload.sniffImageType(p)).to.equal('image/tiff');
+			});
+		});
+
 		it('ne prend pas un PDF pour une image', async () => {
 			await withFile(Buffer.from('%PDF-1.7\n'), async (p) => {
 				expect(await FileUpload.sniffImageType(p)).to.equal(null);
