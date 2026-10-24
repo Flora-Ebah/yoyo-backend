@@ -11,6 +11,7 @@ import { PartnerSet } from '../partner';
 import { AppEvents, eventBus } from '../../events';
 import { PlatformConfigService } from '../platform-config/platform-config.service';
 import { ScanTokenHelper } from '../../helpers/scan-token.helper';
+import { PartnerAccessHelper } from '../../helpers/partner-access.helper';
 
 export class PaymentService {
   private readonly dao: IData<IPayment>;
@@ -399,11 +400,11 @@ export class PaymentService {
   }
 
   /**
-   * Vérifie que l'appelant est bien le propriétaire de la boutique destinataire.
+   * Vérifie que l'appelant est bien le propriétaire (ou un gérant actif) de la boutique destinataire.
    *
    * @param partnerId Boutique destinataire de la demande
    * @param actorId `request.user._id` de l'appelant
-   * @returns la boutique si l'appelant en est le propriétaire, sinon un descripteur d'erreur
+   * @returns la boutique si l'appelant en est le propriétaire ou le gérant, sinon un descripteur d'erreur
    */
   private async resolveOwnedPartner(partnerId: string, actorId: string): Promise<any> {
     if (!coddyger.string.isValidObjectId(partnerId)) {
@@ -423,7 +424,8 @@ export class PaymentService {
       return { error: true, data: locale.notfound('Partenaire') };
     }
 
-    if (String(partner.user ?? '') !== String(actorId)) {
+    // Le gérant actif d'une boutique a les mêmes droits que le propriétaire sur son QR et ses tickets.
+    if (!PartnerAccessHelper.isOwner(partner, actorId) && !(await PartnerAccessHelper.isActiveManager(partner._id, actorId))) {
       return { error: true, forbidden: true, data: locale.controller.payment.notOwner };
     }
 
@@ -524,9 +526,9 @@ export class PaymentService {
       return { error: true, data: locale.controller.payment.belowMinOrder(minOrder) };
     }
 
-    // Plafond par achat : celui de la boutique s'il est fixé, sinon celui de la plateforme.
+    // Plafond par achat : celui de la plateforme (CMS). Le marchand ne fixe plus de plafond.
     // Le client saisissant lui-même le montant, c'est la borne contre un zéro de trop ou une fraude.
-    const ceiling = this.effectiveMaxAmount(partner, maxAmount);
+    const ceiling = this.effectiveMaxAmount(maxAmount);
     if (ceiling > 0 && value > ceiling) {
       return { error: true, data: locale.controller.payment.aboveMaxOrder(ceiling) };
     }
@@ -534,10 +536,11 @@ export class PaymentService {
     return null;
   }
 
-  /** Plafond par achat applicable : `partner.maxOrder` s'il est > 0, sinon le plafond plateforme (0 = aucun). */
-  private effectiveMaxAmount(partner: any, platformMax: number): number {
-    const own = Number(partner?.maxOrder ?? 0);
-    if (Number.isFinite(own) && own > 0) return own;
+  /**
+   * Plafond par achat applicable : celui de la plateforme (0 = aucun). `partner.maxOrder` n'est plus
+   * lu : le plafond marchand a été retiré (remarques testeurs Pro n°5).
+   */
+  private effectiveMaxAmount(platformMax: number): number {
     const fallback = Number(platformMax ?? 0);
     return Number.isFinite(fallback) && fallback > 0 ? fallback : 0;
   }
@@ -595,7 +598,7 @@ export class PaymentService {
    * Transaction logique atomique :
    *  1. abonnement ACTIF du client (exigence conservée) ;
    *  2. boutique existante et `from` ≠ `to` ;
-   *  3. montant borné (`validateAmount` : > 0, ≥ `partner.minOrder`, ≤ plafond boutique ou plateforme) ;
+   *  3. montant borné (`validateAmount` : > 0, ≥ `partner.minOrder`, ≤ plafond plateforme) ;
    *  4. pourcentage figé = `partner.maxDiscount` (0 si absent) ;
    *  5. net + réduction recalculés SERVEUR ;
    *  6. garde-fou idempotent : un ticket `success` identique (from, to, amount) de moins de ~60 s
@@ -660,7 +663,7 @@ export class PaymentService {
 
       const [subscription, partner] = await Promise.all([
         this.subscriptionService.getCurrentSubscriptionWithPlanDetails(from),
-        partnerModel.findOne({ _id: effectiveTo, status: { $nin: ['removed', 'archived'] } }, '_id name user maxDiscount minOrder maxOrder').lean()
+        partnerModel.findOne({ _id: effectiveTo, status: { $nin: ['removed', 'archived'] } }, '_id name user maxDiscount minOrder categories').lean()
       ]);
 
       if (!subscription) {
@@ -674,7 +677,9 @@ export class PaymentService {
       // À partir d'ici, `to` désigne toujours la boutique effective (jeton ou legacy).
       const to: string = effectiveTo;
 
-      const invalidAmount = this.validateAmount(amount, partner, limits.maxAmount);
+      // La commande minimale ne vaut que pour les catégories qui l'autorisent (boulangeries, supérettes).
+      const minOrderApplies = Number(partner.minOrder ?? 0) > 0 && (await PartnerAccessHelper.isMinOrderEligible(partner.categories));
+      const invalidAmount = this.validateAmount(amount, { ...partner, minOrder: minOrderApplies ? partner.minOrder : 0 }, limits.maxAmount);
       if (invalidAmount) {
         return invalidAmount;
       }

@@ -3,6 +3,41 @@ import { PartnerController } from '../../modules/partner/partner.controller';
 import { SettingsService } from '../../modules/settings';
 import { AppCheckMiddleware, TokenMiddleware } from '../middleware';
 import { PartnerMediaHelper } from '../../helpers/partner-media.helper';
+import { PartnerAccessHelper } from '../../helpers/partner-access.helper';
+import { PartnerSet } from '../../modules/partner';
+
+/** Refus 403 au format `{ status, message, data }` attendu par `coddyger.api`. */
+const forbidden = (reply: any, message: string) =>
+  coddyger.api(reply, Promise.resolve({ status: defines.status.forbidden, message, data: null }));
+
+/**
+ * [SÉCURITÉ] Charge la boutique visée et vérifie que l'appelant peut agir dessus : propriétaire,
+ * gérant actif (sauf `ownerOnly`) ou admin. Répond lui-même (400/404/403) et renvoie `null` sinon.
+ */
+const loadManagedPartner = async (reply: any, id: any, user: any, ownerOnly = false): Promise<any | null> => {
+  if (typeof id !== 'string' || !coddyger.string.isValidObjectId(id)) {
+    coddyger.api(reply, Promise.resolve({ status: defines.status.badRequest, message: 'Identifiant de boutique invalide.', data: null }));
+    return null;
+  }
+  const partnerModel: any = (new PartnerSet() as any).defaultModel;
+  const partner: any = await partnerModel
+    .findOne({ _id: id, status: { $nin: ['removed', 'archived'] } }, '_id user isSponsored video categories')
+    .lean();
+  if (!partner) {
+    coddyger.api(reply, Promise.resolve({ status: defines.status.notFound, message: 'Boutique introuvable.', data: null }));
+    return null;
+  }
+  const allowed = ownerOnly
+    ? !!user?.isAdmin || PartnerAccessHelper.isOwner(partner, user?._id)
+    : await PartnerAccessHelper.canManage(partner, user);
+  if (!allowed) {
+    forbidden(reply, "Vous n'avez pas accès à cette boutique.");
+    return null;
+  }
+  return partner;
+};
+
+const VIDEO_BOOST_ONLY = 'La vidéo est réservée aux boutiques boostées. Activez YO Boost pour en ajouter une.';
 
 const routePath = '/partners';
 const Controller: PartnerController = new PartnerController();
@@ -117,10 +152,23 @@ const defaultRoute: any = (fastify: any, options, done) => {
     method: 'POST',
     url: `${routePath}`,
     preHandler: TokenMiddleware.verify,
-    handler: (request, reply) => {
+    handler: async (request, reply) => {
       let body: any = request.body;
       let user: any = request.user;
       body.user = user._id;
+
+      // Le plafond par achat n'est plus fixé par le marchand : seul celui de la plateforme s'applique.
+      delete body.maxOrder;
+
+      if (!user?.isAdmin) {
+        // Une boutique neuve n'est pas boostée : pas de vidéo (avantage YO Boost).
+        if (body.video) return forbidden(reply, VIDEO_BOOST_ONLY);
+        delete body.isSponsored;
+      }
+
+      if (Number(body.minOrder ?? 0) > 0 && !(await PartnerAccessHelper.isMinOrderEligible(body.categories))) {
+        body.minOrder = 0;
+      }
 
       let Q = Controller.create(body);
       return coddyger.api(reply, Q);
@@ -225,7 +273,27 @@ const defaultRoute: any = (fastify: any, options, done) => {
       delete body._id;
 
       let user: any = request.user;
-      body.user = user._id;
+
+      // [SÉCURITÉ] Seuls le propriétaire, un gérant actif ou un admin modifient une boutique, et le
+      // propriétaire n'est jamais réécrit (avant : n'importe quel compte pouvait modifier n'importe
+      // quelle boutique et en devenir propriétaire).
+      delete body.user;
+      delete body.isSponsored;
+      delete body.maxOrder;
+
+      const current: any = await loadManagedPartner(reply, _id, user);
+      if (!current) return;
+
+      // Vidéo = avantage YO Boost : on peut la retirer, pas en ajouter une sans boost.
+      if (!user?.isAdmin && body.video && body.video !== current.video && !current.isSponsored) {
+        return forbidden(reply, VIDEO_BOOST_ONLY);
+      }
+
+      // Commande minimale : uniquement pour les catégories éligibles (boulangeries, supérettes).
+      if (typeof body.minOrder !== 'undefined' || Array.isArray(body.categories)) {
+        const categories = Array.isArray(body.categories) ? body.categories : current.categories;
+        if (!(await PartnerAccessHelper.isMinOrderEligible(categories))) body.minOrder = 0;
+      }
 
       // Verrou métier : un marchand ne peut ni désactiver sa boutique ni descendre sa remise sous
       // le minimum (ni dépasser le maximum). Ces bornes sont désormais paramétrables depuis le CMS
@@ -261,7 +329,7 @@ const defaultRoute: any = (fastify: any, options, done) => {
         }
       }
 
-      let Q = Controller.update(_id, body);
+      let Q = Controller.update(String(current._id), body);
       return coddyger.api(reply, Q);
     }
   });
@@ -397,10 +465,14 @@ const defaultRoute: any = (fastify: any, options, done) => {
     method: 'DELETE',
     url: `${routePath}/remove/:id`,
     preHandler: TokenMiddleware.verify,
-    handler: (request, reply) => {
+    handler: async (request, reply) => {
       let _id: any = request.params.id;
 
-      let Q = Controller.delete(_id);
+      // [SÉCURITÉ] Suppression réservée au propriétaire (pas au gérant) et à l'admin.
+      const partner: any = await loadManagedPartner(reply, _id, request.user, true);
+      if (!partner) return;
+
+      let Q = Controller.delete(String(partner._id));
       return coddyger.api(reply, Q);
     }
   });
@@ -472,11 +544,14 @@ const defaultRoute: any = (fastify: any, options, done) => {
     method: 'PUT',
     url: `${routePath}/:id/opening-hours`,
     preHandler: TokenMiddleware.verify,
-    handler: (request, reply) => {
+    handler: async (request, reply) => {
       const id: any = request.params.id;
       const body: any = request.body;
 
-      let Q = Controller.update(id, { openingHours: body.openingHours });
+      const partner: any = await loadManagedPartner(reply, id, request.user);
+      if (!partner) return;
+
+      let Q = Controller.update(String(partner._id), { openingHours: body.openingHours });
       return coddyger.api(reply, Q);
     }
   });

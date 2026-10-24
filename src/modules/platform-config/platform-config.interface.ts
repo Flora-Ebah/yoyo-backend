@@ -17,7 +17,7 @@ export interface IPlatformConfig {
   /**
    * Garde-fous du flux « le client saisit lui-même le montant » (`PaymentService.redeem`), sans
    * validation manuelle du marchand. 0 = garde-fou désactivé.
-   *  - `maxAmount` : plafond par achat (FCFA), sauf si la boutique fixe son propre `maxOrder` ;
+   *  - `maxAmount` : plafond par achat (FCFA), commun à toutes les boutiques ;
    *  - `cooldownHours` : délai minimum entre deux réductions d'un même client dans une même boutique ;
    *  - `maxPerDay` : nombre maximum de réductions par client et par jour, toutes boutiques confondues.
    *  - `requireScanToken` : si `true`, `POST /payments/redeem` exige une session de scan fraîche

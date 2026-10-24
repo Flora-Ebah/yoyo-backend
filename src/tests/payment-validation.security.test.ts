@@ -8,6 +8,7 @@ import { PartnerSet } from '../modules/partner';
 import { SubscriptionService } from '../modules/subscription/subscription.service';
 import { PushNotificationService } from '../modules/push-notification';
 import { PlatformConfigService } from '../modules/platform-config/platform-config.service';
+import { CategorySet } from '../modules/category/category.model';
 
 /**
  * Flux 100% client de validation des rÃ©ductions.
@@ -52,6 +53,10 @@ describe('[SÃ©curitÃ©] Flux client de validation des rÃ©ductions', () => {
     await mongoose.connect(mongod.getUri(), { dbName: 'yoyo-test-validation' });
     await paymentModel().syncIndexes();
 
+    // Catégorie éligible à la commande minimale (remarques testeurs Pro n°5).
+    const categoryId = new mongoose.Types.ObjectId();
+    await (new CategorySet() as any).defaultModel.create({ _id: categoryId, name: 'Supérettes & Alimentation', status: 'active' });
+
     await partnerModel().create({
       _id: new mongoose.Types.ObjectId(PARTNER_ID),
       slug: 'boutique-validation',
@@ -59,7 +64,8 @@ describe('[SÃ©curitÃ©] Flux client de validation des rÃ©ductions', () => {
       status: 'active',
       user: new mongoose.Types.ObjectId(OWNER_ID),
       maxDiscount: MAX_DISCOUNT,
-      minOrder: MIN_ORDER
+      minOrder: MIN_ORDER,
+      categories: [categoryId]
     });
   });
 
@@ -195,16 +201,24 @@ describe('[SÃ©curitÃ©] Flux client de validation des rÃ©ductions', () => {
       expect(await paymentModel().countDocuments({})).to.equal(0);
     });
 
-    it('applique le plafond propre Ã  la boutique (maxOrder) avant celui de la plateforme', async () => {
+    it("ignore l'ancien plafond propre à la boutique (maxOrder) : seul celui de la plateforme compte", async () => {
       await partnerModel().updateOne({ _id: PARTNER_ID }, { $set: { maxOrder: 20000 } });
       try {
-        const refused: any = await service.redeem(CLIENT_ID, { to: PARTNER_ID, amount: 20001 });
-        expect(refused.error).to.be.true;
-
-        const accepted: any = await service.redeem(CLIENT_ID, { to: PARTNER_ID, amount: 20000 });
+        const accepted: any = await service.redeem(CLIENT_ID, { to: PARTNER_ID, amount: 30000 });
         expect(accepted.error, JSON.stringify(accepted.data)).to.not.equal(true);
       } finally {
         await partnerModel().updateOne({ _id: PARTNER_ID }, { $unset: { maxOrder: 1 } });
+      }
+    });
+
+    it("ignore la commande minimale d'une boutique hors catégories éligibles", async () => {
+      const original: any = await partnerModel().findById(PARTNER_ID).lean();
+      await partnerModel().updateOne({ _id: PARTNER_ID }, { $set: { categories: [] } });
+      try {
+        const accepted: any = await service.redeem(CLIENT_ID, { to: PARTNER_ID, amount: MIN_ORDER - 1 });
+        expect(accepted.error, JSON.stringify(accepted.data)).to.not.equal(true);
+      } finally {
+        await partnerModel().updateOne({ _id: PARTNER_ID }, { $set: { categories: original.categories } });
       }
     });
 
