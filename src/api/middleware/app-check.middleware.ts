@@ -1,8 +1,8 @@
 import coddyger, { defines, LogLevel } from 'coddyger';
-import { cert, getApps, initializeApp, type App } from 'firebase-admin/app';
 import { getAppCheck } from 'firebase-admin/app-check';
 import { config } from '../../config/env';
 import { logEvent } from '../../config/logger';
+import { getFirebaseApp } from '../../helpers/firebase-admin.helper';
 
 const middlewareLabel = 'AppCheckMiddleware';
 
@@ -13,16 +13,6 @@ const middlewareLabel = 'AppCheckMiddleware';
 const APP_CHECK_HEADER = 'x-firebase-appcheck';
 
 /**
- * Nom de l'application Firebase Admin, distinct de l'application par défaut : le processus
- * n'utilise Firebase que pour App Check, et un nom explicite évite tout conflit si une autre
- * intégration Firebase arrivait un jour.
- */
-const FIREBASE_APP_NAME = 'yoyo-app-check';
-
-let firebaseApp: App | null = null;
-let initializationAttempted = false;
-
-/**
  * Verrou posé après un premier échec de la consommation de jeton.
  *
  * La consommation exige que le compte de service porte le rôle *Firebase App Check Token
@@ -30,48 +20,6 @@ let initializationAttempted = false;
  * on cesse d'essayer dès qu'on a la preuve que c'est la consommation, et non le jeton, qui échoue.
  */
 let consumptionUnavailable = false;
-
-/**
- * Initialise l'application Firebase Admin à la première requête, jamais au chargement du module.
- *
- * Le démarrage du serveur ne doit pas dépendre de la présence de la configuration Firebase :
- * en mode observation, une configuration absente est une information à journaliser, pas une
- * raison de refuser de démarrer.
- */
-const getFirebaseApp = (): App | null => {
-	if (firebaseApp) return firebaseApp;
-	if (initializationAttempted) return null;
-
-	initializationAttempted = true;
-
-	const { projectId, clientEmail, privateKey } = config.appCheck;
-
-	if (!projectId || !clientEmail || !privateKey) {
-		logEvent({
-			type: LogLevel.Error,
-			content:
-				'Configuration Firebase incomplète : FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL et ' +
-				"FIREBASE_PRIVATE_KEY sont requis pour vérifier les attestations. Aucune requête ne sera attestée.",
-			location: middlewareLabel,
-			method: 'getFirebaseApp'
-		});
-		return null;
-	}
-
-	try {
-		const existing = getApps().find(app => app.name === FIREBASE_APP_NAME);
-		firebaseApp = existing ?? initializeApp({ credential: cert({ projectId, clientEmail, privateKey }) }, FIREBASE_APP_NAME);
-		return firebaseApp;
-	} catch (error) {
-		logEvent({
-			type: LogLevel.Error,
-			content: `Initialisation de Firebase Admin impossible : ${error}`,
-			location: middlewareLabel,
-			method: 'getFirebaseApp'
-		});
-		return null;
-	}
-};
 
 type AttestationOutcome = { attested: true; replayed: boolean } | { attested: false; reason: string };
 

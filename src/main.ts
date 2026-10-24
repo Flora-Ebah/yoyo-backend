@@ -4,6 +4,7 @@ import { MainHelper, SocketIOHelper } from "./helpers";
 import { startCleanupCron } from './cron/cleanup-clients.cron';
 import { startSubscriptionRenewalCron } from './cron/subscription-renewal.cron';
 import { startSponsorExpirationCron } from './cron/sponsor-expiration.cron';
+import { startDeviceTokenCleanupCron } from './cron/device-token-cleanup.cron';
 import { initNotificationServices } from './services/notification';
 import { initEventBus } from './events';
 import { assertSecureConfiguration } from './config/security-check';
@@ -83,6 +84,9 @@ export class Main {
 
     // [YO Boost] Expiration des mises en avant boutiques
     startSponsorExpirationCron();
+
+    // Push FCM : purge des jetons d'appareils abandonnés
+    startDeviceTokenCleanupCron();
 
     // Modération : charge la liste des médias bloqués servie par `/file/` (requête mise en
     // attente par Mongoose jusqu'à la connexion).

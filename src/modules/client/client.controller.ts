@@ -5,6 +5,7 @@ import { LoginService } from '../login/login.service';
 import { InfluencerService } from '../influencer/influencer.service';
 import { notificationManager, NotificationCategory, NotificationType } from '../../services/notification';
 import { NotificationHelper } from '../../helpers/notification.helper';
+import { PushNotificationService } from '../push-notification/push-notification.service';
 import { OtpController } from '../otp/otp.controller';
 
 const controllerLabel: string = 'ClientController';
@@ -698,22 +699,22 @@ export class ClientController {
           });
         }
         
+        // Push : socket + section Notifications + FCM sur tous les appareils du client. L'ancien
+        // chemin lisait un `pushToken` qui n'existe pas dans le modèle et échouait toujours.
+        if (notificationType === NotificationType.PUSH) {
+          const published: any = await new PushNotificationService().publishFromAdmin({ to: clientId, message });
+          if (published?.error) {
+            return resolve({ status: defines.status.serverError, message: "Échec de l'envoi de la notification", data: null });
+          }
+          return resolve({ status: defines.status.requestOK, message: 'Notification envoyée avec succès', data: null });
+        }
+
         // Déterminer le destinataire en fonction du type de notification
         let recipient = '';
         if (notificationType === NotificationType.EMAIL) {
           recipient = client.email;
         } else if (notificationType === NotificationType.SMS) {
           recipient = client.contact;
-        } else if (notificationType === NotificationType.PUSH) {
-          // Pour les notifications push, on utiliserait un token FCM stocké dans le profil du client
-          recipient = client.pushToken || '';
-          if (!recipient) {
-            return resolve({
-              status: defines.status.badRequest,
-              message: 'Ce client n\'a pas de token pour les notifications push',
-              data: null
-            });
-          }
         }
         
         // Envoyer la notification

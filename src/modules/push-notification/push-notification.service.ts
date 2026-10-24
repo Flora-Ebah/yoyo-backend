@@ -2,6 +2,9 @@ import { notificationManager, NotificationCategory, NotificationType } from '../
 import { IPushNotification } from './push-notification.interface';
 import { Events, PushNotificationSet } from './push-notification.model';
 import coddyger, { IData, IErrorObject, LoggerService, LogLevel } from 'coddyger';
+import { fcmService } from '../../services/notification/fcm.service';
+import { DeviceApp } from '../device-token/device-token.interface';
+import { BoutiqueManagerSet } from '../boutique-manager/boutique-manager.model';
 
 export class PushNotificationService {
   private readonly dao: IData<IPushNotification>;
@@ -160,26 +163,32 @@ export class PushNotificationService {
         timestamp: new Date().toISOString()
       };
 
-      // Destinataire de la notification. `to: 'all'` était codé en dur ici : chaque notification
-      // — donc chaque demande de réduction, avec les données du client — était sérialisée et
-      // diffusée à TOUS les téléphones connectés, qui filtraient ensuite sur l'appareil. Sous un
-      // pic de scans c'est le premier poste de charge de la boucle d'événements, et il croît avec
-      // le nombre de connectés plutôt qu'avec le nombre de scanneurs.
-      //
-      // `PushService` (couche transport) se charge du repli vers une diffusion générale si le
-      // destinataire n'a rejoint aucune room — c'est là que vit l'instance Socket.IO.
-      const recipient: string | undefined = (notification.data as any)?.userId
-        ? String((notification.data as any).userId)
-        : undefined;
+      // Destinataire(s) de la notification. `to: 'all'` était codé en dur ici : chaque notification
+      // — donc chaque demande de réduction, avec les données du client — était diffusée à TOUS les
+      // téléphones connectés. Une notification de groupe (`push-user-group`) partait elle aussi à
+      // tout le monde, `data.users` étant ignoré : on l'adresse maintenant à ses seuls destinataires.
+      const data: any = notification.data ?? {};
+      const recipients: string[] | 'all' =
+        notification.target === Events.NOTIFICATION_GROUP && Array.isArray(data.users)
+          ? data.users.map(String).filter(Boolean)
+          : data.userId
+            ? [String(data.userId)]
+            : 'all';
 
       const result:any = await this.sendNotification({
         ...payload,
         event: notification.target,
-        to: recipient ?? 'all'
+        to: recipients
       });
       if(result.success === false) {
         throw new Error(result);
       }
+
+      // Push FCM (appli fermée, Android et iOS), en plus du socket. Un échec FCM ne doit jamais
+      // faire échouer la notification : elle reste enregistrée et visible dans l'appli.
+      await this.sendFcm(notification, recipients).catch((fcmError) => {
+        LoggerService.log({ type: LogLevel.Error, content: fcmError, location: this.serviceLabel, method: 'sendFcm' });
+      });
 
       // Mettre à jour le statut de la notification
       await this.dao.update(
@@ -202,6 +211,51 @@ export class PushNotificationService {
       );
       return { error: true, data: error };
     }
+  }
+
+  /** Application ciblée par la push : les notifications de boutique ne concernent que le Pro. */
+  private static appFor(notification: IPushNotification): DeviceApp | undefined {
+    const data: any = notification.data ?? {};
+    if (data.app === 'client' || data.app === 'pro') return data.app;
+    if (notification.target === Events.PUSH_DEMANDE || notification.target === Events.NOTIFY_DEMANDE_STATUS) return 'pro';
+    return undefined;
+  }
+
+  /**
+   * Envoie la push FCM. Pour une notification de boutique, les gérants actifs la reçoivent aussi :
+   * ce sont eux qui tiennent la caisse quand le propriétaire est absent.
+   */
+  private async sendFcm(notification: IPushNotification, recipients: string[] | 'all'): Promise<void> {
+    const data: any = notification.data ?? {};
+    // Proximité : c'est la tâche de fond de l'appli Client qui interroge le serveur puis affiche
+    // elle-même la notification (`services/proximityLocation.ts`). Une push FCM ferait doublon.
+    if (data.kind === 'proximity') return;
+    let users = recipients;
+
+    if (users !== 'all' && notification.target === Events.PUSH_DEMANDE && data.boutiqueId) {
+      const managerModel: any = (new BoutiqueManagerSet() as any).defaultModel;
+      const managers: any[] = await managerModel.distinct('manager', { boutique: data.boutiqueId, status: 'active' });
+      users = [...new Set([...users, ...managers.map(String)])];
+    }
+
+    await fcmService.sendToUsers(
+      users,
+      {
+        title: notification.title,
+        body: notification.body,
+        data: {
+          event: notification.target ?? 'notification',
+          notificationId: notification._id,
+          url: data.url,
+          kind: data.kind,
+          partnerId: data.partnerId,
+          boutiqueId: data.boutiqueId,
+          demand: data.demand,
+          destination: data.destination
+        }
+      },
+      { app: PushNotificationService.appFor(notification), editorial: data.editorial === true }
+    );
   }
 
   private async sendNotification(notification: any): Promise<any> {
@@ -350,19 +404,27 @@ export class PushNotificationService {
    * émis et rien n'apparaissait côté utilisateur.
    * @param to `'all'`, un identifiant utilisateur, ou une liste d'identifiants
    */
-  async publishFromAdmin(input: { title?: string; message: string; to: string | string[]; url?: string }): Promise<any> {
+  async publishFromAdmin(input: {
+    title?: string;
+    message: string;
+    to: string | string[];
+    url?: string;
+    /** Données de diffusion (`editorial`, `app`, `destination`, `partnerId`) transmises aux applis. */
+    data?: Record<string, any>;
+  }): Promise<any> {
     const title = input.title?.trim() || 'YoYo';
     const base: any = { title, body: input.message, type: 'info', priority: 'normal', status: 'pending' };
+    const extra = { url: input.url, ...(input.data ?? {}) };
 
     if (Array.isArray(input.to)) {
       const users = input.to.map(String).filter(Boolean);
       if (users.length === 0) return null;
-      return this.create({ ...base, target: Events.NOTIFICATION_GROUP, data: { users, url: input.url } });
+      return this.create({ ...base, target: Events.NOTIFICATION_GROUP, data: { ...extra, users } });
     }
     if (!input.to || input.to === 'all') {
-      return this.create({ ...base, target: Events.PUSH_NOTIFICATION, data: { url: input.url } });
+      return this.create({ ...base, target: Events.PUSH_NOTIFICATION, data: extra });
     }
-    return this.create({ ...base, target: Events.USER_NOTIFICATION, data: { userId: String(input.to), url: input.url } });
+    return this.create({ ...base, target: Events.USER_NOTIFICATION, data: { ...extra, userId: String(input.to) } });
   }
 
   /** Conditions désignant les notifications adressées à un utilisateur précis. */
