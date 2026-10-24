@@ -270,7 +270,9 @@ export class LoginService {
 		// comptes `anonymized`, `suspended`, `inactive` et `locked` restent exclus.
 		let searchQuery: any = {
 			$or: [],
-			status: { $in: ['active', 'removed'] }
+			// `pending` : client inscrit dont l'email n'est pas encore vérifié — le login renvoie alors
+			// `ACCOUNT_NOT_VERIFIED` (voir `LoginController.login`) au lieu de « identifiants invalides ».
+			status: { $in: ['active', 'removed', 'pending'] }
 		};
 
 		if (isEmail) {

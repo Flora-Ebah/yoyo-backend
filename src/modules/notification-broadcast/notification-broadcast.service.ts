@@ -1,6 +1,7 @@
 import { NotificationService } from '../notification';
 import { NotificationType, NotificationCategory } from '../../services/notification/notification.interface';
 import { ClientSet } from '../client/client.model';
+import { PushNotificationService } from '../push-notification/push-notification.service';
 
 export type BroadcastSegment = 'all' | 'clients' | 'partners';
 
@@ -45,6 +46,13 @@ export class NotificationBroadcastService {
       data: { title: input.title, message: input.message },
       status: 'sent'
     } as any);
+
+    // Publication effective dans les apps (socket + section Notifications).
+    await new PushNotificationService().publishFromAdmin({
+      title: input.title,
+      message: input.message,
+      to: input.segment === 'all' ? 'all' : ids
+    });
 
     return { sent: ids.length };
   }

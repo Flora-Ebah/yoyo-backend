@@ -1,4 +1,4 @@
-import { Events } from "../modules/push-notification";
+import { Events, IPushNotification, PushNotificationService } from "../modules/push-notification";
 import { EmailService, MessageTypes, NotificationCategory, notificationManager, NotificationType, SmsService } from "../services/notification";
 
 const emailService = new EmailService();
@@ -73,24 +73,23 @@ export class MessageHelper {
 	}
 
 	// Certification notify
+	// Passe par `PushNotificationService` : la notification est enregistrée (visible dans la
+	// section Notifications) et envoyée au seul titulaire. Elle était auparavant diffusée à tous
+	// les appareils connectés (`to: 'all'`), sans trace en base.
 	static async certificationNotify(data: any, status: string) {
 		try {
-			await notificationManager.sendNotification({
-        category: NotificationCategory.INFO,
-        type: NotificationType.PUSH,
-        to: 'all',
-        data: {
-          title: 'Notification de certification',
-          message: status === 'verifie' ? 'Vos documents ont été vérifiés avec succès.' : 'Vos documents ont été refusés. Motif: ' + data.reason,
-          data: {
-            event: Events.USER_NOTIFICATION,
-            additionalData: {
-              url: '/profile/document/history',
-              user: data._id
-            }
-          }
-        }
-      });
+			await new PushNotificationService().create({
+				title: 'Notification de certification',
+				body: status === 'verifie' ? 'Vos documents ont été vérifiés avec succès.' : 'Vos documents ont été refusés. Motif: ' + data.reason,
+				type: 'info',
+				priority: 'high',
+				data: {
+					userId: String(data._id),
+					url: '/profile/document/history'
+				},
+				target: Events.USER_NOTIFICATION,
+				status: 'pending'
+			} as IPushNotification);
 		} catch (error) {
 			return { success: false, error };
 		}

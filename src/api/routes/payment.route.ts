@@ -466,6 +466,28 @@ const defaultRoute: any = (fastify: any, options, done) => {
     }
   });
 
+  // Détail d'une transaction du client connecté (ticket, références) — propriété vérifiée.
+  fastify.route({
+    schema: {
+      tags: tagsClient,
+      summary: "Détail d'une transaction du client connecté",
+      params: {
+        type: 'object',
+        properties: { id: { type: 'string' } },
+        required: ['id'],
+        additionalProperties: false
+      }
+    },
+    method: 'GET',
+    url: `${routePath}/client/details/:id`,
+    preHandler: TokenMiddleware.verify,
+    handler: (request, reply) => {
+      const user: any = request.user;
+      let Q = Controller.getClientTransactionDetails(user._id, request.params.id);
+      return coddyger.api(reply, Q);
+    }
+  });
+
   // Économies cumulées du client connecté (somme des réductions de ses tickets validés)
   fastify.route({
     schema: {

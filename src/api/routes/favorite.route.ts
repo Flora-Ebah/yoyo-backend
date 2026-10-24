@@ -1,6 +1,7 @@
 import coddyger from 'coddyger';
 import { FavoriteController } from '../../modules/favorite/favorite.controller';
 import { TokenMiddleware } from '../middleware';
+import { PartnerMediaHelper } from '../../helpers/partner-media.helper';
 
 const Controller: FavoriteController = new FavoriteController();
 const tags: string[] = ['Favoris'];
@@ -43,7 +44,8 @@ const defaultRoute: any = (fastify: any, options, done) => {
     preHandler: TokenMiddleware.verify,
     handler: (request, reply) => {
       const user: any = request.user;
-      return coddyger.api(reply, Controller.listForUser(user?._id));
+      // Vidéo réservée aux boutiques boostées.
+      return coddyger.api(reply, PartnerMediaHelper.apply(Controller.listForUser(user?._id), user));
     }
   });
 

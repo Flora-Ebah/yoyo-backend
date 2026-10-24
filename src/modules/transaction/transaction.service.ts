@@ -432,6 +432,12 @@ export class TransactionService {
       // la devise et de la référence). Orange Money conserve son chemin historique ci-dessous.
       const current: any = await this.dao.selectOne({ _id: payloads.id });
 
+      // Déjà réglée : l'app interroge toutes les 5 s, inutile de solliciter le prestataire ni de
+      // repasser par `updateTransactionStatus` (qui relancerait l'activation de l'abonnement).
+      if (current?.paymentStatus === 'success') {
+        return { ...current, isPaid: true };
+      }
+
       if (current?.paymentMethod === 'wave') {
         await this.settleTransaction(current, 'checkPaymentStatus');
 

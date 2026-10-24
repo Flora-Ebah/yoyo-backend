@@ -1,6 +1,6 @@
 import { notificationManager, NotificationCategory, NotificationType } from '../../services/notification';
 import { IPushNotification } from './push-notification.interface';
-import { PushNotificationSet } from './push-notification.model';
+import { Events, PushNotificationSet } from './push-notification.model';
 import coddyger, { IData, IErrorObject, LoggerService, LogLevel } from 'coddyger';
 
 export class PushNotificationService {
@@ -277,8 +277,11 @@ export class PushNotificationService {
   async markAllAsRead(userId: string): Promise<void | IErrorObject> {
     try {
       const result:any = await this.dao.updateMany(
-        { 
-          'target.userId': userId,
+        {
+          // `target` est une chaîne (nom d'événement) : l'ancien filtre `target.userId` ne
+          // correspondait à rien. Seules les notifications propres à l'utilisateur passent à `read`
+          // (les diffusions globales sont partagées et suivent `readBy` via `markAsRead`).
+          $or: PushNotificationService.ownedBy(userId),
           status: { $nin: ['removed', 'archived'] }
         },
         { 
@@ -342,6 +345,32 @@ export class PushNotificationService {
   }
 
   /**
+   * Publie dans l'app (socket + section Notifications) une notification envoyée depuis l'admin.
+   * Les envois admin n'étaient enregistrés que dans la collection `Notification` : rien n'était
+   * émis et rien n'apparaissait côté utilisateur.
+   * @param to `'all'`, un identifiant utilisateur, ou une liste d'identifiants
+   */
+  async publishFromAdmin(input: { title?: string; message: string; to: string | string[]; url?: string }): Promise<any> {
+    const title = input.title?.trim() || 'YoYo';
+    const base: any = { title, body: input.message, type: 'info', priority: 'normal', status: 'pending' };
+
+    if (Array.isArray(input.to)) {
+      const users = input.to.map(String).filter(Boolean);
+      if (users.length === 0) return null;
+      return this.create({ ...base, target: Events.NOTIFICATION_GROUP, data: { users, url: input.url } });
+    }
+    if (!input.to || input.to === 'all') {
+      return this.create({ ...base, target: Events.PUSH_NOTIFICATION, data: { url: input.url } });
+    }
+    return this.create({ ...base, target: Events.USER_NOTIFICATION, data: { userId: String(input.to), url: input.url } });
+  }
+
+  /** Conditions désignant les notifications adressées à un utilisateur précis. */
+  static ownedBy(userId: string): any[] {
+    return [{ 'data.user': userId }, { 'data.users': userId }, { 'data.userId': userId }];
+  }
+
+  /**
    * Récupère les notifications d'un utilisateur
    */
   async getUserNotifications(userId: string, payloads: { page?: number; pageSize?: number; read?: boolean }): Promise<any> {
@@ -355,10 +384,11 @@ export class PushNotificationService {
       };
 
       // Construire la requête en fonction des paramètres
+      // `data.userId` : clé utilisée par la plupart des émetteurs (réponse support, réduction
+      // invalidée, proximité…). Sans elle, ces notifications étaient reçues mais absentes de la liste.
       query.$or = [
         { 'target': 'push-notification' },
-        { 'data.user': userId },
-        { 'data.users': userId }
+        ...PushNotificationService.ownedBy(userId)
       ];
 
       if (read !== undefined) {

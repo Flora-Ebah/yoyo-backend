@@ -1080,6 +1080,36 @@ export class PaymentService {
    * @param payloads Paramètres de pagination et filtres
    * @returns Liste des transactions
    */
+  /**
+   * Détail d'une transaction (ticket de réduction) pour son seul titulaire : traçabilité côté
+   * client, à l'image du détail marchand de l'app Pro. Montants recalculés comme au `redeem`.
+   * @returns La transaction, ou `null` si elle n'existe pas ou n'appartient pas au client
+   */
+  async getClientTransactionDetails(clientId: string, paymentId: string): Promise<any> {
+    const payment: any = await this.dao.selectOne({ _id: paymentId, from: clientId });
+    if (!payment || payment.error) return null;
+
+    const amount = Number(payment.amount) || 0;
+    const pct = Number(payment.discountPercentage) || 0;
+    const net = Math.round(amount * (1 - pct / 100));
+    return {
+      _id: String(payment._id),
+      reference: String(payment._id),
+      boutique: payment.to ? { _id: String(payment.to._id ?? payment.to), name: payment.to.name } : null,
+      amount,
+      discountPercentage: pct,
+      reduction: amount - net,
+      net,
+      status: payment.status,
+      validatedBy: payment.validatedBy,
+      deniedReason: payment.deniedReason,
+      createdAt: payment.createdAt,
+      completedAt: payment.completedAt,
+      invalidatedAt: payment.invalidatedAt,
+      updatedAt: payment.updatedAt
+    };
+  }
+
   async getClientTransactions(clientId: string, payloads: { page?: number; pageSize?: number; status?: string }): Promise<any> {
     try {
       // Vérifier si le client existe

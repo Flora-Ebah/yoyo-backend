@@ -7,6 +7,7 @@ import { startSponsorExpirationCron } from './cron/sponsor-expiration.cron';
 import { initNotificationServices } from './services/notification';
 import { initEventBus } from './events';
 import { assertSecureConfiguration } from './config/security-check';
+import { MediaModerationService } from './modules/media-moderation/media-moderation.service';
 
 // Instance Socket.IO globale
 let socketInstance: SocketIOHelper | undefined;
@@ -82,6 +83,14 @@ export class Main {
 
     // [YO Boost] Expiration des mises en avant boutiques
     startSponsorExpirationCron();
+
+    // Modération : charge la liste des médias bloqués servie par `/file/` (requête mise en
+    // attente par Mongoose jusqu'à la connexion).
+    if (env.database.useDatabase === 'yes') {
+      new MediaModerationService().warmup().catch((error) => {
+        console.error('Chargement des médias bloqués impossible :', error);
+      });
+    }
   }
 }
 

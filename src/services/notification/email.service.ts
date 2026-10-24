@@ -235,11 +235,13 @@ export class EmailService extends NotificationService {
     userName?: string,
     details?: any
   ): Promise<{ success: boolean; message: string }> {
-    if (!this.initialized) {
-      await this.init();
-    }
-    
     try {
+      // `init()` relance son erreur : il doit être dans le `try`, sinon un SMTP injoignable
+      // devient un rejet non géré au lieu d'un échec signalé à l'appelant.
+      if (!this.initialized) {
+        await this.init();
+      }
+
       // Récupérer le template d'email en fonction du purpose
       const emailTemplate = MessageTypes.getEmailTemplate(purpose, code, userName, details);
       
@@ -256,7 +258,8 @@ export class EmailService extends NotificationService {
       
       LoggerService.log({
         type: LogLevel.Info,
-        content: `Email OTP envoyé à ${email} avec le code ${code} pour ${purpose}. Message ID: ${info.messageId}`,
+        // Le code n'est jamais journalisé : les logs ne doivent pas permettre de valider un OTP.
+        content: `Email OTP envoyé à ${email} pour ${purpose}. Message ID: ${info.messageId}`,
         location: this.serviceLabel,
         method: 'sendOtpEmail'
       });
@@ -265,8 +268,13 @@ export class EmailService extends NotificationService {
         success: true,
         message: 'Email envoyé avec succès'
       };
-    } catch (error) {
-      console.log(error)
+    } catch (error: any) {
+      LoggerService.log({
+        type: LogLevel.Error,
+        content: `Échec de l'envoi de l'email OTP à ${email} (${purpose}) : ${error?.message || error}`,
+        location: this.serviceLabel,
+        method: 'sendOtpEmail'
+      });
 
       return {
         success: false,

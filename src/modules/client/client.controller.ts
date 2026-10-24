@@ -5,6 +5,7 @@ import { LoginService } from '../login/login.service';
 import { InfluencerService } from '../influencer/influencer.service';
 import { notificationManager, NotificationCategory, NotificationType } from '../../services/notification';
 import { NotificationHelper } from '../../helpers/notification.helper';
+import { OtpController } from '../otp/otp.controller';
 
 const controllerLabel: string = 'ClientController';
 
@@ -218,9 +219,23 @@ export class ClientController {
         formattedItem.slug = coddyger.buildSlug('CLT', theLast ? theLast.slug : null);
         formattedItem.password = await coddyger.string.encryptPassword(formattedItem.password);
 
+        // Vérification de l'email (app Client) : le compte reste `pending` jusqu'à la saisie du
+        // code reçu par email ; `OtpController.verify` l'active (statut + `isEmailConfirmed`).
+        const requiresVerification = item.emailVerification === true && !formattedItem.isPartner;
+        delete formattedItem.emailVerification;
+        if (requiresVerification) formattedItem.status = 'pending';
+
         const save: any = await this.service.create(formattedItem);
         if (save.error) {
           return reject(save);
+        }
+
+        // Le compte existe même si l'email ne part pas : l'utilisateur peut redemander le code
+        // depuis l'écran de vérification ou en se connectant.
+        let otpSent = false;
+        if (requiresVerification) {
+          const otp: any = await new OtpController().generate(formattedItem.email, 'ACCOUNT_VERIFICATION');
+          otpSent = otp?.status === defines.status.requestOK;
         }
 
         // Suivi admin : un nouveau compte vient d'être créé sur les apps.
@@ -236,7 +251,7 @@ export class ClientController {
         resolve({
           status: defines.status.created,
           message: locale.controller.successSave,
-          data: { promo }
+          data: { promo, verificationRequired: requiresVerification, otpSent }
         });
       } catch (error) {
         reject(error);

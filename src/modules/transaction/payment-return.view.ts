@@ -16,7 +16,19 @@ export interface PaymentReturnState {
   reference?: string;
   /** URL de rechargement automatique, fournie uniquement tant que le statut reste en attente. */
   refreshUrl?: string;
+  /** Application d'origine du paiement : détermine le bouton « Retourner sur YoYo ». */
+  app?: 'client' | 'pro';
 }
+
+/**
+ * Liens de retour vers l'application. Sur Android, un lien `intent://` ouvre l'app par son
+ * package (ou sa fiche Play Store si elle est absente) ; ailleurs, le scheme personnalisé.
+ * Sans ce bouton, le client restait bloqué sur la page Wave et devait relancer l'app à la main.
+ */
+const APP_LINKS = {
+  client: { scheme: 'yoyo', pkg: 'com.yoyousers.yoyoafrica', path: 'payment-return', label: 'Retourner sur YoYo' },
+  pro: { scheme: 'yoyo-pro', pkg: 'com.yoyopro.yoyoafrica', path: '', label: 'Retourner sur YoYo Pro' }
+} as const;
 
 /**
  * Neutralise les caractères actifs avant injection dans le gabarit.
@@ -58,7 +70,7 @@ const copy: Record<PaymentReturnOutcome, { title: string; lead: string; note: st
   success: {
     title: 'Paiement confirmé',
     lead: 'Votre paiement a bien été reçu et votre abonnement YoYo est activé.',
-    note: 'Vous pouvez fermer cette page et revenir dans l\'application.'
+    note: 'Vous allez être redirigé vers l\'application. Sinon, touchez le bouton ci-dessus.'
   },
   pending: {
     title: 'Paiement en cours de confirmation',
@@ -89,7 +101,11 @@ const copy: Record<PaymentReturnOutcome, { title: string; lead: string; note: st
  */
 export const renderPaymentReturnPage = (state: PaymentReturnState): string => {
   const { outcome } = state;
-  const text = copy[outcome] ?? copy.invalid;
+  const base = copy[outcome] ?? copy.invalid;
+  // Le boost (app Pro) n'active pas d'abonnement : libellé adapté.
+  const text = outcome === 'success' && state.app === 'pro'
+    ? { ...base, lead: 'Votre paiement a bien été reçu et votre boost YoYo est activé.' }
+    : base;
   const icon = icons[outcome] ?? icons.invalid;
 
   // Le logo est servi par le backend sous `/assets/`, comme dans les e-mails et la page
@@ -111,6 +127,22 @@ export const renderPaymentReturnPage = (state: PaymentReturnState): string => {
   const manualRefresh = outcome === 'pending' && !state.refreshUrl
     ? `<p class="note">La confirmation tarde plus que d'habitude. <b>Rouvrez l'application YoYo</b> pour vérifier l'état de votre abonnement.</p>`
     : '';
+
+  const appLink = APP_LINKS[state.app ?? 'client'];
+  const query = appLink.path && state.reference ? `?tx=${encodeURIComponent(state.reference)}` : '';
+  const schemeUrl = `${appLink.scheme}://${appLink.path}${query}`;
+  const intentUrl = `intent://${appLink.path}${query}#Intent;scheme=${appLink.scheme};package=${appLink.pkg};end`;
+  // Rien à faire dans l'app tant que le lien est invalide.
+  const backButton = outcome === 'invalid'
+    ? ''
+    : `<a id="back" class="btn" href="${escapeHtml(schemeUrl)}">${escapeHtml(appLink.label)}</a>`;
+  // Choix du lien selon la plateforme, puis retour automatique quand le paiement est confirmé.
+  const backScript = outcome === 'invalid'
+    ? ''
+    : `<script>(function(){var a=document.getElementById('back');if(!a)return;` +
+      `if(/android/i.test(navigator.userAgent))a.href=${JSON.stringify(intentUrl)};` +
+      (outcome === 'success' ? `setTimeout(function(){window.location.href=a.href;},1200);` : '') +
+      `})();</script>`;
 
   const details = [
     amountLabel ? `<div class="row"><span>Montant</span><b>${escapeHtml(amountLabel)}</b></div>` : '',
@@ -139,6 +171,8 @@ ${autoRefresh}
   .row b{font-weight:700;text-align:right}
   .note{font-size:13px;color:var(--muted);margin:0;line-height:1.55}
   .note b{color:var(--ink);font-weight:700}
+  .btn{display:block;text-align:center;background:var(--brand);color:#fff;text-decoration:none;font-weight:700;
+    font-size:15px;padding:15px 18px;margin:0 0 18px;border-radius:10px}
   .spin{display:inline-block;width:13px;height:13px;margin-right:8px;vertical-align:-1px;
     border:2px solid var(--line);border-top-color:var(--brand);border-radius:50%;animation:s .8s linear infinite}
   @keyframes s{to{transform:rotate(360deg)}}
@@ -150,8 +184,10 @@ ${autoRefresh}
     <h1>${escapeHtml(text.title)}</h1>
     <p class="lead">${escapeHtml(text.lead)}</p>
     ${details ? `<div class="rows">${details}</div>` : ''}
+    ${backButton}
     <p class="note">${outcome === 'pending' && state.refreshUrl ? '<span class="spin"></span>' : ''}${escapeHtml(text.note)}</p>
     ${manualRefresh}
   </div>
+  ${backScript}
 </body></html>`;
 };

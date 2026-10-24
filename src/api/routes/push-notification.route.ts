@@ -182,6 +182,8 @@ const defaultRoute: any = (fastify: any, options, done) => {
         properties: {
           page: { type: 'number', default: 1 },
           pageSize: { type: 'number', default: 10 },
+          // Alias envoyé par l'app Client (`limit`) : ignoré jusqu'ici, la liste plafonnait à 10.
+          limit: { type: 'number' },
           read: { type: 'boolean' }
         }
       }
@@ -191,7 +193,8 @@ const defaultRoute: any = (fastify: any, options, done) => {
     preHandler: TokenMiddleware.verify,
     handler: (request, reply) => {
       const user: any = request.user;
-      const { page, pageSize, read } = request.query;
+      const { page, limit, read } = request.query;
+      const pageSize = Math.min(Number(limit ?? request.query.pageSize) || 10, 100);
       let Q = Controller.getUserNotifications(user._id, { page, pageSize, read });
       return coddyger.api(reply, Q);
     }

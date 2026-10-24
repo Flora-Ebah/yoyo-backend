@@ -3,6 +3,7 @@ import { locale } from '../../public';
 import { NotificationService } from './notification.service';
 import { INotification } from './notification.interface';
 import { NotificationType, NotificationCategory } from '../../services/notification/notification.interface';
+import { PushNotificationService } from '../push-notification/push-notification.service';
 
 const controllerLabel: string = 'NotificationController';
 
@@ -111,6 +112,17 @@ export class NotificationController {
 
         // Création de la notification
         const notification = await this.service.create(item);
+
+        // Notification push : on la publie aussi dans l'app pour qu'elle soit reçue et listée.
+        if (item.type === NotificationType.PUSH) {
+          const d: any = item.data || {};
+          await new PushNotificationService().publishFromAdmin({
+            title: d.title,
+            message: d.message,
+            url: d.url,
+            to: item.to as any
+          });
+        }
         
         resolve({
           status: defines.status.created,

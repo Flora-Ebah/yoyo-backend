@@ -116,7 +116,8 @@ Réponse :
 		handler: (request, reply) => {
 			const files = request.files;
 
-			let Q = Controller.upload(files, { maxImageBytes: maxSize });
+			// `uploader` : auteur de l'envoi, pour la modération (les envois admin ne sont pas analysés).
+			let Q = Controller.upload(files, { maxImageBytes: maxSize, uploader: request.user });
 			return coddyger.api(reply, Q);
 		}
 	});

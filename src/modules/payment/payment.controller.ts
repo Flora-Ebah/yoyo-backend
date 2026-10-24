@@ -528,6 +528,28 @@ export class PaymentController {
   }
 
   /**
+   * Détail d'une transaction du client connecté (404 si elle ne lui appartient pas).
+   * @param clientId `request.user._id`
+   * @param paymentId Identifiant de la transaction
+   */
+  getClientTransactionDetails(clientId: string, paymentId: string) {
+    return new Promise(async (resolve, reject) => {
+      try {
+        if (!coddyger.string.isValidObjectId(paymentId)) {
+          return resolve({ status: defines.status.badRequest, message: locale.wrongObjectId('de la transaction'), data: null });
+        }
+        const details = await this.service.getClientTransactionDetails(clientId, paymentId);
+        if (!details) {
+          return resolve({ status: defines.status.notFound, message: locale.notfound('Transaction'), data: null });
+        }
+        resolve({ status: defines.status.requestOK, message: 'Transaction', data: details });
+      } catch (error) {
+        reject(error);
+      }
+    }).catch((e: IErrorObject) => coddyger.catchReturn(e, controllerLabel, 'getClientTransactionDetails'));
+  }
+
+  /**
    * Économies cumulées du client connecté (tickets validés uniquement).
    * @param clientId `request.user._id`
    */

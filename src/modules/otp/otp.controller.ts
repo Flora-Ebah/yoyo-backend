@@ -100,13 +100,26 @@ export class OtpController {
 				if (save.error) {
 					reject(save);
 				} else {
-					// Send OTP based on login type
-					OtpService.sendOtp(
-						formattedLogin, 
-						code, 
-						validMessageType, 
+					// Envoi attendu : avant, la réponse annonçait un succès même quand l'email ou le
+					// SMS n'était jamais parti (SMTP en panne, SMS non configuré).
+					const sent = await OtpService.sendOtp(
+						formattedLogin,
+						code,
+						validMessageType,
 						emailValidation.isValid ? 'email' : 'phone'
 					);
+
+					if (!sent) {
+						await this.dao.update({ _id: newOtp._id }, { status: 'expired' });
+						resolve({
+							status: defines.status.serverError,
+							message: emailValidation.isValid
+								? "Le code de vérification n'a pas pu être envoyé par email. Réessayez dans un instant."
+								: "L'envoi de SMS est momentanément indisponible. Utilisez votre adresse email.",
+							data: null
+						});
+						return;
+					}
 
 					resolve({
 						status: defines.status.requestOK,
@@ -115,10 +128,43 @@ export class OtpController {
 					});
 				}
 			} catch (e) {
-				console.error(e);
-				return coddyger.catchReturn(e, controllerLabel, 'generate');
+				// `return catchReturn(...)` dans l'exécuteur laissait la promesse en suspens : la
+				// requête HTTP ne répondait jamais.
+				reject(e);
 			}
-		});
+		}).catch((e: IErrorObject) => coddyger.catchReturn(e, controllerLabel, 'generate'));
+	}
+
+	/**
+	 * Renvoie le code d'activation d'un client inscrit dont l'email n'est pas encore vérifié.
+	 * Réponse identique que le compte existe ou non, pour ne pas permettre de sonder les emails.
+	 */
+	resendAccountVerification(login: string) {
+		return new Promise(async (resolve, reject) => {
+			try {
+				const emailValidation = this.clientService.validateEmail(login);
+				const client: any = emailValidation.isValid
+					? await this.clientService.getOne(
+							{ email: this.clientService.formatEmail(login), status: 'pending', isPartner: { $ne: true } },
+							'_id email'
+						)
+					: null;
+
+				if (client?.email) {
+					const result: any = await this.generate(client.email, 'ACCOUNT_VERIFICATION');
+					// Un échec d'envoi réel est signalé : c'est une panne, pas une information sur le compte.
+					if (result?.status !== defines.status.requestOK) return resolve(result);
+				}
+
+				resolve({
+					status: defines.status.requestOK,
+					message: "Si un compte en attente correspond à cette adresse, un nouveau code vient d'être envoyé.",
+					data: null
+				});
+			} catch (e) {
+				reject(e);
+			}
+		}).catch((e: IErrorObject) => coddyger.catchReturn(e, controllerLabel, 'resendAccountVerification'));
 	}
 
 	/**

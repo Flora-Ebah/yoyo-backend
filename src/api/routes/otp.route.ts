@@ -258,6 +258,34 @@ const defaultRoute: any = (fastify: any, options, done) => {
 		}
 	});
 
+	// Renvoi du code de vérification d'inscription (app Client, compte `pending`).
+	fastify.route({
+		schema: {
+			tags,
+			summary: "Renvoyer le code de vérification de l'email (inscription)",
+			body: {
+				type: 'object',
+				properties: { login: { type: 'string' } },
+				required: ['login'],
+				additionalProperties: false
+			}
+		},
+		method: 'POST',
+		url: `${routePath}/account-verification/resend`,
+		preHandler: AppCheckMiddleware.verify,
+		config: {
+			rateLimit: {
+				max: 5,
+				timeWindow: '1 minute'
+			}
+		},
+		handler: (request, reply) => {
+			const { login } = request.body;
+			let Q = Controller.resendAccountVerification(login);
+			return coddyger.api(reply, Q);
+		}
+	});
+
 	done();
 };
 

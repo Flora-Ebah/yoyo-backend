@@ -2,6 +2,7 @@ import coddyger, { IErrorObject, defines } from 'coddyger';
 import { locale } from '../../public';
 import { ILogin, ILoginClient, LoginService } from './';
 import { ClientService } from '../client/client.service';
+import { OtpController } from '../otp/otp.controller';
 
 const controllerLabel: string = 'LoginController';
 
@@ -92,7 +93,8 @@ export class LoginController {
 				const searchQuery = this.service.buildClientSearchQuery(formattedLogin, isEmail);
 
         const client = await this.clientService.getOne(searchQuery);
-        if (!client) {
+        // Les comptes marchands `pending` suivent le parcours d'activation Pro : inchangés.
+        if (!client || (client.status === 'pending' && client.isPartner)) {
 					console.log(locale.notfound('Compte'), item.login);
 					return resolve({
 						status: defines.status.badRequest,
@@ -132,6 +134,21 @@ export class LoginController {
 						status: defines.status.badRequest,
 						message: this.service.getFailedLoginMessage(updatedLoginAttempts.attempts),
 						data: null
+					});
+				}
+
+				// Email non vérifié : on renvoie un code et l'app ouvre l'écran de saisie. Placé après la
+				// vérification du mot de passe pour ne rien révéler (ni envoyer) sans identifiants valides.
+				if (client.status === 'pending') {
+					const otp: any = await new OtpController().generate(client.email, 'ACCOUNT_VERIFICATION');
+					return resolve({
+						status: defines.status.forbidden,
+						message: "Votre adresse email n'est pas encore vérifiée. Saisissez le code que nous venons de vous envoyer.",
+						data: {
+							code: 'ACCOUNT_NOT_VERIFIED',
+							email: client.email,
+							otpSent: otp?.status === defines.status.requestOK
+						}
 					});
 				}
 

@@ -516,7 +516,9 @@ export class TransactionController {
       const details = {
         amount: transaction.amount,
         currency: transaction.currency,
-        reference: transaction._id ? String(transaction._id) : undefined
+        reference: transaction._id ? String(transaction._id) : undefined,
+        // Le boost de boutique est payé depuis l'app Pro ; tout le reste depuis l'app Client.
+        app: (transaction.kind === 'boutique-sponsor' ? 'pro' : 'client') as 'pro' | 'client'
       };
 
       if (result.alreadySettled || transaction.paymentStatus === 'success') {

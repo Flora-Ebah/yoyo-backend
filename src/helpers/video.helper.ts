@@ -58,6 +58,24 @@ export const extractPoster = async (file: string, output: string, duration: numb
 };
 
 /**
+ * Extrait une image JPEG (1280 px de large au plus) d'une vidéo à l'instant `at` (secondes), ou
+ * normalise une image (WebP, PNG lourd…) : ffmpeg lit les deux. Sert à la modération, qui
+ * n'accepte que du JPEG/PNG de moins de 5 Mo.
+ */
+export const extractFrame = async (file: string, output: string, at?: number): Promise<void> => {
+	const seek = at !== undefined ? ['-ss', Math.max(0, at).toFixed(2)] : [];
+	try {
+		await run(
+			'ffmpeg',
+			['-v', 'error', ...seek, '-i', file, '-frames:v', '1', '-vf', "scale='min(1280,iw)':-2", '-q:v', '4', '-y', output],
+			{ timeout: TOOL_TIMEOUT_MS }
+		);
+	} catch (error) {
+		throw toolError(error, 'ffmpeg');
+	}
+};
+
+/**
  * Remux « faststart » : réécrit le conteneur MP4 en déplaçant l'atome `moov` (l'index) en TÊTE du
  * fichier. Sans cela, le `moov` se trouve en fin de fichier et le lecteur doit tout télécharger
  * avant d'afficher la 1re image (écran noir puis apparition « d'un coup ») ; avec, la lecture

@@ -4,6 +4,7 @@ import multer from 'fastify-multer';
 import path from 'path';
 import mime from 'mime-types';
 import { isPublicKey, storage, storageDriver, uploadPath } from '../services/storage/storage.service';
+import { blockedMedia } from '../services/moderation/moderation-policy';
 
 interface FileUploadOptions {
   maxSize: number;
@@ -116,6 +117,8 @@ export const sendStoredFile = async (reply: any, key: string): Promise<any> => {
   reply.header('Cross-Origin-Resource-Policy', 'cross-origin');
 
   if (!isPublicKey(key)) return notFound();
+  // Média signalé ou rejeté par la modération (contenu sexuel) : jamais servi publiquement.
+  if (blockedMedia.isBlocked(key)) return notFound();
 
   if (await storage.localPath(key)) return reply.sendFile(key, uploadPath);
 

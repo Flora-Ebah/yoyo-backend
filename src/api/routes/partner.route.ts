@@ -2,6 +2,7 @@ import coddyger, { defines } from 'coddyger';
 import { PartnerController } from '../../modules/partner/partner.controller';
 import { SettingsService } from '../../modules/settings';
 import { AppCheckMiddleware, TokenMiddleware } from '../middleware';
+import { PartnerMediaHelper } from '../../helpers/partner-media.helper';
 
 const routePath = '/partners';
 const Controller: PartnerController = new PartnerController();
@@ -315,7 +316,8 @@ const defaultRoute: any = (fastify: any, options, done) => {
         createdBy = user?._id;
       }
 
-      let Q = Controller.getAll({ page, pageSize, status, query, category, createdBy, sort, from, to });
+      // Vidéo réservée aux boutiques boostées (sauf admin / propriétaire).
+      let Q = PartnerMediaHelper.apply(Controller.getAll({ page, pageSize, status, query, category, createdBy, sort, from, to }), user);
       return coddyger.api(reply, Q);
     }
   });
@@ -348,7 +350,7 @@ const defaultRoute: any = (fastify: any, options, done) => {
       const pageSize: any = request.query.pageSize;
       const status: any = request.query.status;
 
-      let Q = Controller.getAll({ status, page, pageSize });
+      let Q = PartnerMediaHelper.apply(Controller.getAll({ status, page, pageSize }), request.user);
       return coddyger.api(reply, Q);
     }
   });
@@ -373,7 +375,7 @@ const defaultRoute: any = (fastify: any, options, done) => {
     handler: (request, reply) => {
       const _id: any = request.params.id;
 
-      let Q = Controller.getById(_id);
+      let Q = PartnerMediaHelper.apply(Controller.getById(_id), request.user);
       return coddyger.api(reply, Q);
     }
   });
@@ -644,7 +646,7 @@ const defaultRoute: any = (fastify: any, options, done) => {
       let pageSize: any = request.query.pageSize;
       let ville: any = request.query.ville;
 
-      let Q = Controller.getOpenPartners({ page, pageSize, ville });
+      let Q = PartnerMediaHelper.apply(Controller.getOpenPartners({ page, pageSize, ville }), null);
       return coddyger.api(reply, Q);
     }
   });

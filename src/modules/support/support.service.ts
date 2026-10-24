@@ -768,7 +768,10 @@ export class SupportService {
 		try {
 			const faqResume = SUPPORT_FAQ.map((f) => `Q: ${f.q}\nR: ${f.a}`).join('\n');
 			const systemPrompt =
-				'Tu es l’assistant YoYo La Carte. Réponds en français, brièvement, sur la base de la FAQ.\n\n' +
+				'Tu es l’assistant YoYo La Carte. Réponds en français, brièvement, sur la base de la FAQ.\n' +
+				// Ton de la marque : « YO » est le salut YoYo ; tutoiement chaleureux et simple.
+				'Ton ton est chaleureux et proche : tu tutoies le client et, quand tu salues, tu dis « YO ». ' +
+				'Si le client te salue (bonjour, salut, yo…), réponds en commençant par « YO ! ».\n\n' +
 				'Tu réponds UNIQUEMENT par un objet JSON valide, sans texte autour, avec exactement ces clés :\n' +
 				'- "reply" (string) : ta réponse au client, en français.\n' +
 				'- "escalate" (boolean) : true si tu ne peux pas résoudre le problème, ou s’il s’agit d’un ' +

@@ -26,6 +26,8 @@ const defaultRoute: any = (fastify: any, options, done) => {
           birthdate: { type: 'string' },
           country: { type: 'string' },
           isPartner: { type: 'boolean', default: false },
+          // App Client : exige la vérification de l'email par OTP avant d'activer le compte.
+          emailVerification: { type: 'boolean' },
           // Matricule de l'agent (interne) rattaché à l'inscription, saisi depuis yoyo-pro.
           // Facultatif : s'il est fourni, il doit correspondre à un agent existant (sinon erreur).
           agentMatricule: { type: 'string' },

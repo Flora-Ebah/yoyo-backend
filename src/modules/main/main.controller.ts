@@ -8,6 +8,7 @@ import { ClientService } from '../client/client.service';
 import { PlatformConfigService } from '../platform-config/platform-config.service';
 import { storage } from '../../services/storage/storage.service';
 import { DURATION_TOLERANCE_SECONDS, VideoError, extractPoster, probeVideo, remuxFaststart } from '../../helpers/video.helper';
+import { MediaModerationService, ModerationVerdict } from '../media-moderation/media-moderation.service';
 const controllerLabel: string = 'MainController';
 
 export class MainController {
@@ -66,7 +67,7 @@ export class MainController {
 	 * Vidéos : poids et durée réelle (ffprobe) comparés aux limites réglées au BO, puis extraction
 	 * d'une image d'aperçu, renvoyée dans `poster`.
 	 */
-	upload(items: any[], options: { maxImageBytes: number }) {
+	upload(items: any[], options: { maxImageBytes: number; uploader?: any }) {
 		return new Promise(async (resolve, reject) => {
 			if (!items || items.length === 0) {
 				resolve({
@@ -86,7 +87,34 @@ export class MainController {
 
 			try {
 				const limits = await new PlatformConfigService().getMediaLimits();
-				const checked: Array<{ file: any; contentType: string; duration?: number }> = [];
+				const checked: Array<{ file: any; contentType: string; duration?: number; verdict?: ModerationVerdict }> = [];
+				// Modération (contenu sexuel / pédopornographique) des images et vidéos, avant tout
+				// enregistrement. Les envois de l'admin ne sont pas analysés.
+				const moderate = !options.uploader?.isAdmin;
+				const uploaderId = options.uploader?._id;
+				const moderation = new MediaModerationService();
+				const rejectIfInappropriate = async (file: any, contentType: string, duration?: number) => {
+					const verdict = await moderation.analyze(file, contentType, duration);
+					if (verdict.status !== 'rejected') return { verdict };
+					await moderation.record({
+						originalName: file.originalname,
+						mediaType: duration !== undefined ? 'video' : 'image',
+						uploaderId,
+						labels: verdict.labels,
+						maxConfidence: verdict.maxConfidence,
+						status: 'rejected'
+					});
+					await discardAll();
+					resolve({
+						status: 422,
+						message:
+							duration !== undefined
+								? 'Vidéo refusée : contenu inapproprié détecté. Les contenus à caractère sexuel sont interdits sur YoYo.'
+								: 'Image refusée : contenu inapproprié détecté. Les contenus à caractère sexuel sont interdits sur YoYo.',
+						data: { code: 'MEDIA_REJECTED', confidence: verdict.maxConfidence }
+					});
+					return null;
+				};
 
 				for (const file of items) {
 					if (!file) return refuse(locale.controller.uploadFailed);
@@ -94,7 +122,13 @@ export class MainController {
 					const contentType = FileUpload.contentTypeOf(file);
 					if (!FileUpload.isVideo(contentType)) {
 						if (file.size > options.maxImageBytes) return refuse(locale.controller.uploadTooLarge);
-						checked.push({ file, contentType });
+						let verdict: ModerationVerdict | undefined;
+						if (moderate && contentType.startsWith('image/')) {
+							const result = await rejectIfInappropriate(file, contentType);
+							if (!result) return;
+							verdict = result.verdict;
+						}
+						checked.push({ file, contentType, verdict });
 						continue;
 					}
 
@@ -105,11 +139,17 @@ export class MainController {
 					if (duration > limits.maxVideoSeconds + DURATION_TOLERANCE_SECONDS) {
 						return refuse(`Vidéo trop longue : ${Math.round(duration)} s (maximum ${limits.maxVideoSeconds} s)`);
 					}
-					checked.push({ file, contentType, duration });
+					let verdict: ModerationVerdict | undefined;
+					if (moderate) {
+						const result = await rejectIfInappropriate(file, contentType, duration);
+						if (!result) return;
+						verdict = result.verdict;
+					}
+					checked.push({ file, contentType, duration, verdict });
 				}
 
 				const files: Array<any> = [];
-				for (const { file, contentType, duration } of checked) {
+				for (const { file, contentType, duration, verdict } of checked) {
 					let poster: string | undefined;
 					if (duration !== undefined) {
 						const posterTemp = `${file.path}-poster.jpg`;
@@ -159,6 +199,22 @@ export class MainController {
 					}
 
 					if (save.error) throw save;
+
+					// Journal de modération ; un média `flagged` est stocké mais n'est plus servi par
+					// `/file/` tant qu'un admin ne l'a pas approuvé.
+					if (verdict) {
+						await moderation.record({
+							fileName: save.filename,
+							posterName: poster,
+							originalName: file.originalname,
+							mediaType: duration !== undefined ? 'video' : 'image',
+							uploaderId,
+							labels: verdict.labels,
+							maxConfidence: verdict.maxConfidence,
+							status: verdict.status,
+							note: verdict.note
+						});
+					}
 
 					files.push({
 						filename: save.filename,

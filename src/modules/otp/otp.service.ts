@@ -37,7 +37,8 @@ export class OtpService {
 	}
 
 	// Fonction pour envoyer le code OTP
-	static async sendOtp(login: string, code: string, purpose: string, type: 'email' | 'phone'): Promise<void> {
+	/** Envoie l'OTP ; renvoie `true` seulement si l'email / le SMS est réellement parti. */
+	static async sendOtp(login: string, code: string, purpose: string, type: 'email' | 'phone'): Promise<boolean> {
 		// Créer une instance des services
 		const emailService = new EmailService();
 		const smsService = new SmsService();
@@ -58,6 +59,7 @@ export class OtpService {
 					method: 'sendOtp'
 				});
 			}
+			return result.success;
 		} else {
 			// Utiliser le service SMS pour envoyer l'OTP
 			const result = await smsService.sendOtpSms(
@@ -74,6 +76,7 @@ export class OtpService {
 					method: 'sendOtp'
 				});
 			}
+			return result.success;
 		}
 	}
 

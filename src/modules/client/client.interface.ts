@@ -70,6 +70,9 @@ export interface IRegister {
   referralCode?: string;
   influencerCode?: string;
   agentMatricule?: string;
+  // Envoyé par l'app Client à partir de la version qui sait saisir le code : le compte reste
+  // `pending` jusqu'à la vérification de l'OTP email. Absent (anciennes versions, app Pro) ⇒ actif.
+  emailVerification?: boolean;
 }
 
 export interface ISecurityPreferences {
