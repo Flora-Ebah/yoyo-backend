@@ -37,6 +37,27 @@ const loadManagedPartner = async (reply: any, id: any, user: any, ownerOnly = fa
   return partner;
 };
 
+/**
+ * [SÉCURITÉ] Seuls champs qu'un appelant peut écrire sur une boutique via POST / PUT /partners.
+ * Le schéma accepte des propriétés supplémentaires : sans cette liste, un corps pouvait poser
+ * `verified`, `isSponsored`, `user`, `slug`… ou un opérateur Mongo (`$set`, `$unset`).
+ */
+const WRITABLE_PARTNER_FIELDS = [
+  'name', 'description', 'ville', 'address', 'latitude', 'longitude', 'phone', 'email', 'socials',
+  'categories', 'thumbnail', 'photos', 'video', 'videoPoster', 'maxDiscount', 'minOrder', 'status',
+  'openingHours'
+];
+
+/** Copie du corps limitée aux champs autorisés. */
+const pickWritable = (body: any): any => {
+  const out: any = {};
+  if (!body || typeof body !== 'object') return out;
+  for (const key of WRITABLE_PARTNER_FIELDS) {
+    if (Object.prototype.hasOwnProperty.call(body, key)) out[key] = body[key];
+  }
+  return out;
+};
+
 const VIDEO_BOOST_ONLY = 'La vidéo est réservée aux boutiques boostées. Activez YO Boost pour en ajouter une.';
 
 const routePath = '/partners';
@@ -153,18 +174,13 @@ const defaultRoute: any = (fastify: any, options, done) => {
     url: `${routePath}`,
     preHandler: TokenMiddleware.verify,
     handler: async (request, reply) => {
-      let body: any = request.body;
       let user: any = request.user;
+      // Champs autorisés uniquement (le plafond par achat `maxOrder` n'en fait plus partie).
+      let body: any = pickWritable(request.body);
       body.user = user._id;
 
-      // Le plafond par achat n'est plus fixé par le marchand : seul celui de la plateforme s'applique.
-      delete body.maxOrder;
-
-      if (!user?.isAdmin) {
-        // Une boutique neuve n'est pas boostée : pas de vidéo (avantage YO Boost).
-        if (body.video) return forbidden(reply, VIDEO_BOOST_ONLY);
-        delete body.isSponsored;
-      }
+      // Une boutique neuve n'est pas boostée : pas de vidéo (avantage YO Boost).
+      if (!user?.isAdmin && body.video) return forbidden(reply, VIDEO_BOOST_ONLY);
 
       if (Number(body.minOrder ?? 0) > 0 && !(await PartnerAccessHelper.isMinOrderEligible(body.categories))) {
         body.minOrder = 0;
@@ -268,18 +284,15 @@ const defaultRoute: any = (fastify: any, options, done) => {
     url: `${routePath}`,
     preHandler: TokenMiddleware.verify,
     handler: async (request, reply) => {
-      let body: any = request.body;
-      const _id = body._id;
-      delete body._id;
+      const _id = (request.body as any)?._id;
+      // Champs autorisés uniquement : jamais `user`, `isSponsored`, `maxOrder`, `slug`, opérateurs Mongo…
+      let body: any = pickWritable(request.body);
 
       let user: any = request.user;
 
       // [SÉCURITÉ] Seuls le propriétaire, un gérant actif ou un admin modifient une boutique, et le
       // propriétaire n'est jamais réécrit (avant : n'importe quel compte pouvait modifier n'importe
       // quelle boutique et en devenir propriétaire).
-      delete body.user;
-      delete body.isSponsored;
-      delete body.maxOrder;
 
       const current: any = await loadManagedPartner(reply, _id, user);
       if (!current) return;

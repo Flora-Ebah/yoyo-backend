@@ -199,6 +199,18 @@ describe('Remarques testeurs — app Pro', () => {
 			expect(state.code).to.equal(403);
 		});
 
+		it('PUT /partners : ignore les champs hors liste et les opérateurs Mongo', async () => {
+			await call('PUT', '/partners', {
+				body: { _id: PARTNER_ID, name: 'Renommée', verified: true, slug: 'pirate', $set: { user: STRANGER_ID } },
+				user: { _id: OWNER_ID }
+			});
+			const p: any = await partnerModel().findById(PARTNER_ID).lean();
+			expect(p.name).to.equal('Renommée');
+			expect(p.slug).to.equal('boutique-pro');
+			expect(p.verified).to.equal(undefined);
+			expect(String(p.user)).to.equal(OWNER_ID);
+		});
+
 		it('PUT /partners : identifiant invalide refusé', async () => {
 			const state = await call('PUT', '/partners', { body: { _id: 'abc' }, user: { _id: OWNER_ID } });
 			expect(state.code).to.equal(400);
