@@ -4,7 +4,12 @@ import { blockedMedia, decideModeration } from '../services/moderation/moderatio
 import { PartnerMediaHelper } from '../helpers/partner-media.helper';
 import { renderPaymentReturnPage } from '../modules/transaction/payment-return.view';
 import { PushNotificationService } from '../modules/push-notification/push-notification.service';
-import { sendStoredFile } from '../helpers/file-upload.helper';
+import { FileUpload, sendStoredFile } from '../helpers/file-upload.helper';
+import { TokenMiddleware } from '../api/middleware';
+import notificationRoute from '../api/routes/notification.route';
+import fs from 'fs/promises';
+import os from 'os';
+import path from 'path';
 
 /**
  * Correctifs issus des remarques des testeurs de l'app Client (octobre 2026).
@@ -118,6 +123,39 @@ describe('Remarques testeurs — app Client', () => {
 			const conditions = PushNotificationService.ownedBy('u1');
 			expect(conditions).to.deep.include({ 'data.userId': 'u1' });
 			expect(conditions).to.deep.include({ 'data.user': 'u1' });
+		});
+
+		it('`POST /notifications` (envoi à tous possible) est réservé à l’admin', () => {
+			const routes: any[] = [];
+			notificationRoute({ route: (d: any) => routes.push(d) }, {}, () => {});
+			const create = routes.find((r) => r.method === 'POST' && r.url === '/notifications');
+			expect(create.preHandler).to.equal(TokenMiddleware.verifyAdmin);
+		});
+	});
+
+	describe('Détection des images par leurs octets (modération)', () => {
+		const withFile = async (bytes: Buffer, run: (p: string) => Promise<void>) => {
+			const p = path.join(os.tmpdir(), `yoyo-sniff-${crypto.randomUUID()}`);
+			await fs.writeFile(p, bytes);
+			try { await run(p); } finally { await fs.rm(p, { force: true }); }
+		};
+
+		it('reconnaît un JPEG même déclaré sous un autre type', async () => {
+			await withFile(Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0, 0x10]), async (p) => {
+				expect(await FileUpload.sniffImageType(p)).to.equal('image/jpeg');
+			});
+		});
+
+		it('reconnaît un PNG', async () => {
+			await withFile(Buffer.from('89504e470d0a1a0a0000', 'hex'), async (p) => {
+				expect(await FileUpload.sniffImageType(p)).to.equal('image/png');
+			});
+		});
+
+		it('ne prend pas un PDF pour une image', async () => {
+			await withFile(Buffer.from('%PDF-1.7\n'), async (p) => {
+				expect(await FileUpload.sniffImageType(p)).to.equal(null);
+			});
 		});
 	});
 });

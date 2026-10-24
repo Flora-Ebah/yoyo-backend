@@ -107,7 +107,8 @@ const defaultRoute: any = (fastify: any, options, done) => {
     },
     method: 'POST',
     url: `${routePath}`,
-    preHandler: TokenMiddleware.verify,
+    // Envoi possible à tous les utilisateurs : réservé à l'admin.
+    preHandler: TokenMiddleware.verifyAdmin,
     handler: (request, reply) => {
       let body: any = request.body;
       let Q = Controller.create(body);

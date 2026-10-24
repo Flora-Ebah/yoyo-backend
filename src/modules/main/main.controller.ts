@@ -123,8 +123,11 @@ export class MainController {
 					if (!FileUpload.isVideo(contentType)) {
 						if (file.size > options.maxImageBytes) return refuse(locale.controller.uploadTooLarge);
 						let verdict: ModerationVerdict | undefined;
-						if (moderate && contentType.startsWith('image/')) {
-							const result = await rejectIfInappropriate(file, contentType);
+						// Image reconnue au type déclaré OU à ses octets : un type déclaré trompeur
+						// ne permet pas d'échapper à l'analyse.
+						const sniffed = moderate ? await FileUpload.sniffImageType(file.path) : null;
+						if (moderate && (contentType.startsWith('image/') || sniffed)) {
+							const result = await rejectIfInappropriate(file, sniffed || contentType);
 							if (!result) return;
 							verdict = result.verdict;
 						}

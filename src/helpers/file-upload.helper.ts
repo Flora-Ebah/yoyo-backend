@@ -91,6 +91,34 @@ export class FileUpload {
     return file?.mimetype || byName || 'application/octet-stream';
   }
 
+  /**
+   * Type image déduit des premiers octets du fichier (signature), ou `null`. Sert à la modération :
+   * le type déclaré par le client ne suffit pas, une image peut être annoncée autrement.
+   */
+  static async sniffImageType(filePath: string): Promise<string | null> {
+    let head: Buffer;
+    try {
+      const fh = await fs.promises.open(filePath, 'r');
+      try {
+        head = Buffer.alloc(16);
+        await fh.read(head, 0, 16, 0);
+      } finally {
+        await fh.close();
+      }
+    } catch {
+      return null;
+    }
+    if (head[0] === 0xff && head[1] === 0xd8 && head[2] === 0xff) return 'image/jpeg';
+    if (head.subarray(0, 4).toString('hex') === '89504e47') return 'image/png';
+    if (head.subarray(0, 4).toString('ascii') === 'GIF8') return 'image/gif';
+    if (head.subarray(0, 4).toString('ascii') === 'RIFF' && head.subarray(8, 12).toString('ascii') === 'WEBP') return 'image/webp';
+    if (head.subarray(0, 2).toString('ascii') === 'BM') return 'image/bmp';
+    if (head.subarray(4, 8).toString('ascii') === 'ftyp' && /^(heic|heix|hevc|mif1|msf1|avif)/.test(head.subarray(8, 12).toString('ascii'))) {
+      return 'image/heic';
+    }
+    return null;
+  }
+
   static isVideo(contentType: string): boolean {
     return contentType.startsWith('video/');
   }
