@@ -5,6 +5,7 @@ import { MongoMemoryServer } from 'mongodb-memory-server';
 import { TokenMiddleware } from '../api/middleware';
 import deviceTokenRoute from '../api/routes/device-token.route';
 import broadcastRoute from '../api/routes/notification-broadcast.route';
+import pushNotificationRoute from '../api/routes/push-notification.route';
 import { DeviceTokenService } from '../modules/device-token/device-token.service';
 import { DeviceTokenSet } from '../modules/device-token/device-token.model';
 import { FcmService } from '../services/notification/fcm.service';
@@ -149,6 +150,24 @@ describe('Push FCM et diffusions CMS', () => {
 			expect(multicast.called).to.equal(false);
 		});
 
+		it('notification ciblée sans destinataire : aucune push FCM (jamais « tous » par défaut)', async () => {
+			await new PushNotificationService().create({
+				title: 'Statut de la demande',
+				body: 'Sans userId',
+				data: { demand: 'd1' },
+				target: Events.USER_NOTIFICATION,
+				status: 'pending'
+			} as any);
+			expect(multicast.called).to.equal(false);
+		});
+
+		it('compte supprimé ou anonymisé : ses appareils ne reçoivent plus rien', async () => {
+			await model(ClientSet).updateOne({ _id: oid(CLIENT_A) }, { status: 'anonymized' });
+			await new FcmService().sendToUsers('all', { title: 't', body: 'b' }, { app: 'client' });
+			expect(sentTokens()).to.not.include(TOKEN('a'));
+			expect(sentTokens()).to.include(TOKEN('b'));
+		});
+
 		it('notification de groupe : seulement les destinataires listés', async () => {
 			await new PushNotificationService().publishFromAdmin({ message: 'Bonjour', to: [CLIENT_A] });
 			expect(sentTokens()).to.deep.equal([TOKEN('a')]);
@@ -237,6 +256,17 @@ describe('Push FCM et diffusions CMS', () => {
 			const routes = collect(broadcastRoute);
 			expect(routes).to.have.length(2);
 			routes.forEach(r => expect(r.preHandler).to.equal(TokenMiddleware.verifyAdmin));
+		});
+
+		it('notifications : création, liste globale, lecture et modification par ID réservées aux administrateurs', () => {
+			const routes = collect(pushNotificationRoute);
+			const guard = (method: string, url: string) => routes.find(r => r.method === method && r.url === url)?.preHandler;
+			expect(guard('POST', '/push-notifications')).to.equal(TokenMiddleware.verifyAdmin);
+			expect(guard('GET', '/push-notifications')).to.equal(TokenMiddleware.verifyAdmin);
+			expect(guard('GET', '/push-notifications/:id')).to.equal(TokenMiddleware.verifyAdmin);
+			expect(guard('PUT', '/push-notifications/:id')).to.equal(TokenMiddleware.verifyAdmin);
+			// Utilisées par l'appli Client pour ses propres notifications.
+			expect(guard('GET', '/push-notifications/me')).to.equal(TokenMiddleware.verify);
 		});
 	});
 });

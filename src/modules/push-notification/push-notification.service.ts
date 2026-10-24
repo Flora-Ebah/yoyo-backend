@@ -230,6 +230,9 @@ export class PushNotificationService {
     // Proximité : c'est la tâche de fond de l'appli Client qui interroge le serveur puis affiche
     // elle-même la notification (`services/proximityLocation.ts`). Une push FCM ferait doublon.
     if (data.kind === 'proximity') return;
+    // Sans destinataire désigné, seule une diffusion explicite part à tout le monde : une
+    // notification ciblée à laquelle il manquerait `userId` ne doit pas fuiter vers tous les appareils.
+    if (recipients === 'all' && notification.target !== Events.PUSH_NOTIFICATION) return;
     let users = recipients;
 
     if (users !== 'all' && notification.target === Events.PUSH_DEMANDE && data.boutiqueId) {

@@ -27,7 +27,9 @@ const defaultRoute: any = (fastify: any, options, done) => {
     },
     method: 'GET',
     url: `${routePath}`,
-    preHandler: TokenMiddleware.verify,
+    // [SÉCURITÉ] Administration des notifications : un compte utilisateur ne doit ni lister celles
+    // des autres, ni en émettre (la création déclenche socket + push FCM vers les destinataires).
+    preHandler: TokenMiddleware.verifyAdmin,
     handler: (request, reply) => {
       const { page, pageSize, query, status } = request.query;
       let Q = Controller.getAll({ page, pageSize, query, status });
@@ -50,7 +52,9 @@ const defaultRoute: any = (fastify: any, options, done) => {
     },
     method: 'GET',
     url: `${routePath}/:id`,
-    preHandler: TokenMiddleware.verify,
+    // [SÉCURITÉ] Administration des notifications : un compte utilisateur ne doit ni lister celles
+    // des autres, ni en émettre (la création déclenche socket + push FCM vers les destinataires).
+    preHandler: TokenMiddleware.verifyAdmin,
     handler: (request, reply) => {
       const { id } = request.params;
       let Q = Controller.getById(id);
@@ -87,7 +91,9 @@ const defaultRoute: any = (fastify: any, options, done) => {
     },
     method: 'POST',
     url: `${routePath}`,
-    preHandler: TokenMiddleware.verify,
+    // [SÉCURITÉ] Administration des notifications : un compte utilisateur ne doit ni lister celles
+    // des autres, ni en émettre (la création déclenche socket + push FCM vers les destinataires).
+    preHandler: TokenMiddleware.verifyAdmin,
     handler: (request, reply) => {
       const body = request.body;
       let Q = Controller.create(body);
@@ -140,7 +146,9 @@ const defaultRoute: any = (fastify: any, options, done) => {
     },
     method: 'PUT',
     url: `${routePath}/:id`,
-    preHandler: TokenMiddleware.verify,
+    // [SÉCURITÉ] Administration des notifications : un compte utilisateur ne doit ni lister celles
+    // des autres, ni en émettre (la création déclenche socket + push FCM vers les destinataires).
+    preHandler: TokenMiddleware.verifyAdmin,
     handler: (request, reply) => {
       const { id } = request.params;
       const body = request.body;

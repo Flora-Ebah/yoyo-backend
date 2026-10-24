@@ -8,6 +8,9 @@ import { ClientSet } from '../../modules/client/client.model';
 /** Limite de jetons par appel `sendEachForMulticast` imposée par FCM. */
 const FCM_BATCH_SIZE = 500;
 
+/** Comptes fermés : leurs appareils encore enregistrés ne reçoivent plus rien. */
+const CLOSED_ACCOUNT_STATUSES = ['removed', 'archived', 'anonymized'];
+
 /**
  * Codes d'erreur FCM qui signifient « ce jeton ne servira plus jamais » (appli désinstallée,
  * jeton expiré ou corrompu). Les autres erreurs (quota, réseau, charge invalide) ne justifient
@@ -66,19 +69,19 @@ export class FcmService {
     return app ? getMessaging(app) : null;
   }
 
-  /** Utilisateurs (parmi `userIds`) qui ont désactivé les push ou les actualités. */
-  private async optedOut(userIds: string[]): Promise<Set<string>> {
+  /**
+   * Utilisateurs (parmi `userIds`) à ne pas notifier : comptes supprimés, archivés ou anonymisés
+   * (leurs appareils peuvent encore être enregistrés) et, pour une diffusion éditoriale, ceux qui
+   * ont désactivé les push ou les actualités.
+   */
+  private async excluded(userIds: string[], editorial: boolean): Promise<Set<string>> {
     if (userIds.length === 0) return new Set();
     const model: any = (new ClientSet() as any).defaultModel;
-    const rows: any[] = await model
-      .find(
-        {
-          _id: { $in: userIds },
-          $or: [{ 'notificationPreferences.push': false }, { 'notificationPreferences.types.news': false }]
-        },
-        '_id'
-      )
-      .lean();
+    const reasons: any[] = [{ status: { $in: CLOSED_ACCOUNT_STATUSES } }];
+    if (editorial) {
+      reasons.push({ 'notificationPreferences.push': false }, { 'notificationPreferences.types.news': false });
+    }
+    const rows: any[] = await model.find({ _id: { $in: userIds }, $or: reasons }, '_id').lean();
     return new Set(rows.map(r => String(r._id)));
   }
 
@@ -87,8 +90,8 @@ export class FcmService {
     if (!messaging) return { sent: 0, failed: 0, skipped: true };
 
     let targets = await this.tokens.tokensFor(userIds, options.app);
-    if (options.editorial && targets.length > 0) {
-      const excluded = await this.optedOut([...new Set(targets.map(t => t.user))]);
+    if (targets.length > 0) {
+      const excluded = await this.excluded([...new Set(targets.map(t => t.user))], options.editorial === true);
       targets = targets.filter(t => !excluded.has(t.user));
     }
     if (targets.length === 0) return { sent: 0, failed: 0 };
