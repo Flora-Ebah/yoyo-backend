@@ -15,6 +15,14 @@ const schema = new mongoose.Schema<IPlatformConfig>({
   media: { maxVideoSeconds: { type: Number }, maxVideoSizeMb: { type: Number } },
   // Garde-fous du montant saisi par le client (cf. IPlatformConfig).
   redeemLimits: { maxAmount: { type: Number }, cooldownHours: { type: Number }, maxPerDay: { type: Number }, requireScanToken: { type: Boolean } },
+  // Programme de parrainage + compteur des récompenses attribuées (cf. IPlatformConfig).
+  referralProgram: {
+    enabled: { type: Boolean },
+    planId: { type: Schema.Types.ObjectId, ref: 'Plan' },
+    referralsPerReward: { type: Number },
+    rewardCap: { type: Number }
+  },
+  referralRewardsGranted: { type: Number, default: 0 },
   status: { type: String, enum: ['active', 'inactive', 'removed'], default: 'active' }
 },
 { timestamps: true, minimize: false });

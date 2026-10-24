@@ -37,7 +37,9 @@ const defaultRoute: any = (fastify: any, options, done) => {
           // Parrainage (#6/#7) : code du parrain (facultatif).
           referralCode: { type: 'string' },
           // Attribution influenceur (#17) : code influenceur (facultatif).
-          influencerCode: { type: 'string' }
+          influencerCode: { type: 'string' },
+          // Identifiant de l'appareil (anti auto-parrainage, Excel n°6). Facultatif.
+          deviceId: { type: 'string', maxLength: 128 }
         },
         required: ['email', 'password', 'contact', 'country'],
         additionalProperties: false

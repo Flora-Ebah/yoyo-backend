@@ -1,4 +1,5 @@
 import coddyger, { IErrorObject, defines, env } from 'coddyger';
+import { referralService } from '../referral/referral.service';
 import { locale } from '../../public';
 import { IClient, IRegister, ClientService, IUpdatePassword } from './';
 import { LoginService } from '../login/login.service';
@@ -87,7 +88,10 @@ export class ClientController {
   getReferral(userId: string) {
     return new Promise(async (resolve, reject) => {
       try {
-        const data = await this.service.getReferralInfo(userId);
+        const data = await referralService.info(userId);
+        if (!data) {
+          return resolve({ status: defines.status.notFound, message: 'Compte introuvable', data: null });
+        }
         resolve({ status: defines.status.requestOK, message: 'OK', data });
       } catch (error) {
         reject(error);
@@ -208,6 +212,12 @@ export class ClientController {
           }
         }
 
+        // Anti auto-parrainage (Excel n°6) : identifiant de l'appareil d'inscription. Transitoire
+        // dans la requête (`deviceId`), conservé sur le compte (`signupDeviceId`).
+        const rawDeviceId = (item as any).deviceId;
+        if (rawDeviceId && String(rawDeviceId).trim()) formattedItem.signupDeviceId = String(rawDeviceId).trim().slice(0, 128);
+        delete formattedItem.deviceId;
+
         // Le code saisi (celui du parrain) ne doit jamais devenir le code propre du nouveau
         // client : on le retire pour que `create()` en génère un neuf et unique.
         delete formattedItem.referralCode;
@@ -229,6 +239,13 @@ export class ClientController {
         const save: any = await this.service.create(formattedItem);
         if (save.error) {
           return reject(save);
+        }
+
+        // Parrainage : règle de vitesse sur le parrain ; s'il n'y a pas de vérification à attendre,
+        // le compte est déjà actif et le parrain est prévenu tout de suite.
+        if (formattedItem.referredBy) {
+          void referralService.onRegistered(String(formattedItem.referredBy));
+          if (!requiresVerification) void referralService.onActivated(String(formattedItem._id));
         }
 
         // Le compte existe même si l'email ne part pas : l'utilisateur peut redemander le code

@@ -48,6 +48,25 @@ export interface IClient {
   freeMonthsGranted?: number;
   /** Parrainage — vrai une fois que ce filleul a été comptabilisé chez son parrain (idempotence). */
   referralCredited?: boolean;
+  /** Identifiant de l'appareil à l'inscription (Android ID / identifiant iOS) : anti auto-parrainage. */
+  signupDeviceId?: string;
+  /** Filleul : date de validation (1er abonnement payé). */
+  referralValidatedAt?: Date;
+  /** Filleul : motif de refus (`same-device`, `same-phone`) — il ne comptera jamais. */
+  referralRejected?: string;
+  /** Parrain : trop de filleuls en 24 h, la récompense attend une vérification dans le CMS. */
+  referralReview?: boolean;
+  /** Parrain : date de la dernière revue levée (la règle de vitesse ne compte qu'après). */
+  referralReviewClearedAt?: Date;
+  /** Parrain : octroi du mois offert (`FreeMonthGrant`) — une seule récompense par parrain. */
+  referralRewardId?: any;
+  /** Parrain : fraude confirmée, plus aucune récompense. */
+  referralRewardBlocked?: boolean;
+  /** Parrain : avertissements pour fraude (blocage du compte à la récidive). */
+  referralWarnings?: number;
+  /** Parrain : relances envoyées (2 au plus) et date de la dernière. */
+  referralNudges?: number;
+  referralLastNudgeAt?: Date;
   /** Parrainage — code influenceur (#17) saisi à l'inscription (distinct du parrainage utilisateur). */
   influencerCode?: string;
   /** Push proximité (#1) — dernière position connue remontée par l'app (background). */

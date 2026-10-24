@@ -71,10 +71,21 @@ const schema = new mongoose.Schema<IClient>({
 	reactivatedAt: { type: Date },
 	// Parrainage (#6/#7) + attribution influenceur (#17).
 	referralCode: { type: String, index: true },
-	referredBy: { type: mongoose.Schema.Types.ObjectId, ref: 'Client' },
+	referredBy: { type: mongoose.Schema.Types.ObjectId, ref: 'Client', index: true },
 	referredCount: { type: Number, default: 0 },
 	freeMonthsGranted: { type: Number, default: 0 },
 	referralCredited: { type: Boolean, default: false },
+	// Parrainage : anti-fraude, revue et relances (cf. IClient).
+	signupDeviceId: { type: String },
+	referralValidatedAt: { type: Date },
+	referralRejected: { type: String },
+	referralReview: { type: Boolean, default: false },
+	referralReviewClearedAt: { type: Date },
+	referralRewardId: { type: mongoose.Schema.Types.ObjectId, ref: 'FreeMonthGrant' },
+	referralRewardBlocked: { type: Boolean, default: false },
+	referralWarnings: { type: Number, default: 0 },
+	referralNudges: { type: Number, default: 0 },
+	referralLastNudgeAt: { type: Date },
 	influencerCode: { type: String },
 	// Push proximité (#1).
 	lastLocation: { lat: { type: Number }, lng: { type: Number }, at: { type: Date } },

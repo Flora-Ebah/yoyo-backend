@@ -43,6 +43,23 @@ const normalizeRedeemLimits = (limits: any): NonNullable<IPlatformConfig['redeem
   };
 };
 
+/** Programme de parrainage : valeurs de départ, modifiables au BO (décisions 1 et 5). */
+export const DEFAULT_REFERRAL_PROGRAM = { enabled: true, planId: null, referralsPerReward: 3, rewardCap: 3000 };
+
+/** Paramètres du parrainage valides, champ par champ (un document ancien retombe sur le défaut). */
+const normalizeReferralProgram = (program: any): NonNullable<IPlatformConfig['referralProgram']> => {
+  const positive = (value: any, fallback: number) => {
+    const n = Number(value);
+    return Number.isInteger(n) && n > 0 ? n : fallback;
+  };
+  return {
+    enabled: program?.enabled !== false,
+    planId: program?.planId ? String(program.planId) : null,
+    referralsPerReward: positive(program?.referralsPerReward, DEFAULT_REFERRAL_PROGRAM.referralsPerReward),
+    rewardCap: positive(program?.rewardCap, DEFAULT_REFERRAL_PROGRAM.rewardCap)
+  };
+};
+
 export class PlatformConfigService {
   private readonly dao: PlatformConfigSet;
 
@@ -66,7 +83,13 @@ export class PlatformConfigService {
     }
     // `media` toujours complet dans la réponse, y compris pour un document créé avant ce champ :
     // les apps lisent ces limites sans valeur de repli codée en dur de leur côté.
-    return { ...doc, media: normalizeMedia(doc.media), redeemLimits: normalizeRedeemLimits(doc.redeemLimits) } as IPlatformConfig;
+    return {
+      ...doc,
+      media: normalizeMedia(doc.media),
+      redeemLimits: normalizeRedeemLimits(doc.redeemLimits),
+      referralProgram: normalizeReferralProgram(doc.referralProgram),
+      referralRewardsGranted: Number(doc.referralRewardsGranted) || 0
+    } as IPlatformConfig;
   }
 
   /** Garde-fous du montant saisi par le client (plafond, délai par boutique, quota journalier). */
@@ -76,6 +99,44 @@ export class PlatformConfigService {
     } catch {
       return { ...DEFAULT_REDEEM_LIMITS };
     }
+  }
+
+  /** Paramètres du programme de parrainage + nombre de récompenses déjà attribuées. */
+  async getReferralProgram(): Promise<NonNullable<IPlatformConfig['referralProgram']> & { granted: number }> {
+    try {
+      const config = await this.get();
+      return { ...normalizeReferralProgram(config.referralProgram), granted: config.referralRewardsGranted ?? 0 };
+    } catch {
+      return { ...DEFAULT_REFERRAL_PROGRAM, granted: 0 };
+    }
+  }
+
+  /**
+   * Réserve atomiquement une place du programme (« 3 000 premiers »). Deux validations simultanées
+   * ne peuvent pas dépasser le plafond : l'incrément n'a lieu que si le compteur est sous `cap`.
+   * Retourne `false` quand le programme est complet.
+   */
+  async reserveReferralReward(cap: number): Promise<boolean> {
+    await this.get(); // garantit l'existence du singleton
+    const model: any = (this.dao as any).defaultModel;
+    const doc = await model.findOneAndUpdate(
+      {
+        status: { $ne: 'removed' },
+        $or: [{ referralRewardsGranted: { $lt: cap } }, { referralRewardsGranted: { $exists: false } }]
+      },
+      { $inc: { referralRewardsGranted: 1 } },
+      { new: true }
+    );
+    return !!doc;
+  }
+
+  /** Libère une place (récompense annulée ou attribution échouée). */
+  async releaseReferralReward(): Promise<void> {
+    const model: any = (this.dao as any).defaultModel;
+    await model.updateOne(
+      { status: { $ne: 'removed' }, referralRewardsGranted: { $gt: 0 } },
+      { $inc: { referralRewardsGranted: -1 } }
+    );
   }
 
   /** Limites de la vidéo de présentation (durée en secondes, poids en Mo). */
@@ -118,6 +179,10 @@ export class PlatformConfigService {
 
     if (data.redeemLimits) {
       next.redeemLimits = normalizeRedeemLimits({ ...current.redeemLimits, ...data.redeemLimits });
+    }
+
+    if (data.referralProgram) {
+      next.referralProgram = normalizeReferralProgram({ ...current.referralProgram, ...data.referralProgram });
     }
 
     const res: any = await this.dao.update({ _id: (current as any)._id }, next);

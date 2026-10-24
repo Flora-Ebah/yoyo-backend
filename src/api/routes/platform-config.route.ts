@@ -84,6 +84,17 @@ const defaultRoute: any = (fastify: any, options, done) => {
               requireScanToken: { type: 'boolean' }
             },
             additionalProperties: false
+          },
+          // Programme de parrainage (plan offert, filleuls requis, plafond « 3 000 premiers »).
+          referralProgram: {
+            type: 'object',
+            properties: {
+              enabled: { type: 'boolean' },
+              planId: { anyOf: [{ type: 'string', pattern: '^[0-9a-fA-F]{24}$' }, { type: 'null' }] },
+              referralsPerReward: { type: 'integer', minimum: 1, maximum: 20 },
+              rewardCap: { type: 'integer', minimum: 1, maximum: 1000000 }
+            },
+            additionalProperties: false
           }
         },
         additionalProperties: false

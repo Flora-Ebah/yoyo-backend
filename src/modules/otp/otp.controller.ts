@@ -282,6 +282,9 @@ export class OtpController {
 					const confirmationFlag =
 						otp.type === 'email' ? { isEmailConfirmed: true } : { isPhoneConfirmed: true };
 					await this.clientService.update(user._id, { status: 'active', ...confirmationFlag });
+					// Parrainage : le parrain apprend que son filleul a rejoint YoYo (sans bloquer).
+					const { referralService } = require('../referral/referral.service');
+					void referralService.onActivated(String(user._id));
 					// Un client inscrit par téléphone peut ne pas avoir d'email.
 					if (user.email) {
 						MessageHelper.welcomeClient(user);

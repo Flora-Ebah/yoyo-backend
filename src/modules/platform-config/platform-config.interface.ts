@@ -24,5 +24,18 @@ export interface IPlatformConfig {
    *    (QR à jeton court échangé via `scan-verify`) ; le `to` legacy en clair n'est plus accepté.
    */
   redeemLimits?: { maxAmount: number; cooldownHours: number; maxPerDay: number; requireScanToken: boolean };
+  /**
+   * Programme de parrainage (Excel Parrainage n°2, décisions 1 et 5) :
+   *  - `enabled` : coupe l'attribution de nouvelles récompenses (le comptage des filleuls continue) ;
+   *  - `planId` : plan offert pendant le mois gratuit (vide = plan actif à 2 000 F, sinon le moins cher) ;
+   *  - `referralsPerReward` : filleuls validés pour débloquer LA récompense (une seule par parrain) ;
+   *  - `rewardCap` : nombre total de récompenses du programme (« 3 000 premiers »).
+   */
+  referralProgram?: { enabled: boolean; planId?: string | null; referralsPerReward: number; rewardCap: number };
+  /**
+   * Récompenses de parrainage déjà attribuées. Compteur distinct de `referralProgram` : il n'est
+   * modifié que par `$inc` atomique (réservation d'une place), jamais par la mise à jour du BO.
+   */
+  referralRewardsGranted?: number;
   status?: string;
 }

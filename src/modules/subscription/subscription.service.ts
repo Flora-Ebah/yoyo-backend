@@ -283,12 +283,15 @@ export class SubscriptionService {
           };
         }
         
-        // Parrainage (#6/#7) : si cet abonné a été parrainé, on comptabilise le filleul chez son
-        // parrain (crédit d'1 mois tous les 3 filleuls). Idempotent (une seule fois par filleul,
-        // renouvellements ignorés) et best-effort : un échec n'empêche jamais la création de l'abo.
+        // Parrainage : un filleul n'est validé qu'à un abonnement PAYÉ (décision n°2) — un plan
+        // gratuit ne compte pas. Idempotent (une seule fois par filleul, renouvellements ignorés)
+        // et best-effort : un échec n'empêche jamais la création de l'abonnement.
         try {
-          const { ClientService } = require('../client/client.service');
-          await new ClientService().creditReferrerForPaidReferral(userId);
+          if (Number(plan.price) > 0) {
+            // `require` différé : `referral.service` dépend des notifications, qui importent `main`.
+            const { referralService } = require('../referral/referral.service');
+            await referralService.onPaidSubscription(String(userId));
+          }
         } catch (referralError) {
           LoggerService.log({ type: LogLevel.Error, content: referralError, location: this.serviceLabel, method: 'createSubscription:referral' });
         }
