@@ -99,6 +99,27 @@ export const normalizeSupportSla = (sla: any): NonNullable<IPlatformConfig['supp
   };
 };
 
+export const DEFAULT_FRAUD_RULES: NonNullable<IPlatformConfig['fraudRules']> = {
+  accountsPerDevice: 3,
+  scansPerDay: 15,
+  boutiqueSpikeFactor: 3,
+  boutiqueSpikeMin: 20
+};
+
+/** Seuils valides, champ par champ (repli sur le défaut). */
+export const normalizeFraudRules = (rules: any): NonNullable<IPlatformConfig['fraudRules']> => {
+  const num = (value: any, fallback: number, min: number, max: number) => {
+    const n = Number(value);
+    return Number.isFinite(n) && n >= min && n <= max ? n : fallback;
+  };
+  return {
+    accountsPerDevice: Math.round(num(rules?.accountsPerDevice, DEFAULT_FRAUD_RULES.accountsPerDevice, 2, 50)),
+    scansPerDay: Math.round(num(rules?.scansPerDay, DEFAULT_FRAUD_RULES.scansPerDay, 2, 500)),
+    boutiqueSpikeFactor: num(rules?.boutiqueSpikeFactor, DEFAULT_FRAUD_RULES.boutiqueSpikeFactor, 1.5, 50),
+    boutiqueSpikeMin: Math.round(num(rules?.boutiqueSpikeMin, DEFAULT_FRAUD_RULES.boutiqueSpikeMin, 1, 10000))
+  };
+};
+
 export class PlatformConfigService {
   private readonly dao: PlatformConfigSet;
 
@@ -128,7 +149,8 @@ export class PlatformConfigService {
       redeemLimits: normalizeRedeemLimits(doc.redeemLimits),
       referralProgram: normalizeReferralProgram(doc.referralProgram),
       referralRewardsGranted: Number(doc.referralRewardsGranted) || 0,
-      supportSla: normalizeSupportSla(doc.supportSla)
+      supportSla: normalizeSupportSla(doc.supportSla),
+      fraudRules: normalizeFraudRules(doc.fraudRules)
     } as IPlatformConfig;
   }
 
@@ -188,6 +210,15 @@ export class PlatformConfigService {
     }
   }
 
+  /** Seuils des alertes fraude (Excel CMS n°3). */
+  async getFraudRules(): Promise<NonNullable<IPlatformConfig['fraudRules']>> {
+    try {
+      return normalizeFraudRules((await this.get()).fraudRules);
+    } catch {
+      return { ...DEFAULT_FRAUD_RULES };
+    }
+  }
+
   /** Limites de la vidéo de présentation (durée en secondes, poids en Mo). */
   async getMediaLimits(): Promise<NonNullable<IPlatformConfig['media']>> {
     try {
@@ -236,6 +267,10 @@ export class PlatformConfigService {
 
     if (data.supportSla) {
       next.supportSla = normalizeSupportSla({ ...current.supportSla, ...data.supportSla });
+    }
+
+    if (data.fraudRules) {
+      next.fraudRules = normalizeFraudRules({ ...current.fraudRules, ...data.fraudRules });
     }
 
     const res: any = await this.dao.update({ _id: (current as any)._id }, next);

@@ -5,6 +5,7 @@ import { AppCheckMiddleware, TokenMiddleware } from '../middleware';
 import { PartnerMediaHelper } from '../../helpers/partner-media.helper';
 import { PartnerAccessHelper } from '../../helpers/partner-access.helper';
 import { PartnerSet } from '../../modules/partner';
+import { PartnerValidationService, partnerValidationService } from '../../modules/partner/partner-validation.service';
 
 /** Refus 403 au format `{ status, message, data }` attendu par `coddyger.api`. */
 const forbidden = (reply: any, message: string) =>
@@ -191,7 +192,17 @@ const defaultRoute: any = (fastify: any, options, done) => {
         body.minOrder = 0;
       }
 
-      let Q = Controller.create(body);
+      // Boutique créée par le marchand lui-même : en attente de validation par l'équipe YoYo
+      // (Excel CMS n°14). Un admin (commercial) la crée directement active.
+      const selfService = !user?.isAdmin;
+      if (selfService) Object.assign(body, PartnerValidationService.pendingFields());
+
+      let Q = Controller.create(body).then(async (res: any) => {
+        if (selfService && res?.status === defines.status.created && body._id) {
+          await partnerValidationService.notifySubmitted({ _id: body._id, name: body.name });
+        }
+        return res;
+      });
       return coddyger.api(reply, Q);
     }
   });
@@ -347,7 +358,11 @@ const defaultRoute: any = (fastify: any, options, done) => {
         }
       }
 
-      let Q = Controller.update(String(current._id), body);
+      // Boutique refusée puis modifiée par le marchand : renvoyée en validation.
+      let Q = Controller.update(String(current._id), body).then(async (res: any) => {
+        if (!isAdmin && res?.status === defines.status.requestOK) await partnerValidationService.resubmitIfRejected(String(current._id));
+        return res;
+      });
       return coddyger.api(reply, Q);
     }
   });
@@ -403,6 +418,9 @@ const defaultRoute: any = (fastify: any, options, done) => {
       if (createdBy === 'me') {
         createdBy = user?._id;
       }
+      // Appli Client : uniquement les boutiques en service (ni en attente de validation, ni
+      // suspendues). Le back-office garde tous les statuts.
+      if (!user?.isAdmin) status = 'active';
 
       // Vidéo réservée aux boutiques boostées (sauf admin / propriétaire).
       let Q = PartnerMediaHelper.apply(Controller.getAll({ page, pageSize, status, query, category, createdBy, sort, from, to, ville }), user);
@@ -445,7 +463,8 @@ const defaultRoute: any = (fastify: any, options, done) => {
     handler: (request, reply) => {
       const page: any = request.query.page || 1;
       const pageSize: any = request.query.pageSize;
-      const status: any = request.query.status;
+      // Hors back-office : boutiques en service uniquement.
+      const status: any = request.user?.isAdmin ? request.query.status : 'active';
 
       let Q = PartnerMediaHelper.apply(Controller.getAll({ status, page, pageSize }), request.user);
       return coddyger.api(reply, Q);
@@ -471,8 +490,18 @@ const defaultRoute: any = (fastify: any, options, done) => {
     preHandler: TokenMiddleware.verify,
     handler: (request, reply) => {
       const _id: any = request.params.id;
+      const user: any = request.user;
 
-      let Q = PartnerMediaHelper.apply(Controller.getById(_id), request.user);
+      // Boutique en attente, refusée ou suspendue : visible seulement de son propriétaire, de ses
+      // gérants et du back-office (Excel CMS n°14).
+      const guarded = Controller.getById(_id).then(async (res: any) => {
+        const partner = res?.data;
+        if (partner && partner.status !== 'active' && !(await PartnerAccessHelper.canManage(partner, user))) {
+          return { status: defines.status.notFound, message: 'Boutique introuvable.', data: null };
+        }
+        return res;
+      });
+      let Q = PartnerMediaHelper.apply(guarded, user);
       return coddyger.api(reply, Q);
     }
   });

@@ -56,8 +56,17 @@ const schema = new mongoose.Schema<IPartner>({
   
   status: {
     type: String,
-    enum: ['active', 'inactive', 'suspended', 'removed'],
+    enum: ['active', 'inactive', 'suspended', 'removed', 'pending'],
     default: 'active'
+  },
+  // Validation par l'équipe YoYo d'une boutique créée par le marchand lui-même (Excel CMS n°14).
+  // Absent sur les boutiques antérieures ou enrôlées par un commercial (créées directement actives).
+  validation: {
+    status: { type: String, enum: ['pending', 'approved', 'rejected'] },
+    reason: { type: String },
+    by: { type: mongoose.Schema.Types.ObjectId, ref: 'Admin' },
+    at: { type: Date },
+    submittedAt: { type: Date }
   },
   // Statut mémorisé avant une suppression de compte, pour le restaurer à l'identique lors d'une
   // réactivation (évite qu'une boutique suspendue/non validée ne revienne en `active`).

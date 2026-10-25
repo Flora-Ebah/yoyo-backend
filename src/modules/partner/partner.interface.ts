@@ -53,6 +53,8 @@ export interface IPartner {
   /** Statut mémorisé avant suppression de compte, pour restauration exacte à la réactivation. */
   statusBeforeRemoval?: string;
   suspendedByBlock?: boolean;
+  // Validation d'une boutique créée par le marchand (Excel CMS n°14).
+  validation?: { status?: 'pending' | 'approved' | 'rejected'; reason?: string; by?: any; at?: Date; submittedAt?: Date };
   user?: any;
   /** Admin (commercial) auteur de l'enrôlement à distance. */
   createdBy?: any;

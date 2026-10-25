@@ -9,6 +9,7 @@ import { notificationManager, NotificationCategory, NotificationType } from '../
 import { NotificationHelper } from '../../helpers/notification.helper';
 import { PushNotificationService } from '../push-notification/push-notification.service';
 import { OtpController } from '../otp/otp.controller';
+import { fraudAlertService } from '../fraud-alert/fraud-alert.service';
 
 const controllerLabel: string = 'ClientController';
 
@@ -260,6 +261,9 @@ export class ClientController {
 
         // Parrainage : règle de vitesse sur le parrain ; s'il n'y a pas de vérification à attendre,
         // le compte est déjà actif et le parrain est prévenu tout de suite.
+        // Alerte fraude si l'appareil a déjà servi à créer plusieurs comptes (Excel CMS n°3).
+        if (formattedItem.signupDeviceId) void fraudAlertService.checkDevice(formattedItem.signupDeviceId);
+
         if (formattedItem.referredBy) {
           void referralService.onRegistered(String(formattedItem.referredBy));
           if (!requiresVerification) void referralService.onActivated(String(formattedItem._id));

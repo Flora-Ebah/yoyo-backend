@@ -52,6 +52,7 @@ export interface IClient {
   referralCredited?: boolean;
   /** Identifiant de l'appareil à l'inscription (Android ID / identifiant iOS) : anti auto-parrainage. */
   signupDeviceId?: string;
+  lastDataExportAt?: Date;
   /** Filleul : date de validation (1er abonnement payé). */
   referralValidatedAt?: Date;
   /** Filleul : motif de refus (`same-device`, `same-phone`) — il ne comptera jamais. */

@@ -1,9 +1,11 @@
-import coddyger from 'coddyger';
+import coddyger, { defines } from 'coddyger';
 import { PlatformConfigController } from '../../modules/platform-config/platform-config.controller';
+import { PlatformConfigService } from '../../modules/platform-config/platform-config.service';
 import { TokenMiddleware, AppCheckMiddleware } from '../middleware';
 
 const routePath = '/platform-config';
 const Controller: PlatformConfigController = new PlatformConfigController();
+const platformConfigService = new PlatformConfigService();
 const tags: string[] = ['Paramètres plateforme (#3/#2/#1)'];
 
 /**
@@ -23,7 +25,22 @@ const defaultRoute: any = (fastify: any, options, done) => {
     method: 'GET',
     url: `${routePath}`,
     preHandler: AppCheckMiddleware.verify,
-    handler: (request, reply) => coddyger.api(reply, Controller.get())
+    // Les seuils fraude ne sont pas publics : lus par le back-office via la route dédiée.
+    handler: (request, reply) =>
+      coddyger.api(reply, Controller.get().then((res: any) => {
+        if (res?.data) delete res.data.fraudRules;
+        return res;
+      }))
+  });
+
+  // Seuils des alertes fraude (Excel CMS n°3), back-office uniquement.
+  fastify.route({
+    schema: { tags, summary: 'Lire les seuils des alertes fraude' },
+    method: 'GET',
+    url: `${routePath}/fraud-rules`,
+    preHandler: TokenMiddleware.can('read', 'settings'),
+    handler: (request, reply) =>
+      coddyger.api(reply, platformConfigService.getFraudRules().then((data) => ({ status: defines.status.requestOK, message: 'OK', data })))
   });
 
   fastify.route({
@@ -106,6 +123,17 @@ const defaultRoute: any = (fastify: any, options, done) => {
               businessStartHour: { type: 'integer', minimum: 0, maximum: 23 },
               businessEndHour: { type: 'integer', minimum: 1, maximum: 24 },
               businessDays: { type: 'array', items: { type: 'integer', minimum: 0, maximum: 6 }, minItems: 1, maxItems: 7 }
+            },
+            additionalProperties: false
+          },
+          // Seuils des alertes fraude (Excel CMS n°3).
+          fraudRules: {
+            type: 'object',
+            properties: {
+              accountsPerDevice: { type: 'integer', minimum: 2, maximum: 50 },
+              scansPerDay: { type: 'integer', minimum: 2, maximum: 500 },
+              boutiqueSpikeFactor: { type: 'number', minimum: 1.5, maximum: 50 },
+              boutiqueSpikeMin: { type: 'integer', minimum: 1, maximum: 10000 }
             },
             additionalProperties: false
           }

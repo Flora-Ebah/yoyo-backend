@@ -59,8 +59,9 @@ export class GeoService {
     }
 
     // 4) Partenaires géolocalisés (option : sponsorisés uniquement).
+    // Seules les boutiques visibles dans l'appli (ni en attente de validation, ni suspendues).
     const params: any = {
-      status: { $nin: ['removed', 'archived'] },
+      status: 'active',
       latitude: { $ne: null },
       longitude: { $ne: null }
     };

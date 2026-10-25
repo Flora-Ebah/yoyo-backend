@@ -338,7 +338,10 @@ export class ClientService {
 				secretResponse: null,
 				secretQuestion: null,
 				status: 'anonymized',
-				anonymizedAt: new Date()
+				anonymizedAt: new Date(),
+				// Identifiants techniques et données nominatives restantes (Excel CMS n°16).
+				signupDeviceId: null,
+				block: null
 			};
 
 			const result: any = await this.dao.update({ _id: id }, scrub);
@@ -352,6 +355,10 @@ export class ClientService {
 			// Enrôlements liés : retirés pour qu'ils disparaissent de la vue du commercial.
 			await this.enrolmentService.removeByClientId(id);
 
+			// Appareils (jetons push) supprimés, texte des commentaires effacé (le commentaire est
+			// retiré de l'affichage).
+			await this.scrubLinkedData(id);
+
 			// Journal d'audit (best-effort) : trace non nominative de l'acte d'anonymisation.
 			await this.anonymizationLogService.record({
 				clientId: id,
@@ -363,6 +370,23 @@ export class ClientService {
 		} catch (error) {
 			LoggerService.log({ type: LogLevel.Error, content: error, location: this.serviceLabel, method: 'anonymize' });
 			return { error: true, data: error };
+		}
+	}
+
+	/** Données liées au compte à effacer lors de l'anonymisation (au mieux, sans bloquer). */
+	private async scrubLinkedData(id: string): Promise<void> {
+		// eslint-disable-next-line @typescript-eslint/no-var-requires
+		const mongoose = require('mongoose');
+		const steps: Array<() => Promise<any>> = [
+			() => mongoose.model('DeviceToken').deleteMany({ user: id }),
+			() => mongoose.model('PartnerComment').updateMany({ userId: id }, { $set: { text: '[supprimé]', status: 'removed' } })
+		];
+		for (const step of steps) {
+			try {
+				await step();
+			} catch (error) {
+				LoggerService.log({ type: LogLevel.Error, content: error, location: this.serviceLabel, method: 'scrubLinkedData' });
+			}
 		}
 	}
 

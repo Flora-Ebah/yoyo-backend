@@ -63,6 +63,8 @@ export class MessageTypes {
     // Blocage d'un compte par un administrateur (Excel CMS n°2) et fin du blocage.
     ACCOUNT_SUSPENDED: 'account_suspended',
     ACCOUNT_REINSTATED: 'account_reinstated',
+    // Export des données personnelles demandé depuis les applis (Excel CMS n°16).
+    DATA_EXPORT: 'data_export',
     MERCHANT_ACTIVATION: 'merchant_activation',
   };
 
@@ -556,6 +558,16 @@ export class MessageTypes {
         <p>Bonjour <strong>${name ?? 'cher utilisateur'}</strong></p>
         <p>La suspension de votre compte YoYo est levée : vous pouvez de nouveau vous connecter.</p>
         <p>À très vite,<br>L'équipe YoYo</p>
+      `
+    },
+    [MessageTypes.TYPES.DATA_EXPORT]: {
+      subject: 'Vos données personnelles YoYo',
+      hero: 'Vos données',
+      template: (code?: string, name?: string) => `
+        <p>Bonjour <strong>${name ?? 'cher utilisateur'}</strong></p>
+        <p>Vous trouverez en pièce jointe les données personnelles que YoYo conserve pour votre compte (fichier JSON, lisible avec un éditeur de texte).</p>
+        ${securityNote('Vous n’avez pas fait cette demande ? Changez votre mot de passe et contactez le support YoYo.')}
+        <p>L'équipe YoYo</p>
       `
     }
   };

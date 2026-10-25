@@ -12,6 +12,7 @@ import { AppEvents, eventBus } from '../../events';
 import { PlatformConfigService } from '../platform-config/platform-config.service';
 import { ScanTokenHelper } from '../../helpers/scan-token.helper';
 import { PartnerAccessHelper } from '../../helpers/partner-access.helper';
+import { fraudAlertService } from '../fraud-alert/fraud-alert.service';
 
 export class PaymentService {
   private readonly dao: IData<IPayment>;
@@ -663,7 +664,8 @@ export class PaymentService {
 
       const [subscription, partner] = await Promise.all([
         this.subscriptionService.getCurrentSubscriptionWithPlanDetails(from),
-        partnerModel.findOne({ _id: effectiveTo, status: { $nin: ['removed', 'archived'] } }, '_id name user maxDiscount minOrder categories').lean()
+        // Boutique en service uniquement : ni en attente de validation, ni suspendue (Excel CMS n°14).
+        partnerModel.findOne({ _id: effectiveTo, status: 'active' }, '_id name user maxDiscount minOrder categories').lean()
       ]);
 
       if (!subscription) {
@@ -744,6 +746,9 @@ export class PaymentService {
         validatedBy: 'client',
         flagged
       });
+
+      // File d'alertes fraude du back-office (Excel CMS n°3), sans retarder le ticket.
+      if (flagged) void fraudAlertService.flaggedScan({ _id, from, to, amount: total, boutiqueName: partner.name });
 
       // Notifie le marchand (réutilise push + socket, comme la notification de demande initiée).
       await this.pushNotificationService.create({

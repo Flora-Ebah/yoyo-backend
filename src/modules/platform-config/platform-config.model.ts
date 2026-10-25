@@ -32,6 +32,13 @@ const schema = new mongoose.Schema<IPlatformConfig>({
     businessEndHour: { type: Number },
     businessDays: [{ type: Number }]
   },
+  // Seuils des alertes fraude (cf. IPlatformConfig).
+  fraudRules: {
+    accountsPerDevice: { type: Number },
+    scansPerDay: { type: Number },
+    boutiqueSpikeFactor: { type: Number },
+    boutiqueSpikeMin: { type: Number }
+  },
   status: { type: String, enum: ['active', 'inactive', 'removed'], default: 'active' }
 },
 { timestamps: true, minimize: false });

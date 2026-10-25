@@ -85,7 +85,9 @@ const schema = new mongoose.Schema<IClient>({
 	freeMonthsGranted: { type: Number, default: 0 },
 	referralCredited: { type: Boolean, default: false },
 	// Parrainage : anti-fraude, revue et relances (cf. IClient).
-	signupDeviceId: { type: String },
+	signupDeviceId: { type: String, index: true, sparse: true },
+	// Dernier export des données personnelles demandé par l'utilisateur (1 par 24 h, Excel CMS n°16).
+	lastDataExportAt: { type: Date },
 	referralValidatedAt: { type: Date },
 	referralRejected: { type: String },
 	referralReview: { type: Boolean, default: false },

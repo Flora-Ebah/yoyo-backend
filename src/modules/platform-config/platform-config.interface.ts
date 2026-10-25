@@ -53,5 +53,18 @@ export interface IPlatformConfig {
     businessEndHour: number;
     businessDays: number[];
   };
+  /**
+   * Seuils des alertes fraude (Excel CMS n°3) :
+   *  - `accountsPerDevice` : comptes inscrits depuis un même appareil ;
+   *  - `scansPerDay` : réductions validées par un client sur 24 h ;
+   *  - `boutiqueSpikeFactor` / `boutiqueSpikeMin` : volume du jour d'une boutique comparé à sa
+   *    moyenne quotidienne sur 30 jours (alerte au-delà du facteur, et d'au moins `boutiqueSpikeMin`).
+   */
+  fraudRules?: {
+    accountsPerDevice: number;
+    scansPerDay: number;
+    boutiqueSpikeFactor: number;
+    boutiqueSpikeMin: number;
+  };
   status?: string;
 }

@@ -27,7 +27,9 @@ export interface INotificationOptions {
   templateData?: any;
   attachments?: Array<{
     filename: string;
-    path: string;
+    // Fichier sur disque (`path`) ou contenu en mémoire (`content`).
+    path?: string;
+    content?: string | Buffer;
     contentType?: string;
   }>;
 }

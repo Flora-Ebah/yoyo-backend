@@ -89,6 +89,40 @@ export class NotificationHelper {
 	}
 
 	/**
+	 * Comptes admin actifs dont le profil couvre `subject` (ou super-admin). Sert aux alertes
+	 * métier (signalements, boutiques à valider, fraude) envoyées à l'équipe concernée.
+	 */
+	static async adminIdsWithPermission(subject: string): Promise<string[]> {
+		// eslint-disable-next-line @typescript-eslint/no-var-requires
+		const mongoose = require('mongoose');
+		const profiles = await mongoose.model('Profile').find(
+			{
+				status: { $ne: 'removed' },
+				$or: [{ 'ability.subject': subject }, { 'ability.subject': 'all', 'ability.action': 'manage' }]
+			},
+			{ _id: 1 }
+		);
+		if (profiles.length === 0) return [];
+		const admins = await mongoose
+			.model('Admin')
+			.find({ profile: { $in: profiles.map((p: any) => p._id) }, status: 'active' }, { _id: 1 });
+		return admins.map((a: any) => String(a._id));
+	}
+
+	/** Dépose la même notification dans la cloche de chaque admin ayant la permission `subject`. */
+	static async notifyAdminsWithPermission(
+		subject: string,
+		payload: { title: string; message: string; category?: NotificationCategory; metadata?: any }
+	): Promise<void> {
+		try {
+			const ids = await NotificationHelper.adminIdsWithPermission(subject);
+			for (const to of ids) await NotificationHelper.notifyAdminInApp({ to, ...payload });
+		} catch (error) {
+			LoggerService.log({ type: LogLevel.Error, content: error, location: helperLabel, method: 'notifyAdminsWithPermission' });
+		}
+	}
+
+	/**
 	 * Diffuse une notification à tous les super-administrateurs (profil disposant de manage/all),
 	 * en excluant éventuellement l'auteur de l'action (déjà notifié par ailleurs).
 	 * Permet à l'admin de suivre l'activité (ex. un marchand enrôlé par un commercial).
