@@ -245,6 +245,13 @@ export class ClientController {
         const requiresVerification = item.emailVerification === true && !formattedItem.isPartner;
         delete formattedItem.emailVerification;
         if (requiresVerification) formattedItem.status = 'pending';
+        // Code cadeau / Business : activé seulement sur un compte vérifié par OTP. Sans vérification
+        // (anciennes versions de l'appli), il est ignoré : créer des comptes en série ne doit pas
+        // permettre de tester des codes.
+        if (formattedItem.pendingPromoCode && !requiresVerification) {
+          delete formattedItem.pendingPromoCode;
+          promo.type = 'invalid';
+        }
 
         const save: any = await this.service.create(formattedItem);
         if (save.error) {
@@ -256,10 +263,6 @@ export class ClientController {
         if (formattedItem.referredBy) {
           void referralService.onRegistered(String(formattedItem.referredBy));
           if (!requiresVerification) void referralService.onActivated(String(formattedItem._id));
-        }
-        // Code cadeau / Business : activé tout de suite si le compte est déjà actif.
-        if (formattedItem.pendingPromoCode && !requiresVerification) {
-          void promoCodeService.redeemPending(String(formattedItem._id));
         }
 
         // Le compte existe même si l'email ne part pas : l'utilisateur peut redemander le code

@@ -49,6 +49,9 @@ const defaultRoute: any = (fastify: any, options, done) => {
     method: 'POST',
     url: '/clients/me/promo-codes/redeem',
     preHandler: TokenMiddleware.verify,
+    // Anti-devinette par IP, en plus de la limite par compte : créer des comptes en série ne
+    // multiplie pas les essais depuis une même machine.
+    config: { rateLimit: { max: 20, timeWindow: '1 hour', keyGenerator: (request: any) => request.ip } },
     handler: (request, reply) => coddyger.api(reply, Controller.redeem(request.user._id, request.body.code))
   });
 

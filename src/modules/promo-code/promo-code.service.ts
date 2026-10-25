@@ -39,7 +39,6 @@ export type PromoFailure =
   | 'code-invalid'
   | 'code-expired'
   | 'code-used'
-  | 'code-not-yours'
   | 'already-redeemed'
   | 'too-many-attempts'
   | 'account-not-found';
@@ -110,13 +109,33 @@ export class PromoCodeService {
     return { type: code.startsWith(`${PROMO_CODE_PREFIX.business}-`) ? 'business' : 'gift', code };
   }
 
-  /** Compte les échecs pour l'anti-devinette (fenêtre glissante d'une heure). */
-  private async recordFailure(client: any): Promise<void> {
-    const recent = client.promoFailuresAt && Date.now() - new Date(client.promoFailuresAt).getTime() < FAILURE_WINDOW_MS;
+  /**
+   * Anti-devinette : réserve atomiquement un essai AVANT de chercher le code. Des requêtes
+   * simultanées ne peuvent donc pas dépasser la limite. Un essai réussi est rendu (`refundAttempt`).
+   */
+  private async reserveAttempt(userId: string): Promise<any> {
+    const now = new Date();
+    // Fenêtre d'une heure écoulée : le compteur repart de zéro.
     await this.clients.updateOne(
-      { _id: client._id },
-      recent ? { $inc: { promoFailures: 1 } } : { $set: { promoFailures: 1, promoFailuresAt: new Date() } }
+      {
+        _id: userId,
+        $or: [{ promoFailuresAt: null }, { promoFailuresAt: { $lte: new Date(now.getTime() - FAILURE_WINDOW_MS) } }]
+      },
+      { $set: { promoFailures: 0, promoFailuresAt: now } }
     );
+    const client = await this.clients
+      .findOneAndUpdate(
+        { _id: userId, $or: [{ promoFailures: null }, { promoFailures: { $lt: PROMO_MAX_FAILURES } }] },
+        { $inc: { promoFailures: 1 } },
+        { new: true, projection: 'contact' }
+      )
+      .lean();
+    if (client) return client;
+    throw new PromoCodeError((await this.clients.exists({ _id: userId })) ? 'too-many-attempts' : 'account-not-found');
+  }
+
+  private async refundAttempt(userId: string): Promise<void> {
+    await this.clients.updateOne({ _id: userId, promoFailures: { $gt: 0 } }, { $inc: { promoFailures: -1 } }).catch(() => undefined);
   }
 
   /**
@@ -124,27 +143,19 @@ export class PromoCodeService {
    * La réservation de l'utilisation est atomique : deux comptes ne prennent jamais le même code.
    */
   async redeem(userId: string, raw: string): Promise<{ type: PromoCodeType; days: number; mode: string; endDate: Date | null }> {
-    const client = await this.clients.findOne({ _id: userId }, 'contact promoFailures promoFailuresAt').lean();
-    if (!client) throw new PromoCodeError('account-not-found');
-
-    const blocked =
-      (client.promoFailures ?? 0) >= PROMO_MAX_FAILURES &&
-      client.promoFailuresAt &&
-      Date.now() - new Date(client.promoFailuresAt).getTime() < FAILURE_WINDOW_MS;
-    if (blocked) throw new PromoCodeError('too-many-attempts');
-
-    const fail = async (reason: PromoFailure): Promise<never> => {
-      await this.recordFailure(client);
-      throw new PromoCodeError(reason);
-    };
+    const client = await this.reserveAttempt(userId);
 
     const code = await this.codes.findOne({ code: normalizeCode(raw) }).lean();
-    if (!code || code.status === 'disabled') return fail('code-invalid');
+    // Code d'un autre numéro : même refus qu'un code inexistant, pour ne pas révéler qu'il existe.
+    const notYours = code?.holderPhone && phoneKey(code.holderPhone) !== phoneKey(client.contact);
+    if (!code || code.status === 'disabled' || notYours) throw new PromoCodeError('code-invalid');
     const state = codeState(code);
-    if (state === 'used') return fail('code-used');
-    if (state === 'expired') return fail('code-expired');
-    if (code.holderPhone && phoneKey(code.holderPhone) !== phoneKey(client.contact)) return fail('code-not-yours');
-    if (await this.redemptions.exists({ batch: code.batch, user: userId })) throw new PromoCodeError('already-redeemed');
+    if (state === 'used') throw new PromoCodeError('code-used');
+    if (state === 'expired') throw new PromoCodeError('code-expired');
+    if (await this.redemptions.exists({ batch: code.batch, user: userId })) {
+      await this.refundAttempt(userId);
+      throw new PromoCodeError('already-redeemed');
+    }
 
     const reserved = await this.codes.findOneAndUpdate(
       { _id: code._id, status: 'active', uses: { $lt: code.maxUses }, expiresAt: { $gt: new Date() } },
@@ -170,7 +181,10 @@ export class PromoCodeService {
       });
     } catch (error: any) {
       await release();
-      if (error?.code === 11000) throw new PromoCodeError('already-redeemed');
+      if (error?.code === 11000) {
+        await this.refundAttempt(userId);
+        throw new PromoCodeError('already-redeemed');
+      }
       throw error;
     }
 
@@ -181,6 +195,7 @@ export class PromoCodeService {
         days: batch?.days ?? FREE_MONTH_DAYS
       });
       await this.redemptions.updateOne({ _id: redemptionId }, { grantId: grant._id });
+      await this.refundAttempt(userId);
 
       const subscription: any = grant.subscriptionId
         ? await this.subscriptions.findOne({ _id: grant.subscriptionId }, 'endDate').lean()

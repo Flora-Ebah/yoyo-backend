@@ -5,10 +5,9 @@ const controllerLabel = 'PromoCodeController';
 
 /** Messages affichés dans l'appli Client pour chaque refus d'activation. */
 const FAILURE_MESSAGES: Record<PromoFailure, { status: number; message: string }> = {
-  'code-invalid': { status: defines.status.badRequest, message: "Ce code n'existe pas ou n'est plus valable." },
+  'code-invalid': { status: defines.status.badRequest, message: "Ce code n'existe pas, n'est plus valable ou ne vous est pas attribué." },
   'code-expired': { status: defines.status.badRequest, message: 'Ce code a expiré.' },
   'code-used': { status: defines.status.badRequest, message: 'Ce code a déjà été utilisé.' },
-  'code-not-yours': { status: defines.status.badRequest, message: 'Ce code est réservé à un autre numéro de téléphone.' },
   'already-redeemed': { status: defines.status.badRequest, message: 'Vous avez déjà activé un code de cette offre.' },
   'too-many-attempts': { status: 429, message: 'Trop de codes refusés. Réessayez dans une heure.' },
   'account-not-found': { status: defines.status.notFound, message: 'Compte introuvable' }

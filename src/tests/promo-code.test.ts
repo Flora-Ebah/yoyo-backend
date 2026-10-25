@@ -149,7 +149,7 @@ describe('Codes cadeaux et YOYO Business', () => {
 			const owner = await newClient({ contact: '0708091011' });
 			const other = await newClient();
 			const [code] = await batch({ rows: [{ name: 'Awa', phone: '+225 07 08 09 10 11' }] });
-			await rejects(service.redeem(String(other._id), code.code), 'code-not-yours');
+			await rejects(service.redeem(String(other._id), code.code), 'code-invalid');
 			const result = await service.redeem(String(owner._id), code.code);
 			expect(result.type).to.equal('gift');
 		});
@@ -192,6 +192,21 @@ describe('Codes cadeaux et YOYO Business', () => {
 				await rejects(service.redeem(String(user._id), `GIFT-AAAAA${i + 2}`), 'code-invalid');
 			}
 			await rejects(service.redeem(String(user._id), code.code), 'too-many-attempts');
+		});
+
+		it('anti-devinette : des essais simultanés ne dépassent pas la limite', async () => {
+			const user = await newClient();
+			const tries = Array.from({ length: 12 }, (_, i) => service.redeem(String(user._id), `GIFT-BBB${'23456789ACDEFGH'[i]}`));
+			const reasons = (await Promise.allSettled(tries)).map((r: any) => r.reason?.reason);
+			expect(reasons.filter((r) => r === 'code-invalid')).to.have.length(PROMO_MAX_FAILURES);
+			expect(reasons.filter((r) => r === 'too-many-attempts')).to.have.length(12 - PROMO_MAX_FAILURES);
+		});
+
+		it('un code activé ne consomme pas d’essai', async () => {
+			const user = await newClient();
+			const [code] = await batch();
+			await service.redeem(String(user._id), code.code);
+			expect((await model(ClientSet).findById(user._id).lean()).promoFailures).to.equal(0);
 		});
 	});
 
