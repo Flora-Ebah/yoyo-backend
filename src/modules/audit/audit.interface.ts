@@ -25,6 +25,10 @@ export interface IAuditLog {
 	success?: boolean;
 	ip?: string;
 	userAgent?: string;
+	/** Action métier quand elle n'est pas une simple mutation HTTP, ex. `export` (Excel CMS n°9). */
+	action?: string;
+	/** Détails de l'action, ex. pour un export : `{ entity, filters, count }`. */
+	meta?: Record<string, any>;
 	createdAt?: Date;
 	updatedAt?: Date;
 }

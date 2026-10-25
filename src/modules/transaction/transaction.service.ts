@@ -563,6 +563,14 @@ export class TransactionService {
   }
 
   /**
+   * Re-vérifie une transaction auprès de son prestataire, à la demande d'un admin
+   * (activation manuelle, Excel CMS n°12). Même chemin que le webhook : rien n'est cru sur parole.
+   */
+  async resettle(transaction: any): Promise<any> {
+    return this.settleTransaction(transaction, 'resettle');
+  }
+
+  /**
    * Variante Wave de `settleTransaction` : le statut est lu sur la session de paiement Wave,
    * retrouvée par l'identifiant stocké en base (`paymentToken`), jamais par une valeur reçue.
    *
@@ -1414,6 +1422,14 @@ export class TransactionService {
         paymentDate: new Date()
       });
 
+      // Abonnement déjà créé lors d'un premier règlement : un rejeu ne doit rien recréer.
+      if (paymentStatus === 'success' && transaction.paymentStatus === 'success') {
+        return updatedTransaction;
+      }
+
+      // Rattachement de l'abonnement à son paiement (rapprochement, remboursement).
+      const subscriptionOptions = { transactionId, paymentMethod: transaction.paymentMethod };
+
       if(paymentStatus === 'success') {
         // [MISE EN AVANT] Transaction de sponsorisation boutique (flux marchand self-service).
         // On ne crée PAS d'abonnement client : on active la mise en avant de la boutique.
@@ -1459,7 +1475,7 @@ export class TransactionService {
                 method: 'updateTransactionStatus'
               });
               // En cas d'erreur, créer un abonnement normal comme fallback
-              await this.subscriptionService.createSubscription(transaction.user, transaction.plan);
+              await this.subscriptionService.createSubscription(transaction.user, transaction.plan, subscriptionOptions);
             }
           } catch (error) {
             logEvent({
@@ -1469,11 +1485,11 @@ export class TransactionService {
               method: 'updateTransactionStatus'
             });
             // En cas d'erreur, créer un abonnement normal comme fallback
-            await this.subscriptionService.createSubscription(transaction.user, transaction.plan);
+            await this.subscriptionService.createSubscription(transaction.user, transaction.plan, subscriptionOptions);
           }
         } else {
           // Créer un nouvel abonnement (comportement normal)
-          await this.subscriptionService.createSubscription(transaction.user, transaction.plan);
+          await this.subscriptionService.createSubscription(transaction.user, transaction.plan, subscriptionOptions);
         }
       } 
       

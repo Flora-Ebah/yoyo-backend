@@ -34,11 +34,27 @@ const schema = new mongoose.Schema<ITransaction>({
   boutiqueId: { type: String },                 // flux MONO (rétrocompat)
   boutiqueIds: { type: [String], default: undefined }, // flux MULTI (YO Boost) : N boutiques, 1 paiement
   sponsorPlanId: { type: String },
+  // Activation forcée par un admin (Excel CMS n°12) : paiement constaté chez Wave mais non
+  // confirmé par la session. Tracée pour le rapprochement et l'audit.
+  manualActivation: {
+    by: { type: Schema.Types.ObjectId, ref: 'Admin' },
+    at: { type: Date },
+    reason: { type: String },
+    ref: { type: String }
+  },
+  // Remboursement effectué hors plateforme (depuis le compte marchand Wave), consigné ici.
+  refund: {
+    amount: { type: Number },
+    ref: { type: String },
+    reason: { type: String },
+    by: { type: Schema.Types.ObjectId, ref: 'Admin' },
+    at: { type: Date },
+    subscriptionCancelled: { type: Boolean }
+  },
 },
 { timestamps: true });
 
-const model = mongoose.model<ITransaction>('Transaction', schema);
-
+// Index déclarés AVANT `mongoose.model`, pour qu'ils fassent partie du schéma compilé.
 schema.index({ user: 1, paymentDate: -1 });
 schema.index({ paymentDate: -1 });
 schema.index({ paymentStatus: 1 });
@@ -48,6 +64,10 @@ schema.index({ paymentUrl: 1 });
 schema.index({ returnToken: 1 });
 // Résolution des webhooks Wave par identifiant de session.
 schema.index({ paymentToken: 1 });
+// Rapprochement avec le relevé Wave (référence de paiement).
+schema.index({ txnId: 1 });
+
+const model = mongoose.model<ITransaction>('Transaction', schema);
 
 export class TransactionSet extends MongoDbDao<ITransaction & Document> implements IData<ITransaction & Document> {
   defaultModel = model;

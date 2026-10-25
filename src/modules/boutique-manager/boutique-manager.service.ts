@@ -2,6 +2,8 @@ import coddyger from 'coddyger';
 import { BoutiqueManagerSet } from './boutique-manager.model';
 import { PartnerSet } from '../partner/partner.model';
 import { ClientService } from '../client/client.service';
+import { dateRangeFilter } from '../../shared/date-filter';
+import { escapeRegex } from '../../shared/regex';
 
 const serviceLabel = 'BoutiqueManagerService';
 
@@ -233,6 +235,35 @@ export class BoutiqueManagerService {
   }
 
   /** Tous les gérants d'un propriétaire (toutes ses boutiques). */
+  /**
+   * Liste paginée de tous les gérants pour le back-office (Excel CMS n°4 : page Gérants + export).
+   * Filtres cumulés : statut, recherche (nom, téléphone), période de création.
+   */
+  async adminList(payloads: { page?: number; pageSize?: number; status?: string; q?: string; from?: string; to?: string }): Promise<any> {
+    const page = Math.max(1, Number(payloads.page) || 1);
+    const pageSize = Math.min(500, Math.max(1, Number(payloads.pageSize) || 50));
+    const params: any = { ...dateRangeFilter(payloads.from, payloads.to) };
+    params.status = payloads.status ? payloads.status : { $nin: ['removed'] };
+    if (payloads.q && payloads.q.trim()) {
+      const rx = { $regex: escapeRegex(payloads.q.trim()), $options: 'i' };
+      params.$or = [{ managerName: rx }, { managerPhone: rx }];
+    }
+    const model: any = this.dao.defaultModel;
+    const [rows, totalRows] = await Promise.all([
+      model
+        .find(params, '-__v')
+        .populate('boutique', 'name ville status')
+        .populate('owner', 'firstname lastname email contact')
+        .populate('manager', 'firstname lastname contact status')
+        .sort({ createdAt: -1 })
+        .skip((page - 1) * pageSize)
+        .limit(pageSize)
+        .lean(),
+      model.countDocuments(params)
+    ]);
+    return { rows, data: { totalRows, totalPages: Math.ceil(totalRows / pageSize), page, pageSize } };
+  }
+
   async listByOwner(ownerId: string): Promise<any[]> {
     const rows: any = await this.dao.selectHug({ owner: ownerId, status: { $nin: ['removed'] } });
     // Exclure les gérants rattachés à une boutique supprimée/archivée ou introuvable.

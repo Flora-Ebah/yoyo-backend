@@ -27,6 +27,7 @@ export class AuditService {
 		page?: number;
 		pageSize?: number;
 		subject?: string;
+		action?: string;
 		method?: string;
 		success?: string;
 		q?: string;
@@ -36,6 +37,7 @@ export class AuditService {
 		try {
 			const params: any = {};
 			if (payloads.subject) params.subject = payloads.subject;
+			if (payloads.action) params.action = payloads.action;
 			if (payloads.method) params.method = payloads.method.toUpperCase();
 			if (payloads.success === 'true') params.success = true;
 			if (payloads.success === 'false') params.success = false;
@@ -54,6 +56,32 @@ export class AuditService {
 		} catch (error) {
 			return { error: true, data: error };
 		}
+	}
+
+	/**
+	 * Trace un export de données du back-office (Excel CMS n°9) : qui, quelle liste, quels filtres,
+	 * combien de lignes. Appelé par le CMS après la génération du fichier.
+	 */
+	async recordExport(
+		actor: { _id: string; email?: string },
+		payload: { entity: string; filters?: Record<string, any>; count?: number; format?: string },
+		request: { ip?: string; userAgent?: string; path: string }
+	): Promise<void> {
+		await this.record({
+			actorId: actor._id,
+			actorEmail: actor.email,
+			actorType: 'admin',
+			method: 'EXPORT',
+			path: request.path,
+			subject: 'exports',
+			targetId: payload.entity,
+			action: 'export',
+			statusCode: 200,
+			success: true,
+			ip: request.ip,
+			userAgent: request.userAgent,
+			meta: { entity: payload.entity, filters: payload.filters ?? {}, count: payload.count ?? 0, format: payload.format ?? 'csv' }
+		});
 	}
 
 	/** Liste des domaines distincts présents dans le journal (pour le filtre). */

@@ -15,7 +15,9 @@ const schema = new mongoose.Schema<IAuditLog>(
 		statusCode: { type: Number },
 		success: { type: Boolean, default: true },
 		ip: { type: String },
-		userAgent: { type: String }
+		userAgent: { type: String },
+		action: { type: String },
+		meta: { type: Schema.Types.Mixed }
 	},
 	{ timestamps: true }
 );

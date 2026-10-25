@@ -8,7 +8,7 @@ export class AuditController {
 	private readonly service = new AuditService();
 
 	/** Liste paginée + filtrée du journal d'audit (admin). */
-	list(payloads: { page?: number; pageSize?: number; subject?: string; method?: string; success?: string; q?: string; from?: string; to?: string }) {
+	list(payloads: { page?: number; pageSize?: number; subject?: string; action?: string; method?: string; success?: string; q?: string; from?: string; to?: string }) {
 		return new Promise(async (resolve, reject) => {
 			try {
 				const result: any = await this.service.list(payloads);

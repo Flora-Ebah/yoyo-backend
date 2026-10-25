@@ -168,7 +168,7 @@ export default class Router {
 			try {
 				const method = request.method;
 				const user = request.user;
-				if (AUDITED_METHODS.has(method) && user && user.isAdmin === true) {
+				if (AUDITED_METHODS.has(method) && user && user.isAdmin === true && !request.auditHandled) {
 					const rawUrl = String(request.url || '').split('?')[0];
 					const pathOnly = rawUrl.startsWith(prefix) ? rawUrl.slice(prefix.length) : rawUrl;
 					const segments = pathOnly.split('/').filter(Boolean);

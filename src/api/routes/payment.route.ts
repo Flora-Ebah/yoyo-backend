@@ -158,7 +158,8 @@ const defaultRoute: any = (fastify: any, options, done) => {
     },
     method: 'GET',
     url: `${routePath}`,
-    preHandler: TokenMiddleware.verify,
+    // Tous les tickets de la plateforme : back-office uniquement (était ouvert à tout compte connecté).
+    preHandler: TokenMiddleware.canAny([['read', 'transactions'], ['read', 'pros']]),
     handler: (request, reply) => {
       let page: any = request.query.page || 1;
       let pageSize: any = request.query.pageSize;
@@ -192,7 +193,8 @@ const defaultRoute: any = (fastify: any, options, done) => {
     },
     method: 'GET',
     url: `${routePath}/overview`,
-    preHandler: TokenMiddleware.verify,
+    // Statistiques globales : back-office uniquement.
+    preHandler: TokenMiddleware.canAny([['read', 'transactions'], ['read', 'dashboard']]),
     handler: (request, reply) => {
       const status: any = request.query.status;
       const from: any = request.query.from;
@@ -224,7 +226,8 @@ const defaultRoute: any = (fastify: any, options, done) => {
     },
     method: 'GET',
     url: `${routePath}/top-partners`,
-    preHandler: TokenMiddleware.verify,
+    // Classement global des boutiques : back-office uniquement.
+    preHandler: TokenMiddleware.canAny([['read', 'transactions'], ['read', 'dashboard']]),
     handler: (request, reply) => {
       const from: any = request.query.from;
       const to: any = request.query.to;
@@ -259,7 +262,8 @@ const defaultRoute: any = (fastify: any, options, done) => {
     },
     method: 'GET',
     url: `${routePath}/findByStatus`,
-    preHandler: TokenMiddleware.verify,
+    // Back-office uniquement.
+    preHandler: TokenMiddleware.can('read', 'transactions'),
     handler: (request, reply) => {
       const page: any = request.query.page || 1;
       const pageSize: any = request.query.pageSize;
@@ -286,7 +290,8 @@ const defaultRoute: any = (fastify: any, options, done) => {
     },
     method: 'GET',
     url: `${routePath}/details/:id`,
-    preHandler: TokenMiddleware.verify,
+    // N'importe quel ticket par son id : back-office uniquement (les clients passent par `client/details`).
+    preHandler: TokenMiddleware.can('read', 'transactions'),
     handler: (request, reply) => {
       const _id: any = request.params.id;
 
@@ -311,7 +316,8 @@ const defaultRoute: any = (fastify: any, options, done) => {
     },
     method: 'DELETE',
     url: `${routePath}/remove/:id`,
-    preHandler: TokenMiddleware.verify,
+    // Suppression : back-office uniquement (tout compte connecté pouvait supprimer un ticket).
+    preHandler: TokenMiddleware.can('delete', 'transactions'),
     handler: (request, reply) => {
       let _id: any = request.params.id;
 

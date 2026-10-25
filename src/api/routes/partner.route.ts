@@ -375,7 +375,8 @@ const defaultRoute: any = (fastify: any, options, done) => {
             description: "Tri du marketplace. `discount_desc` = plus fortes réductions d'abord."
           },
           from: { type: 'string' },
-          to: { type: 'string' }
+          to: { type: 'string' },
+          ville: { type: 'string' }
         },
         required: [],
         additionalProperties: false
@@ -394,6 +395,7 @@ const defaultRoute: any = (fastify: any, options, done) => {
       let sort: any = request.query.sort;
       let from: any = request.query.from;
       let to: any = request.query.to;
+      let ville: any = request.query.ville;
       const user: any = request.user;
 
       // `createdBy=me` est résolu ici, à partir du jeton : le client ne choisit pas l'identité
@@ -403,9 +405,18 @@ const defaultRoute: any = (fastify: any, options, done) => {
       }
 
       // Vidéo réservée aux boutiques boostées (sauf admin / propriétaire).
-      let Q = PartnerMediaHelper.apply(Controller.getAll({ page, pageSize, status, query, category, createdBy, sort, from, to }), user);
+      let Q = PartnerMediaHelper.apply(Controller.getAll({ page, pageSize, status, query, category, createdBy, sort, from, to, ville }), user);
       return coddyger.api(reply, Q);
     }
+  });
+
+  // Villes distinctes des boutiques : alimente le filtre « Ville » du back-office (Excel CMS n°4).
+  fastify.route({
+    schema: { tags, summary: 'Villes des boutiques (filtre)' },
+    method: 'GET',
+    url: `${routePath}/villes`,
+    preHandler: TokenMiddleware.verify,
+    handler: (request, reply) => coddyger.api(reply, Controller.villes())
   });
 
   // Document list by status

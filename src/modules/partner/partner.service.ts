@@ -1,5 +1,6 @@
 import { IPartner, IOpeningHours } from './partner.interface';
 import { dateRangeFilter } from '../../shared/date-filter';
+import { escapeRegex } from '../../shared/regex';
 import { PartnerSet } from './partner.model';
 import coddyger, { IData, IErrorObject, LoggerService, LogLevel } from 'coddyger';
 import { CategoryService } from '../category/category.service';
@@ -155,7 +156,19 @@ export class PartnerService {
     return partner;
   }
 
-  async getAll(payloads: { page?: number; pageSize?: number; query?: string; status?: string; category?: string; createdBy?: string; sort?: string; from?: string; to?: string }): Promise<any> {
+  /** Villes distinctes (casse d'origine, sans doublon insensible à la casse), boutiques non supprimées. */
+  async villes(): Promise<string[]> {
+    const model: any = (this.dao as any).defaultModel;
+    const values: string[] = await model.distinct('ville', { status: { $nin: ['removed', 'archived'] } });
+    const seen = new Map<string, string>();
+    for (const v of values) {
+      const clean = String(v ?? '').trim();
+      if (clean && !seen.has(clean.toLowerCase())) seen.set(clean.toLowerCase(), clean);
+    }
+    return [...seen.values()].sort((a, b) => a.localeCompare(b, 'fr'));
+  }
+
+  async getAll(payloads: { page?: number; pageSize?: number; query?: string; status?: string; category?: string; createdBy?: string; sort?: string; from?: string; to?: string; ville?: string }): Promise<any> {
     try {
       let page: number = payloads.page ?? 1;
 			let pageSize: number = payloads.pageSize ?? 10;
@@ -180,31 +193,23 @@ export class PartnerService {
 				base.createdBy = createdBy;
 			}
 
-      if (!coddyger.string.isEmpty(category) && coddyger.string.isValidObjectId(category)) {
-				data = await this.dao.select({ params: { ...base, categories:category }, page, pageSize, ...sortOpts });
-			} else if (coddyger.string.isEmpty(query) && coddyger.string.isEmpty(status)) {
-				data = await this.dao.select({ params: { ...base }, page, pageSize, ...sortOpts });
-			} else if (!coddyger.string.isEmpty(status)) {
-				data = await this.dao.select({ params: { ...base, status }, page, pageSize, ...sortOpts });
-			} else {
-				data = await this.dao.select({
-					params: {
-						...base,
-						$or: [
-							{ slug: { $regex: query || '', $options: 'i' } },
-							{ name: { $regex: query || '', $options: 'i' } },
-              { description: { $regex: query || '', $options: 'i' } },
-              { ville: { $regex: query || '', $options: 'i' } },
-              { address: { $regex: query || '', $options: 'i' } },
-              { phone: { $regex: query || '', $options: 'i' } },
-              { email: { $regex: query || '', $options: 'i' } }
-						]
-					},
-					page,
-					pageSize,
-					...sortOpts
-				});
+			// Critères cumulés (Excel CMS n°4) : avant, la catégorie annulait le statut et la recherche,
+			// et le statut annulait la recherche.
+			const params: any = { ...base };
+			if (!coddyger.string.isEmpty(category) && coddyger.string.isValidObjectId(category)) {
+				params.categories = category;
 			}
+			if (!coddyger.string.isEmpty(status)) {
+				params.status = status;
+			}
+			if (!coddyger.string.isEmpty(payloads.ville)) {
+				params.ville = { $regex: `^${escapeRegex(String(payloads.ville).trim())}$`, $options: 'i' };
+			}
+			if (!coddyger.string.isEmpty(query)) {
+				const rx = { $regex: escapeRegex(query), $options: 'i' };
+				params.$or = ['slug', 'name', 'description', 'ville', 'address', 'phone', 'email'].map((f) => ({ [f]: rx }));
+			}
+			data = await this.dao.select({ params, page, pageSize: Math.min(500, Number(pageSize) || 10), ...sortOpts });
 
 			if (data.error) {
 				throw data;

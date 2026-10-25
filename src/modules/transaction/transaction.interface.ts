@@ -29,4 +29,6 @@ export interface ITransaction {
   // Si renseigné, il prime sur `boutiqueId` lors de l'activation (qui boucle dessus).
   boutiqueIds?: string[];
   sponsorPlanId?: string;    // formule de mise en avant (module sponsor-plan) à appliquer
+  manualActivation?: { by?: string; at?: Date; reason?: string; ref?: string };
+  refund?: { amount?: number; ref?: string; reason?: string; by?: string; at?: Date; subscriptionCancelled?: boolean };
 }

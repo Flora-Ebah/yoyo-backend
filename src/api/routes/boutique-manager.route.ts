@@ -179,6 +179,30 @@ const defaultRoute: any = (fastify: any, options, done) => {
     }
   });
 
+  // [ADMIN] Tous les gérants, paginés et filtrés (page Marchands › Gérants du CMS).
+  fastify.route({
+    schema: {
+      tags,
+      summary: 'Lister tous les gérants (administration)',
+      query: {
+        type: 'object',
+        properties: {
+          page: { type: 'number', minimum: 1 },
+          pageSize: { type: 'number', minimum: 1, maximum: 500 },
+          status: { type: 'string', enum: ['active', 'inactive', 'suspended', 'removed'] },
+          q: { type: 'string', maxLength: 100 },
+          from: { type: 'string' },
+          to: { type: 'string' }
+        },
+        additionalProperties: false
+      }
+    },
+    method: 'GET',
+    url: `${routePath}/admin`,
+    preHandler: TokenMiddleware.can('read', 'pros'),
+    handler: (request, reply) => coddyger.api(reply, Controller.adminList(request.query))
+  });
+
   // [ADMIN] Nombre total de gérants actifs (carte de stats).
   fastify.route({
     schema: { tags, summary: 'Nombre total de gérants actifs (administration)' },

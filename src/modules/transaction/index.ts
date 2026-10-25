@@ -8,3 +8,4 @@ export * from './transaction.service';
 export * from './transaction.model';
 export * from './transaction.interface';
 
+export * from './transaction-admin.service';

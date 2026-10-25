@@ -53,6 +53,18 @@ export class BoutiqueManagerController {
     }).catch((e: IErrorObject) => coddyger.catchReturn(e, controllerLabel, 'listMine'));
   }
 
+  /** Liste paginée des gérants (administration). Pagination dans `message`, lignes dans `data`. */
+  adminList(payloads: { page?: number; pageSize?: number; status?: string; q?: string; from?: string; to?: string }) {
+    return new Promise(async (resolve, reject) => {
+      try {
+        const result = await this.service.adminList(payloads);
+        resolve({ status: defines.status.requestOK, message: result.data, data: result.rows });
+      } catch (error) {
+        reject(error);
+      }
+    }).catch((e: IErrorObject) => coddyger.catchReturn(e, controllerLabel, 'adminList'));
+  }
+
   count() {
     return new Promise(async (resolve, reject) => {
       try {

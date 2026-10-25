@@ -73,7 +73,8 @@ const defaultRoute: any = (fastify: any, options, done) => {
     },
     method: 'GET',
     url: `${routePath}/findByStatus`,
-    preHandler: TokenMiddleware.verify,
+    // Toutes les transactions de la plateforme : back-office uniquement (était ouvert à tout compte connecté).
+    preHandler: TokenMiddleware.can('read', 'transactions'),
     handler: (request, reply) => {
       const page: any = request.query.page || 1;
       const pageSize: any = request.query.pageSize;
@@ -100,7 +101,8 @@ const defaultRoute: any = (fastify: any, options, done) => {
     },
     method: 'GET',
     url: `${routePath}/details/:id`,
-    preHandler: TokenMiddleware.verify,
+    // N'importe quelle transaction par son id : back-office uniquement (était ouvert à tout compte connecté).
+    preHandler: TokenMiddleware.can('read', 'transactions'),
     handler: (request, reply) => {
       const _id: any = request.params.id;
 
@@ -125,7 +127,8 @@ const defaultRoute: any = (fastify: any, options, done) => {
     },
     method: 'DELETE',
     url: `${routePath}/remove/:id`,
-    preHandler: TokenMiddleware.verify,
+    // Suppression : back-office uniquement (n'importe quel compte connecté pouvait supprimer une transaction).
+    preHandler: TokenMiddleware.can('delete', 'transactions'),
     handler: (request, reply) => {
       let _id: any = request.params.id;
 
@@ -225,7 +228,9 @@ const defaultRoute: any = (fastify: any, options, done) => {
           transactionId: { type: 'string' },
           paymentStatus: { 
             type: 'string',
-            enum: ['pending', 'success', 'failed', 'refunded', 'expired', 'cancelled']
+            // Sans `success` : une activation passe par `POST /transactions/:id/activate`, tracée
+            // (Excel CMS n°12) ; sans `refunded` : un remboursement passe par `/refund`.
+            enum: ['pending', 'failed', 'expired', 'cancelled']
           }
         },
         required: ['transactionId', 'paymentStatus'],
