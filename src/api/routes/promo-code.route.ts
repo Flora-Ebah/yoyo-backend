@@ -49,9 +49,10 @@ const defaultRoute: any = (fastify: any, options, done) => {
     method: 'POST',
     url: '/clients/me/promo-codes/redeem',
     preHandler: TokenMiddleware.verify,
-    // Anti-devinette par IP, en plus de la limite par compte : créer des comptes en série ne
-    // multiplie pas les essais depuis une même machine.
-    config: { rateLimit: { max: 20, timeWindow: '1 hour', keyGenerator: (request: any) => request.ip } },
+    // Débit limité par session (clé globale de `router.ts`), en plus des 5 échecs par heure et par
+    // compte. Pas de clé par IP : sans `trustProxy`, `request.ip` est celle du proxy, commune à
+    // tous les clients, et une limite par IP bloquerait tout le monde.
+    config: { rateLimit: { max: 20, timeWindow: '1 hour' } },
     handler: (request, reply) => coddyger.api(reply, Controller.redeem(request.user._id, request.body.code))
   });
 
