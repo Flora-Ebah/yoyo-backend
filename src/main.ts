@@ -6,6 +6,7 @@ import { startSubscriptionRenewalCron } from './cron/subscription-renewal.cron';
 import { startSponsorExpirationCron } from './cron/sponsor-expiration.cron';
 import { startDeviceTokenCleanupCron } from './cron/device-token-cleanup.cron';
 import { startReferralNudgeCron } from './cron/referral-nudge.cron';
+import { startSupportSlaCron } from './cron/support-sla.cron';
 import { initNotificationServices } from './services/notification';
 import { initEventBus } from './events';
 import { assertSecureConfiguration } from './config/security-check';
@@ -89,6 +90,7 @@ export class Main {
     // Push FCM : purge des jetons d'appareils abandonnés
     startDeviceTokenCleanupCron();
     startReferralNudgeCron();
+    startSupportSlaCron();
 
     // Modération : charge la liste des médias bloqués servie par `/file/` (requête mise en
     // attente par Mongoose jusqu'à la connexion).

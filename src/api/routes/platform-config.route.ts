@@ -95,6 +95,19 @@ const defaultRoute: any = (fastify: any, options, done) => {
               rewardCap: { type: 'integer', minimum: 1, maximum: 1000000 }
             },
             additionalProperties: false
+          },
+          // Délais cibles du support (Excel CMS n°5), en heures.
+          supportSla: {
+            type: 'object',
+            properties: {
+              paymentFirstResponseHours: { type: 'number', exclusiveMinimum: 0, maximum: 720 },
+              firstResponseHours: { type: 'number', exclusiveMinimum: 0, maximum: 720 },
+              resolutionHours: { type: 'number', exclusiveMinimum: 0, maximum: 720 },
+              businessStartHour: { type: 'integer', minimum: 0, maximum: 23 },
+              businessEndHour: { type: 'integer', minimum: 1, maximum: 24 },
+              businessDays: { type: 'array', items: { type: 'integer', minimum: 0, maximum: 6 }, minItems: 1, maxItems: 7 }
+            },
+            additionalProperties: false
           }
         },
         additionalProperties: false

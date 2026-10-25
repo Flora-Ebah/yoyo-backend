@@ -23,6 +23,15 @@ const schema = new mongoose.Schema<IPlatformConfig>({
     rewardCap: { type: Number }
   },
   referralRewardsGranted: { type: Number, default: 0 },
+  // Délais cibles du support (cf. IPlatformConfig).
+  supportSla: {
+    paymentFirstResponseHours: { type: Number },
+    firstResponseHours: { type: Number },
+    resolutionHours: { type: Number },
+    businessStartHour: { type: Number },
+    businessEndHour: { type: Number },
+    businessDays: [{ type: Number }]
+  },
   status: { type: String, enum: ['active', 'inactive', 'removed'], default: 'active' }
 },
 { timestamps: true, minimize: false });

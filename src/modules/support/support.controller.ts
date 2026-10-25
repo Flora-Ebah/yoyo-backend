@@ -1,6 +1,9 @@
 import coddyger, { IErrorObject, defines } from 'coddyger';
 import { locale } from '../../public';
 import { SupportService } from './support.service';
+import { SupportApp } from './support.interface';
+import { faqService } from './faq.service';
+import { IFaq } from './faq.model';
 
 const controllerLabel: string = 'SupportController';
 
@@ -16,7 +19,7 @@ export class SupportController {
 	/* ---------------------------------------------------------------------- */
 
 	/** Crée un ticket + le premier message. */
-	createTicket(payloads: { userId: string; category: string; message: string; attachment?: string }) {
+	createTicket(payloads: { userId: string; category: string; message: string; attachment?: string; app?: SupportApp }) {
 		return new Promise(async (resolve, reject) => {
 			try {
 				const result: any = await this.service.createTicket(payloads);
@@ -39,10 +42,10 @@ export class SupportController {
 	}
 
 	/** Liste des tickets du client. */
-	listClientTickets(userId: string) {
+	listClientTickets(userId: string, app: SupportApp = 'client') {
 		return new Promise(async (resolve, reject) => {
 			try {
-				const result: any = await this.service.listClientTickets(userId);
+				const result: any = await this.service.listClientTickets(userId, app);
 				if (result.error) throw result;
 				resolve({ status: defines.status.requestOK, message: locale.controller.done, data: result });
 			} catch (error) {
@@ -119,10 +122,10 @@ export class SupportController {
 	}
 
 	/** FAQ en dur (10 Q/R). */
-	getFaq() {
+	getFaq(app: SupportApp = 'client') {
 		return new Promise(async (resolve, reject) => {
 			try {
-				resolve({ status: defines.status.requestOK, message: locale.controller.done, data: this.service.getFaq() });
+				resolve({ status: defines.status.requestOK, message: locale.controller.done, data: await this.service.getFaq(app) });
 			} catch (error) {
 				reject(error);
 			}
@@ -187,7 +190,15 @@ export class SupportController {
 	/* ---------------------------------------------------------------------- */
 
 	/** Liste paginée pour YOYO ADMIN. */
-	adminList(payloads: { page?: number; pageSize?: number; status?: string; q?: string }) {
+	adminList(payloads: {
+		page?: number;
+		pageSize?: number;
+		status?: string;
+		category?: string;
+		source?: SupportApp;
+		view?: 'awaiting' | 'overdue';
+		q?: string;
+	}) {
 		return new Promise(async (resolve, reject) => {
 			try {
 				const result: any = await this.service.listAdminTickets(payloads);
@@ -317,5 +328,54 @@ export class SupportController {
 				reject(error);
 			}
 		}).catch((e: IErrorObject) => coddyger.catchReturn(e, controllerLabel, 'adminUpdate'));
+	}
+
+	/* ---------------------------------------------------------------------- */
+	/* FAQ (CMS › Paramètres › FAQ)                                           */
+	/* ---------------------------------------------------------------------- */
+
+	adminListFaq(app?: SupportApp) {
+		return new Promise(async (resolve, reject) => {
+			try {
+				resolve({ status: defines.status.requestOK, message: locale.controller.done, data: await faqService.adminList(app) });
+			} catch (error) {
+				reject(error);
+			}
+		}).catch((e: IErrorObject) => coddyger.catchReturn(e, controllerLabel, 'adminListFaq'));
+	}
+
+	adminCreateFaq(body: Pick<IFaq, 'app' | 'theme' | 'question' | 'answer'> & Partial<Pick<IFaq, 'order' | 'status'>>) {
+		return new Promise(async (resolve, reject) => {
+			try {
+				resolve({ status: defines.status.created, message: 'Question ajoutée.', data: await faqService.create(body) });
+			} catch (error) {
+				reject(error);
+			}
+		}).catch((e: IErrorObject) => coddyger.catchReturn(e, controllerLabel, 'adminCreateFaq'));
+	}
+
+	adminUpdateFaq(id: string, body: Partial<IFaq>) {
+		return new Promise(async (resolve, reject) => {
+			try {
+				const faq = await faqService.update(id, body);
+				if (!faq) return resolve({ status: defines.status.notFound, message: locale.notfound('Question'), data: null });
+				resolve({ status: defines.status.requestOK, message: 'Question enregistrée.', data: faq });
+			} catch (error) {
+				reject(error);
+			}
+		}).catch((e: IErrorObject) => coddyger.catchReturn(e, controllerLabel, 'adminUpdateFaq'));
+	}
+
+	adminRemoveFaq(id: string) {
+		return new Promise(async (resolve, reject) => {
+			try {
+				if (!(await faqService.remove(id))) {
+					return resolve({ status: defines.status.notFound, message: locale.notfound('Question'), data: null });
+				}
+				resolve({ status: defines.status.requestOK, message: 'Question supprimée.', data: null });
+			} catch (error) {
+				reject(error);
+			}
+		}).catch((e: IErrorObject) => coddyger.catchReturn(e, controllerLabel, 'adminRemoveFaq'));
 	}
 }

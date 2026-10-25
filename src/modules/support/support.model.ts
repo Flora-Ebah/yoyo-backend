@@ -1,6 +1,6 @@
 import mongoose, { Schema, Document } from 'mongoose';
 import coddyger, { IData, MongoDbDao } from 'coddyger';
-import { ISupportTicket, ISupportMessage } from './support.interface';
+import { ISupportTicket, ISupportMessage, SUPPORT_CATEGORY_VALUES } from './support.interface';
 
 /* ============================================================================
  * Collection `supporttickets`
@@ -13,11 +13,7 @@ const ticketSchema = new mongoose.Schema<ISupportTicket>(
 		// client et recherché par le support dans YOYO ADMIN.
 		reference: { type: String, required: true, unique: true, index: true },
 		userId: { type: Schema.Types.ObjectId, ref: 'Client', required: true, index: true },
-		category: {
-			type: String,
-			enum: ['scan', 'abonnement_paiement', 'marchand', 'compte', 'autre'],
-			required: true
-		},
+		category: { type: String, enum: SUPPORT_CATEGORY_VALUES, required: true },
 		status: {
 			type: String,
 			enum: ['open', 'in_progress', 'resolved'],
@@ -25,10 +21,22 @@ const ticketSchema = new mongoose.Schema<ISupportTicket>(
 		},
 		assignedTo: { type: Schema.Types.ObjectId, ref: 'Admin' },
 		// Basculé par l'assistant IA : en attente d'attribution tant qu'aucun agent n'a pris la main.
-		escalated: { type: Boolean, default: false }
+		escalated: { type: Boolean, default: false },
+		// Appli d'origine (cf. ISupportTicket) et suivi des délais de réponse (Excel CMS n°5).
+		source: { type: String, enum: ['client', 'pro'], default: 'client', index: true },
+		awaitingSince: { type: Date, default: null },
+		firstResponseAt: { type: Date, default: null },
+		firstResponseDueAt: { type: Date },
+		resolutionDueAt: { type: Date },
+		slaAlertedAt: { type: Date, default: null },
+		resolutionAlertedAt: { type: Date, default: null }
 	},
 	{ timestamps: true }
 );
+
+// File du cron des retards : tickets non résolus triés par échéance.
+ticketSchema.index({ status: 1, firstResponseDueAt: 1 });
+ticketSchema.index({ status: 1, resolutionDueAt: 1 });
 
 const ticketModel = mongoose.model<ISupportTicket>('SupportTicket', ticketSchema);
 

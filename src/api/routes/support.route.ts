@@ -1,5 +1,6 @@
 import coddyger from 'coddyger';
 import { SupportController } from '../../modules/support/support.controller';
+import { SUPPORT_CATEGORY_VALUES } from '../../modules/support/support.interface';
 import { TokenMiddleware } from '../middleware';
 
 /**
@@ -18,8 +19,32 @@ const Controller: SupportController = new SupportController();
 const tags: string[] = ['Assistance & messagerie (support)'];
 const adminTags: string[] = ['Admin — Assistance (support)'];
 
-const CATEGORIES = ['scan', 'abonnement_paiement', 'marchand', 'compte', 'autre'];
+const CATEGORIES = SUPPORT_CATEGORY_VALUES;
 const STATUSES = ['open', 'in_progress', 'resolved'];
+const APPS = ['client', 'pro'];
+const appQuery = {
+	type: 'object',
+	properties: { app: { type: 'string', enum: APPS } },
+	additionalProperties: false
+};
+const faqBody = {
+	type: 'object',
+	properties: {
+		app: { type: 'string', enum: APPS },
+		theme: { type: 'string', maxLength: 80 },
+		question: { type: 'string', minLength: 3, maxLength: 300 },
+		answer: { type: 'string', minLength: 3, maxLength: 3000 },
+		order: { type: 'integer', minimum: 0, maximum: 100000 },
+		status: { type: 'string', enum: ['published', 'draft'] }
+	},
+	additionalProperties: false
+};
+const idParams = {
+	type: 'object',
+	properties: { id: { type: 'string', pattern: '^[0-9a-fA-F]{24}$' } },
+	required: ['id'],
+	additionalProperties: false
+};
 
 const defaultRoute: any = (fastify: any, options, done) => {
 	/* ====================================================================== */
@@ -33,13 +58,15 @@ const defaultRoute: any = (fastify: any, options, done) => {
 			summary: 'Créer une demande d’assistance',
 			description:
 				'Ouvre un ticket (status `open`, `reference` générée) et enregistre le premier message ' +
-				'(sender `client`). Le propriétaire est déduit du jeton, jamais du corps.',
+				'(sender `client`). Le propriétaire est déduit du jeton, jamais du corps. `app: pro` : ' +
+				'ticket marchand, réservé aux comptes marchand ou gérant (catégories Pro).',
 			body: {
 				type: 'object',
 				properties: {
 					category: { type: 'string', enum: CATEGORIES },
 					message: { type: 'string', minLength: 1 },
-					attachment: { type: 'string' }
+					attachment: { type: 'string' },
+					app: { type: 'string', enum: APPS }
 				},
 				required: ['category', 'message'],
 				additionalProperties: false
@@ -55,7 +82,8 @@ const defaultRoute: any = (fastify: any, options, done) => {
 				userId: user._id,
 				category: body.category,
 				message: body.message,
-				attachment: body.attachment
+				attachment: body.attachment,
+				app: body.app
 			});
 			return coddyger.api(reply, Q);
 		}
@@ -66,28 +94,30 @@ const defaultRoute: any = (fastify: any, options, done) => {
 		schema: {
 			tags,
 			summary: 'Mes demandes d’assistance',
-			description: 'Tickets du client, récents d’abord, avec aperçu du dernier message.'
+			description: 'Tickets du client pour l’appli demandée (`app`, Client par défaut), récents d’abord.',
+			querystring: appQuery
 		},
 		method: 'GET',
 		url: `${routePath}/tickets`,
 		preHandler: TokenMiddleware.verify,
 		handler: (request, reply) => {
 			const user: any = request.user;
-			return coddyger.api(reply, Controller.listClientTickets(user._id));
+			return coddyger.api(reply, Controller.listClientTickets(user._id, (request.query as any)?.app));
 		}
 	});
 
-	// FAQ (10 Q/R en dur) — déclarée avant `/tickets/:id` pour ne pas être capturée par le param.
+	// FAQ — déclarée avant `/tickets/:id` pour ne pas être capturée par le param.
 	fastify.route({
 		schema: {
 			tags,
 			summary: 'FAQ (questions fréquentes)',
-			description: 'Les 10 questions/réponses du centre d’aide, servies en dur.'
+			description: 'FAQ publiée de l’appli demandée (`app`, Client par défaut), modifiable dans le CMS.',
+			querystring: appQuery
 		},
 		method: 'GET',
 		url: `${routePath}/faq`,
 		preHandler: TokenMiddleware.verify,
-		handler: (request, reply) => coddyger.api(reply, Controller.getFaq())
+		handler: (request, reply) => coddyger.api(reply, Controller.getFaq((request.query as any)?.app))
 	});
 
 	// Assistant IA (Groq)
@@ -264,14 +294,19 @@ const defaultRoute: any = (fastify: any, options, done) => {
 		schema: {
 			tags: adminTags,
 			summary: 'Liste des tickets (admin)',
-			description: 'Filtre `status` + recherche `q` (référence ou nom du client). Paginé.',
+			description:
+				'Filtres `status`, `category`, `source` (appli), `view` (`awaiting` : en attente d’un conseiller, ' +
+				'`overdue` : en retard) et recherche `q` (référence ou nom du client). Paginé.',
 			query: {
 				type: 'object',
 				properties: {
 					page: { type: 'number' },
-					pageSize: { type: 'number' },
+					pageSize: { type: 'number', minimum: 1, maximum: 100 },
 					status: { type: 'string', enum: STATUSES },
-					q: { type: 'string' }
+					category: { type: 'string', enum: CATEGORIES },
+					source: { type: 'string', enum: APPS },
+					view: { type: 'string', enum: ['awaiting', 'overdue'] },
+					q: { type: 'string', maxLength: 100 }
 				},
 				required: [],
 				additionalProperties: false
@@ -288,6 +323,9 @@ const defaultRoute: any = (fastify: any, options, done) => {
 					page: q.page || 1,
 					pageSize: q.pageSize || 20,
 					status: q.status,
+					category: q.category,
+					source: q.source,
+					view: q.view,
 					q: q.q
 				})
 			);
@@ -443,6 +481,42 @@ const defaultRoute: any = (fastify: any, options, done) => {
 				Controller.adminUpdate(String(request.params.id), { status: body.status, assignedTo: body.assignedTo === 'me' ? (request.user as any)._id : body.assignedTo }, (request.user as any)._id)
 			);
 		}
+	});
+
+	/* ====================================================================== */
+	/* ADMIN — FAQ (CMS › Paramètres › FAQ)                                   */
+	/* ====================================================================== */
+
+	fastify.route({
+		schema: { tags: adminTags, summary: 'FAQ des deux applis, brouillons compris (admin)', querystring: appQuery },
+		method: 'GET',
+		url: `${routePath}/admin/faq`,
+		preHandler: TokenMiddleware.can('read', 'support'),
+		handler: (request, reply) => coddyger.api(reply, Controller.adminListFaq((request.query as any)?.app))
+	});
+
+	fastify.route({
+		schema: { tags: adminTags, summary: 'Ajouter une question à la FAQ (admin)', body: { ...faqBody, required: ['app', 'question', 'answer'] } },
+		method: 'POST',
+		url: `${routePath}/admin/faq`,
+		preHandler: TokenMiddleware.can('update', 'support'),
+		handler: (request, reply) => coddyger.api(reply, Controller.adminCreateFaq(request.body))
+	});
+
+	fastify.route({
+		schema: { tags: adminTags, summary: 'Modifier une question de la FAQ (admin)', params: idParams, body: faqBody },
+		method: 'PUT',
+		url: `${routePath}/admin/faq/:id`,
+		preHandler: TokenMiddleware.can('update', 'support'),
+		handler: (request, reply) => coddyger.api(reply, Controller.adminUpdateFaq(request.params.id, request.body))
+	});
+
+	fastify.route({
+		schema: { tags: adminTags, summary: 'Supprimer une question de la FAQ (admin)', params: idParams },
+		method: 'DELETE',
+		url: `${routePath}/admin/faq/:id`,
+		preHandler: TokenMiddleware.can('update', 'support'),
+		handler: (request, reply) => coddyger.api(reply, Controller.adminRemoveFaq(request.params.id))
 	});
 
 	done();

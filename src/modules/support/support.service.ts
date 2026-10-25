@@ -1,5 +1,8 @@
 import coddyger, { AxiosService, IData, IErrorObject, LoggerService, LogLevel } from 'coddyger';
-import { ISupportMessage, ISupportTicket } from './support.interface';
+import { categoriesFor, ISupportMessage, ISupportTicket, SupportApp } from './support.interface';
+import { computeDueDates, isOverdue, overdueFilter } from './support-sla';
+import { faqService } from './faq.service';
+import { PlatformConfigService } from '../platform-config/platform-config.service';
 import { SupportMessageSet, SupportTicketSet } from './support.model';
 import { ClientSet } from '../client';
 import { Events, IPushNotification, PushNotificationService } from '../push-notification';
@@ -10,54 +13,9 @@ import { getSocketIO } from '../../main';
 /** Room Socket.IO partagée par les agents du support (back-office). */
 export const SUPPORT_AGENTS_ROOM = 'support:agents';
 
-/**
- * FAQ — 10 questions/réponses du §04 du cahier des charges, EN DUR.
- * Servie telle quelle par `GET /support/faq` et résumée dans la consigne système de l'assistant IA.
- */
-export const SUPPORT_FAQ: Array<{ q: string; a: string }> = [
-	{
-		q: 'Comment fonctionne YOYO ?',
-		a: 'YOYO vous donne accès à des offres et réductions chez les marchands partenaires. Découvrez les offres dans l’application.'
-	},
-	{
-		q: 'Dois-je payer pour découvrir les offres ?',
-		a: 'Non. Vous pouvez parcourir les offres gratuitement. Un abonnement actif est requis pour utiliser votre réduction au moment du scan.'
-	},
-	{
-		q: 'Combien coûte l’abonnement ?',
-		a: '2 000 FCFA par mois ou 19 900 FCFA par an, selon les formules proposées dans l’application.'
-	},
-	{
-		q: 'Combien de fois puis-je scanner ?',
-		a: 'Les scans sont illimités avec un abonnement actif, sous réserve des conditions de chaque offre et des règles d’utilisation de YOYO.'
-	},
-	{
-		q: 'Comment profiter d’une réduction ?',
-		a: 'Choisissez un marchand participant et suivez le parcours Scanner. Vérifiez le pourcentage et le montant de réduction affichés avant de finaliser l’opération.'
-	},
-	{
-		q: 'Qui encaisse le paiement ?',
-		a: 'Le marchand encaisse directement le montant après réduction selon le fonctionnement de l’offre.'
-	},
-	{
-		q: 'Le marchand refuse la réduction : que faire ?',
-		a: 'Ne forcez pas la transaction. Ouvrez Contacter YOYO, choisissez Problème marchand et indiquez le nom du commerce ainsi que les détails.'
-	},
-	{
-		q: 'Mon scan ne fonctionne pas : que faire ?',
-		a: 'Vérifiez votre connexion et votre abonnement, relancez l’application, puis contactez l’assistance si le problème persiste.'
-	},
-	{
-		q: 'Comment signaler un paiement ou un abonnement non activé ?',
-		a: 'Ouvrez Contacter YOYO → Abonnement / paiement, puis transmettez la date et la référence de paiement si disponible.'
-	},
-	{
-		q: 'Comment joindre YOYO ?',
-		a: 'Depuis Profil → Centre d’aide → Contacter YOYO. Vous pouvez suivre et retrouver vos échanges au même endroit.'
-	}
-];
+// FAQ de départ : désormais en base, modifiable dans le CMS (`faq.service.ts`).
+export { SUPPORT_FAQ } from './faq.service';
 
-const CATEGORIES = ['scan', 'abonnement_paiement', 'marchand', 'compte', 'autre'];
 
 export class SupportService {
 	private readonly tickets: IData<ISupportTicket>;
@@ -88,6 +46,16 @@ export class SupportService {
 		}
 		// Repli très improbable : suffixe horodaté.
 		return 'T' + Date.now().toString(36).toUpperCase().slice(-5);
+	}
+
+	/** Transférés par l'assistant et pas encore attribués : la file « en attente d'un conseiller ». */
+	private awaitingFilter(): any {
+		return { escalated: true, status: 'open', $or: [{ assignedTo: { $exists: false } }, { assignedTo: null }] };
+	}
+
+	/** Échappe une saisie libre avant de l'utiliser dans une expression régulière Mongo. */
+	private escapeRegex(text: string): string {
+		return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 	}
 
 	/** Tronque un texte pour l'aperçu « dernier message » des listes. */
@@ -122,19 +90,42 @@ export class SupportService {
 	 * Côté client
 	 * ----------------------------------------------------------------------- */
 
+	/**
+	 * Échéances et suivi d'un nouveau ticket (Excel CMS n°5). Les délais sont relus à chaque
+	 * création : un changement dans le CMS s'applique aux tickets suivants.
+	 */
+	private async slaFields(category: string, now = new Date()): Promise<Partial<ISupportTicket>> {
+		const sla = await new PlatformConfigService().getSupportSla();
+		return { ...computeDueDates(now, category, sla), awaitingSince: now, firstResponseAt: null };
+	}
+
+	/**
+	 * Un ticket Pro n'est ouvert que par un marchand ou un gérant (Excel CMS n°6) : il arrive dans
+	 * la boîte du support avec le badge « Marchand ».
+	 */
+	private async canUsePro(userId: string): Promise<boolean> {
+		const client: any = await new ClientSet().selectOne({ _id: userId }, '_id isPartner isManager');
+		return Boolean(client && !client.error && (client.isPartner || client.isManager));
+	}
+
 	/** Crée un ticket + le premier message (sender 'client'). */
 	async createTicket(payloads: {
 		userId: string;
 		category: string;
 		message: string;
 		attachment?: string;
+		app?: SupportApp;
 	}): Promise<any> {
 		try {
-			if (CATEGORIES.indexOf(payloads.category) === -1) {
+			const app: SupportApp = payloads.app === 'pro' ? 'pro' : 'client';
+			if (!categoriesFor(app).includes(payloads.category)) {
 				return { error: true, data: 'Catégorie invalide.' };
 			}
 			if (coddyger.string.isEmpty(payloads.message)) {
 				return { error: true, data: 'Le message est requis.' };
+			}
+			if (app === 'pro' && !(await this.canUsePro(payloads.userId))) {
+				return { error: true, data: 'Ce compte n’est pas un compte marchand.' };
 			}
 
 			const reference = await this.generateReference();
@@ -144,7 +135,9 @@ export class SupportService {
 				reference,
 				userId: payloads.userId,
 				category: payloads.category,
-				status: 'open'
+				status: 'open',
+				source: app,
+				...(await this.slaFields(payloads.category))
 			} as ISupportTicket);
 			if (ticket?.error) throw ticket;
 
@@ -172,10 +165,15 @@ export class SupportService {
 		}
 	}
 
-	/** Tickets d'un client, récents d'abord, avec aperçu du dernier message. */
-	async listClientTickets(userId: string): Promise<any> {
+	/**
+	 * Tickets d'un client, récents d'abord, avec aperçu du dernier message. Chaque appli ne voit
+	 * que ses tickets : un marchand qui utilise aussi l'appli Client y garde ses demandes séparées.
+	 * `app` absent : tous les tickets (fiche client du CMS).
+	 */
+	async listClientTickets(userId: string, app?: SupportApp): Promise<any> {
 		try {
-			const data: any = await this.tickets.selectHug({ userId });
+			const bySource = app === 'pro' ? { source: 'pro' } : app === 'client' ? { source: { $ne: 'pro' } } : {};
+			const data: any = await this.tickets.selectHug({ userId, ...bySource });
 			if (data?.error) throw data;
 
 			const rows = (data as any[]).sort(
@@ -190,7 +188,9 @@ export class SupportService {
 					reference: t.reference,
 					category: t.category,
 					status: t.status,
+					source: t.source ?? 'client',
 					lastMessage: last ? this.truncate(last.body) : '',
+					createdAt: t.createdAt,
 					updatedAt: t.updatedAt
 				});
 			}
@@ -279,9 +279,12 @@ export class SupportService {
 			} as ISupportMessage);
 			if (message?.error) throw message;
 
-			// Touche le ticket pour le remonter dans les listes : on ré-écrit le statut inchangé,
-			// ce qui suffit à ce que Mongoose rafraîchisse `updatedAt`.
-			await this.tickets.update({ _id: payloads.ticketId }, { status: ticket.status });
+			// Touche le ticket pour le remonter dans les listes (Mongoose rafraîchit `updatedAt`) et
+			// note depuis quand le client attend une réponse, si ce n'est pas déjà le cas.
+			await this.tickets.update(
+				{ _id: payloads.ticketId },
+				ticket.awaitingSince ? { status: ticket.status } : { status: ticket.status, awaitingSince: new Date() }
+			);
 
 			const dto = this.toMessageDto(message);
 			// Temps réel : vers les agents (liste + conversation côté back-office).
@@ -325,19 +328,37 @@ export class SupportService {
 	 * Côté admin
 	 * ----------------------------------------------------------------------- */
 
-	/** Liste paginée pour YOYO ADMIN (filtre status + recherche reference/nom). */
-	async listAdminTickets(payloads: { page?: number; pageSize?: number; status?: string; q?: string }): Promise<any> {
+	/**
+	 * Liste paginée pour YOYO ADMIN. Tous les filtres sont appliqués côté serveur, pour que les
+	 * onglets et compteurs portent sur l'ensemble des tickets et pas sur la page affichée :
+	 *  - `status`, `category`, `source` (`client` | `pro`) ;
+	 *  - `view` : `awaiting` (transférés par l'assistant, sans conseiller) ou `overdue` (en retard) ;
+	 *  - `q` : référence ou nom du client.
+	 */
+	async listAdminTickets(payloads: {
+		page?: number;
+		pageSize?: number;
+		status?: string;
+		category?: string;
+		source?: SupportApp;
+		view?: 'awaiting' | 'overdue';
+		q?: string;
+	}): Promise<any> {
 		try {
 			const page = payloads.page ?? 1;
-			const pageSize = payloads.pageSize ?? 20;
+			const pageSize = Math.min(payloads.pageSize ?? 20, 100);
 
-			const params: any = {};
-			if (!coddyger.string.isEmpty(payloads.status)) {
-				params.status = payloads.status;
-			}
+			const and: any[] = [];
+			if (!coddyger.string.isEmpty(payloads.status)) and.push({ status: payloads.status });
+			if (!coddyger.string.isEmpty(payloads.category)) and.push({ category: payloads.category });
+			// Les tickets antérieurs au champ `source` sont des tickets Client.
+			if (payloads.source === 'pro') and.push({ source: 'pro' });
+			if (payloads.source === 'client') and.push({ source: { $ne: 'pro' } });
+			if (payloads.view === 'awaiting') and.push(this.awaitingFilter());
+			if (payloads.view === 'overdue') and.push(overdueFilter());
 
 			if (!coddyger.string.isEmpty(payloads.q)) {
-				const q = payloads.q as string;
+				const q = this.escapeRegex(String(payloads.q).trim());
 				// Recherche sur la référence OU sur le nom du client (via lookup des clients).
 				const clientDao: any = new ClientSet();
 				const clients: any = await clientDao.selectHug({
@@ -347,8 +368,9 @@ export class SupportService {
 					]
 				});
 				const clientIds = Array.isArray(clients) ? clients.map((c: any) => c._id) : [];
-				params.$or = [{ reference: { $regex: q, $options: 'i' } }, { userId: { $in: clientIds } }];
+				and.push({ $or: [{ reference: { $regex: q, $options: 'i' } }, { userId: { $in: clientIds } }] });
 			}
+			const params = and.length > 0 ? { $and: and } : {};
 
 			const data: any = await this.tickets.select({ params, page, pageSize });
 			if (data.error) throw data;
@@ -382,7 +404,9 @@ export class SupportService {
 								_id: c._id,
 								firstname: c.firstname,
 								lastname: c.lastname,
-								email: c.email
+								email: c.email,
+								isPartner: c.isPartner === true,
+								isManager: c.isManager === true
 							};
 						}
 					}
@@ -405,6 +429,12 @@ export class SupportService {
 					status: t.status,
 					assignedTo: t.assignedTo ?? null,
 					escalated: t.escalated ?? false,
+					source: t.source ?? 'client',
+					awaitingSince: t.awaitingSince ?? null,
+					firstResponseAt: t.firstResponseAt ?? null,
+					firstResponseDueAt: t.firstResponseDueAt ?? null,
+					resolutionDueAt: t.resolutionDueAt ?? null,
+					overdue: isOverdue(t),
 					lastMessage: last ? this.truncate(last.body) : '',
 					createdAt: t.createdAt,
 					updatedAt: t.updatedAt
@@ -442,10 +472,14 @@ export class SupportService {
 			} as ISupportMessage);
 			if (message?.error) throw message;
 
-			// Un 'open' devient 'in_progress' dès la première réponse du support.
-			const patch: any = {};
+			// Un 'open' devient 'in_progress' dès la première réponse du support ; le client n'attend
+			// plus de réponse et la 1re réponse est datée une fois pour toutes (délais, Excel CMS n°5).
+			const patch: any = { awaitingSince: null };
 			if (ticket.status === 'open') {
 				patch.status = 'in_progress';
+			}
+			if (!ticket.firstResponseAt) {
+				patch.firstResponseAt = new Date();
 			}
 			await this.tickets.update({ _id: payloads.ticketId }, patch);
 
@@ -462,7 +496,9 @@ export class SupportService {
 						userId: ticket.userId,
 						ticketId: payloads.ticketId,
 						reference: ticket.reference,
-						url: `/support/tickets/${payloads.ticketId}`
+						// La push part sur l'appli d'où vient le ticket seulement.
+						app: ticket.source === 'pro' ? 'pro' : 'client',
+						url: ticket.source === 'pro' ? `/help/${payloads.ticketId}` : `/support/tickets/${payloads.ticketId}`
 					},
 					target: Events.USER_NOTIFICATION,
 					status: 'pending'
@@ -580,18 +616,31 @@ export class SupportService {
 	async adminStats(): Promise<any> {
 		try {
 			const model: any = (this.tickets as any).defaultModel;
-			const [total, open, inProgress, resolved, awaiting, byCat] = await Promise.all([
+			const [total, open, inProgress, resolved, awaiting, overdue, pro, byCat] = await Promise.all([
 				model.countDocuments({}),
 				model.countDocuments({ status: 'open' }),
 				model.countDocuments({ status: 'in_progress' }),
 				model.countDocuments({ status: 'resolved' }),
 				// Basculés par l'assistant et pas encore attribués : la file « en attente d'un conseiller ».
-				model.countDocuments({ escalated: true, status: 'open', $or: [{ assignedTo: { $exists: false } }, { assignedTo: null }] }),
+				model.countDocuments(this.awaitingFilter()),
+				model.countDocuments(overdueFilter()),
+				model.countDocuments({ source: 'pro' }),
 				model.aggregate([{ $group: { _id: '$category', n: { $sum: 1 } } }])
 			]);
 			const byCategory: Record<string, number> = {};
 			for (const c of byCat as Array<{ _id: string; n: number }>) byCategory[c._id] = c.n;
-			return { stats: { total, open, in_progress: inProgress, resolved, awaiting, byCategory } };
+			return {
+				stats: {
+					total,
+					open,
+					in_progress: inProgress,
+					resolved,
+					awaiting,
+					overdue,
+					bySource: { client: total - pro, pro },
+					byCategory
+				}
+			};
 		} catch (error) {
 			return { error: true, data: error };
 		}
@@ -631,7 +680,7 @@ export class SupportService {
 				const clientDao: any = new ClientSet();
 				const client: any = await clientDao.selectOne(
 					{ _id: userId },
-					'_id firstname lastname email contact createdAt status'
+					'_id firstname lastname email contact createdAt status isPartner isManager'
 				);
 				if (client && !client.error) {
 					user = {
@@ -641,7 +690,9 @@ export class SupportService {
 						email: client.email,
 						contact: client.contact,
 						createdAt: client.createdAt,
-						status: client.status
+						status: client.status,
+						isPartner: client.isPartner === true,
+						isManager: client.isManager === true
 					};
 				}
 			} catch {
@@ -685,12 +736,39 @@ export class SupportService {
 			// Scans illimités sous abonnement actif, sinon néant.
 			const scans = subscription ? 'Illimités' : '—';
 
+			// Marchand ou gérant (Excel CMS n°6) : ses boutiques, utiles pour un ticket Pro.
+			let boutiques: Array<{ _id: string; name: string; status: string; ville?: string; role: 'owner' | 'manager' }> = [];
+			if (user?.isPartner || user?.isManager) {
+				try {
+					// eslint-disable-next-line @typescript-eslint/no-var-requires
+					const mongoose = require('mongoose');
+					const Partner = mongoose.model('Partner');
+					const owned = user.isPartner
+						? await Partner.find({ user: userId, status: { $ne: 'removed' } }, '_id name status ville').lean()
+						: [];
+					const links = user.isManager
+						? await mongoose.model('BoutiqueManager').find({ manager: userId, status: { $ne: 'removed' } }, 'boutique').lean()
+						: [];
+					const managed = links.length
+						? await Partner.find({ _id: { $in: links.map((l: any) => l.boutique) } }, '_id name status ville').lean()
+						: [];
+					boutiques = [
+						...owned.map((b: any) => ({ ...b, role: 'owner' as const })),
+						...managed.map((b: any) => ({ ...b, role: 'manager' as const }))
+					];
+				} catch {
+					boutiques = [];
+				}
+			}
+
 			return {
 				context: {
 					user,
 					subscription,
 					savings,
-					scans
+					scans,
+					boutiques,
+					source: ticket.source ?? 'client'
 				}
 			};
 		} catch (error) {
@@ -744,8 +822,9 @@ export class SupportService {
 	 * FAQ + Assistant IA
 	 * ----------------------------------------------------------------------- */
 
-	getFaq(): Array<{ q: string; a: string }> {
-		return SUPPORT_FAQ;
+	/** FAQ publiée d'une appli (Client par défaut, pour les versions déjà installées). */
+	getFaq(app: SupportApp = 'client'): Promise<Array<{ q: string; a: string; theme: string }>> {
+		return faqService.listPublished(app);
 	}
 
 	/**
@@ -766,7 +845,8 @@ export class SupportService {
 		}
 
 		try {
-			const faqResume = SUPPORT_FAQ.map((f) => `Q: ${f.q}\nR: ${f.a}`).join('\n');
+			const faqResume = (await faqService.listPublished('client')).map((f) => `Q: ${f.q}\nR: ${f.a}`).join('\n');
+			const clientCategories = categoriesFor('client');
 			const systemPrompt =
 				'Tu es l’assistant YoYo La Carte. Réponds en français, brièvement, sur la base de la FAQ.\n' +
 				// Ton de la marque : « YO » est le salut YoYo ; tutoiement chaleureux et simple.
@@ -777,7 +857,7 @@ export class SupportService {
 				'- "escalate" (boolean) : true si tu ne peux pas résoudre le problème, ou s’il s’agit d’un ' +
 				'problème de compte, de paiement/abonnement non activé, ou de litige avec un marchand qui exige ' +
 				'un conseiller humain. Sinon false.\n' +
-				'- "category" (string) : l’une de "scan", "abonnement_paiement", "marchand", "compte", "autre" — ' +
+				`- "category" (string) : l’une de ${clientCategories.map((c) => `"${c}"`).join(', ')} — ` +
 				'la catégorie la plus adaptée si le client devait ouvrir une demande.\n\n' +
 				'Quand escalate vaut true, dans "reply" invite poliment le client à transférer la conversation ' +
 				'à un conseiller (ne lui demande pas de tout retaper).\n\n' +
@@ -836,7 +916,7 @@ export class SupportService {
 			const parsed = JSON.parse(cleaned);
 			const reply = typeof parsed.reply === 'string' ? parsed.reply.trim() : '';
 			if (!reply) return fallback(raw);
-			const category = CATEGORIES.indexOf(parsed.category) !== -1 ? parsed.category : 'autre';
+			const category = categoriesFor('client').includes(parsed.category) ? parsed.category : 'autre';
 			return { reply, escalate: parsed.escalate === true, category };
 		} catch {
 			return fallback(raw);
@@ -864,7 +944,7 @@ export class SupportService {
 				return { error: true, data: 'Conversation vide.' };
 			}
 
-			const category = CATEGORIES.indexOf(payloads.category as string) !== -1 ? (payloads.category as string) : 'autre';
+			const category = categoriesFor('client').includes(payloads.category as string) ? (payloads.category as string) : 'autre';
 			const reference = await this.generateReference();
 
 			const ticket: any = await this.tickets.save({
@@ -873,7 +953,9 @@ export class SupportService {
 				userId: payloads.userId,
 				category,
 				status: 'open',
-				escalated: true
+				escalated: true,
+				source: 'client',
+				...(await this.slaFields(category))
 			} as ISupportTicket);
 			if (ticket?.error) throw ticket;
 

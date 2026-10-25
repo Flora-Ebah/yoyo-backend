@@ -37,5 +37,21 @@ export interface IPlatformConfig {
    * modifié que par `$inc` atomique (réservation d'une place), jamais par la mise à jour du BO.
    */
   referralRewardsGranted?: number;
+  /**
+   * Délais cibles du support (décision Support n°8, Excel CMS n°5), en heures :
+   *  - `paymentFirstResponseHours` : 1re réponse aux sujets d'argent, en heures OUVRÉES ;
+   *  - `firstResponseHours` : 1re réponse aux autres sujets ;
+   *  - `resolutionHours` : résolution, tous sujets ;
+   *  - `businessStartHour` / `businessEndHour` / `businessDays` : heures ouvrées (heure d'Abidjan,
+   *    UTC ; jours 0 = dimanche … 6 = samedi).
+   */
+  supportSla?: {
+    paymentFirstResponseHours: number;
+    firstResponseHours: number;
+    resolutionHours: number;
+    businessStartHour: number;
+    businessEndHour: number;
+    businessDays: number[];
+  };
   status?: string;
 }

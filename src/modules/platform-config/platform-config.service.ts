@@ -60,6 +60,45 @@ const normalizeReferralProgram = (program: any): NonNullable<IPlatformConfig['re
   };
 };
 
+/** Délais du support : décision n°8 (paiement 2 h ouvrées, sinon 24 h, résolution 48 h). */
+export const DEFAULT_SUPPORT_SLA = {
+  paymentFirstResponseHours: 2,
+  firstResponseHours: 24,
+  resolutionHours: 48,
+  businessStartHour: 8,
+  businessEndHour: 18,
+  businessDays: [1, 2, 3, 4, 5, 6]
+};
+
+/** Délais valides, champ par champ ; des heures ouvrées incohérentes retombent sur le défaut. */
+export const normalizeSupportSla = (sla: any): NonNullable<IPlatformConfig['supportSla']> => {
+  const hours = (value: any, fallback: number) => {
+    const n = Number(value);
+    return Number.isFinite(n) && n > 0 && n <= 720 ? n : fallback;
+  };
+  const hour = (value: any, fallback: number) => {
+    const n = Number(value);
+    return Number.isInteger(n) && n >= 0 && n <= 24 ? n : fallback;
+  };
+  let start = hour(sla?.businessStartHour, DEFAULT_SUPPORT_SLA.businessStartHour);
+  let end = hour(sla?.businessEndHour, DEFAULT_SUPPORT_SLA.businessEndHour);
+  if (end <= start) {
+    start = DEFAULT_SUPPORT_SLA.businessStartHour;
+    end = DEFAULT_SUPPORT_SLA.businessEndHour;
+  }
+  const days = Array.isArray(sla?.businessDays)
+    ? Array.from(new Set<number>(sla.businessDays.map(Number).filter((d: number) => Number.isInteger(d) && d >= 0 && d <= 6))).sort()
+    : [];
+  return {
+    paymentFirstResponseHours: hours(sla?.paymentFirstResponseHours, DEFAULT_SUPPORT_SLA.paymentFirstResponseHours),
+    firstResponseHours: hours(sla?.firstResponseHours, DEFAULT_SUPPORT_SLA.firstResponseHours),
+    resolutionHours: hours(sla?.resolutionHours, DEFAULT_SUPPORT_SLA.resolutionHours),
+    businessStartHour: start,
+    businessEndHour: end,
+    businessDays: days.length > 0 ? days : [...DEFAULT_SUPPORT_SLA.businessDays]
+  };
+};
+
 export class PlatformConfigService {
   private readonly dao: PlatformConfigSet;
 
@@ -88,7 +127,8 @@ export class PlatformConfigService {
       media: normalizeMedia(doc.media),
       redeemLimits: normalizeRedeemLimits(doc.redeemLimits),
       referralProgram: normalizeReferralProgram(doc.referralProgram),
-      referralRewardsGranted: Number(doc.referralRewardsGranted) || 0
+      referralRewardsGranted: Number(doc.referralRewardsGranted) || 0,
+      supportSla: normalizeSupportSla(doc.supportSla)
     } as IPlatformConfig;
   }
 
@@ -139,6 +179,15 @@ export class PlatformConfigService {
     );
   }
 
+  /** Délais cibles du support (repli sur la décision n°8). */
+  async getSupportSla(): Promise<NonNullable<IPlatformConfig['supportSla']>> {
+    try {
+      return normalizeSupportSla((await this.get()).supportSla);
+    } catch {
+      return normalizeSupportSla(null);
+    }
+  }
+
   /** Limites de la vidéo de présentation (durée en secondes, poids en Mo). */
   async getMediaLimits(): Promise<NonNullable<IPlatformConfig['media']>> {
     try {
@@ -183,6 +232,10 @@ export class PlatformConfigService {
 
     if (data.referralProgram) {
       next.referralProgram = normalizeReferralProgram({ ...current.referralProgram, ...data.referralProgram });
+    }
+
+    if (data.supportSla) {
+      next.supportSla = normalizeSupportSla({ ...current.supportSla, ...data.supportSla });
     }
 
     const res: any = await this.dao.update({ _id: (current as any)._id }, next);
