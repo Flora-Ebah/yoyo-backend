@@ -6,6 +6,24 @@ import { collectConfigurationIssues } from '../config/security-check';
 const daoProfile: IData<IProfile> = new ProfileSet();
 const daoAdmin: IData<IAdmin> = new AdminSet();
 
+/** Sujets du back-office (alignés sur `PERMISSION_SUBJECTS` du CMS) : base du profil « Lecture seule ». */
+const READ_ONLY_SUBJECTS: Array<[string, string]> = [
+	['dashboard', 'Tableau de bord'],
+	['clients', 'Utilisateurs'],
+	['pros', 'Partenaires & boutiques'],
+	['transactions', 'Transactions'],
+	['subscriptions', 'Abonnements'],
+	['moderation', 'Modération'],
+	['support', 'Assistance'],
+	['notifications', 'Notifications'],
+	['admins', 'Comptes admin'],
+	['audit', "Journal d'audit"],
+	['roles', 'Rôles & permissions'],
+	['enrolments', 'Activité commerciale'],
+	['promotions', 'Codes & promotions'],
+	['settings', 'Paramètres']
+];
+
 export class MainHelper {
 	static async generateDefaultProfile(): Promise<any> {
 		try {
@@ -142,10 +160,64 @@ export class MainHelper {
 		}
 	}
 
+	/**
+	 * Profils métier créés au démarrage s'ils manquent (Excel CMS n°8), repérés par leur nom : un
+	 * profil existant n'est jamais modifié, l'équipe peut donc l'ajuster dans Paramètres › Rôles.
+	 */
+	static async ensureBusinessProfiles(): Promise<void> {
+		const read = (subject: string, label: string) => ({ name: `${label} · voir`, subject, action: 'read' });
+		const profiles = [
+			{
+				name: 'Finance',
+				description: 'Paiements et abonnements : consultation, activation manuelle, remboursements.',
+				ability: [
+					read('dashboard', 'Tableau de bord'),
+					read('transactions', 'Transactions'),
+					{ name: 'Transactions · modifier', subject: 'transactions', action: 'update' },
+					read('subscriptions', 'Abonnements'),
+					read('clients', 'Utilisateurs'),
+					read('promotions', 'Codes & promotions'),
+					read('audit', "Journal d'audit")
+				]
+			},
+			{
+				name: 'Lecture seule',
+				description: 'Consultation de tout le back-office, sans aucune modification.',
+				ability: READ_ONLY_SUBJECTS.map(([subject, label]) => read(subject, label))
+			}
+		];
+
+		try {
+			// eslint-disable-next-line @typescript-eslint/no-var-requires
+			const Profile = require('mongoose').model('Profile');
+			for (const profile of profiles) {
+				const exists = await Profile.exists({
+					name: { $regex: `^${profile.name}$`, $options: 'i' },
+					status: { $ne: 'removed' }
+				});
+				if (exists) continue;
+				const last: any = await daoProfile.selectLatest();
+				await daoProfile.save({
+					_id: coddyger.string.generateObjectId(),
+					slug: coddyger.buildSlug('PRF', last ? last.slug : null),
+					name: profile.name,
+					description: profile.description,
+					ability: profile.ability,
+					status: 'active',
+					user: null
+				} as any);
+				console.log(`=====> Profil "${profile.name}" créé`);
+			}
+		} catch (error) {
+			console.error('Création des profils métier échouée :', error);
+		}
+	}
+
 	static async setDefaultProfile() {
 		try {
 			// First generate default profile
 			const defaultProfile = await this.generateDefaultProfile();
+			await this.ensureBusinessProfiles();
 
 			// Then generate default admin with this profile
 			await this.generateDefaultAdmin(defaultProfile);

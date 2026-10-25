@@ -86,6 +86,12 @@ const defaultRoute: any = (fastify: any, options, done) => {
     preHandler: TokenMiddleware.verify,
     handler: (request, reply) => {
       const userId = request.params.userId;
+      // [SÉCURITÉ] L'historique d'un autre compte n'est lisible que par un admin (avant : par tout
+      // compte connecté). Le titulaire passe normalement par `/user/me`.
+      const caller: any = request.user;
+      if (!caller?.isAdmin && String(caller?._id) !== String(userId)) {
+        return coddyger.api(reply, Promise.resolve({ status: 403, message: 'Accès refusé.', data: null }));
+      }
       let Q = Controller.getUserHistory(userId);
       return coddyger.api(reply, Q);
     }
@@ -344,7 +350,7 @@ const defaultRoute: any = (fastify: any, options, done) => {
     },
     method: 'POST',
     url: `${routePath}/activate-renewal/:id`,
-    preHandler: TokenMiddleware.verifyAdmin,
+    preHandler: TokenMiddleware.can('update', 'transactions'),
     handler: (request, reply) => {
       const subscriptionId = request.params.id;
 

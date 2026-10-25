@@ -3,6 +3,7 @@ import { locale } from '../../public';
 import { ILogin, ILoginClient, LoginService } from './';
 import { ClientService } from '../client/client.service';
 import { OtpController } from '../otp/otp.controller';
+import { blockedLoginMessage } from '../account-block/account-block.service';
 
 const controllerLabel: string = 'LoginController';
 
@@ -95,6 +96,19 @@ export class LoginController {
         const client = await this.clientService.getOne(searchQuery);
         // Les comptes marchands `pending` suivent le parcours d'activation Pro : inchangés.
         if (!client || (client.status === 'pending' && client.isPartner)) {
+					// Compte bloqué par un administrateur (Excel CMS n°2) : avec le bon mot de passe, on dit
+					// pourquoi et jusqu'à quand, au lieu de « identifiants incorrects ». Sans le bon mot de
+					// passe, la réponse reste identique : on ne révèle pas l'existence du compte.
+					if (!client) {
+						const blocked: any = await this.clientService.getOne({
+							...searchQuery,
+							status: 'suspended',
+							'block.at': { $exists: true }
+						});
+						if (blocked && (await this.service.verifyPassword(item.password, blocked.password))) {
+							return resolve({ status: defines.status.forbidden, message: blockedLoginMessage(blocked), data: { code: 'ACCOUNT_BLOCKED' } });
+						}
+					}
 					console.log(locale.notfound('Compte'), item.login);
 					return resolve({
 						status: defines.status.badRequest,

@@ -68,6 +68,15 @@ const schema = new mongoose.Schema<IClient>({
 	removedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'Admin' },
 	// Anonymisation DCP/RGPD (cf. IClient).
 	anonymizedAt: { type: Date },
+	// Blocage par un administrateur (Excel CMS n°2) : motif, fin (null = définitif), auteur, date.
+	// `statusBeforeBlock` permet de rendre au compte son statut d'origine au déblocage.
+	block: {
+		reason: { type: String },
+		until: { type: Date, default: null },
+		by: { type: mongoose.Schema.Types.ObjectId, ref: 'Admin' },
+		at: { type: Date }
+	},
+	statusBeforeBlock: { type: String },
 	reactivatedAt: { type: Date },
 	// Parrainage (#6/#7) + attribution influenceur (#17).
 	referralCode: { type: String, index: true },

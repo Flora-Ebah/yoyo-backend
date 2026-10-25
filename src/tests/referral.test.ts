@@ -19,6 +19,13 @@ import { ClientService } from '../modules/client/client.service';
 import { isPromoCodeFormat } from '../modules/promo-code/promo-code.service';
 
 /**
+ * Garde admin : `verifyAdmin`, ou un guard RBAC (`can`, `canStrict`, `canAny`) qui porte le
+ * marqueur `adminGuard` (Excel CMS n°8 : les routes admin passent progressivement à `can()`).
+ */
+const isAdminGuard = (handler: any): boolean => handler === TokenMiddleware.verifyAdmin || handler?.adminGuard === true;
+
+
+/**
  * Parrainage (Excel Parrainage n°2, 5, 6, 9, 11, 12) : validation au 1er abonnement payé, mois
  * offert réellement appliqué, une récompense par parrain, plafond du programme, anti-fraude.
  */
@@ -238,7 +245,7 @@ describe('Parrainage et mois offert', () => {
 			const routes: any[] = [];
 			referralRoute({ route: (definition: any) => routes.push(definition) }, {}, () => {});
 			expect(routes).to.have.length(4);
-			routes.forEach(r => expect(r.preHandler).to.equal(TokenMiddleware.verifyAdmin));
+			routes.forEach(r => expect(isAdminGuard(r.preHandler)).to.equal(true));
 		});
 	});
 });

@@ -13,6 +13,13 @@ import { PAYMENT_METHOD_SECRET_PROJECTION } from '../modules/payment-method/paym
 import profileRoute from '../api/routes/profile.route';
 import transactionRoute from '../api/routes/transaction.route';
 
+/**
+ * Garde admin : `verifyAdmin`, ou un guard RBAC (`can`, `canStrict`, `canAny`) qui porte le
+ * marqueur `adminGuard` (Excel CMS n°8 : les routes admin passent progressivement à `can()`).
+ */
+const isAdminGuard = (handler: any): boolean => handler === TokenMiddleware.verifyAdmin || handler?.adminGuard === true;
+
+
 type RecordedRoute = { method: string; url: string; preHandler?: any; schema?: any; config?: any };
 
 /**
@@ -63,7 +70,7 @@ describe('[Sécurité] Gardes des routes', () => {
 			it(`${method} ${url} est réservée aux administrateurs`, () => {
 				const route = find(routes, method, url);
 				expect(route, `route ${method} ${url} introuvable`).to.not.be.undefined;
-				expect(route!.preHandler).to.equal(TokenMiddleware.verifyAdmin);
+				expect(isAdminGuard(route!.preHandler)).to.equal(true);
 			});
 		});
 
@@ -141,7 +148,7 @@ describe('[Sécurité] Gardes des routes', () => {
 		it('GET /transactions est réservée aux administrateurs', () => {
 			const route = find(routes, 'GET', '/transactions');
 			expect(route, 'route GET /transactions introuvable').to.not.be.undefined;
-			expect(route!.preHandler).to.equal(TokenMiddleware.verifyAdmin);
+			expect(isAdminGuard(route!.preHandler)).to.equal(true);
 		});
 
 		it('payment-notify est filtrée par le middleware dédié', () => {
@@ -151,10 +158,8 @@ describe('[Sécurité] Gardes des routes', () => {
 		});
 
 		it('les routes de pilotage restent réservées aux administrateurs', () => {
-			expect(find(routes, 'PUT', '/transactions/update-status')!.preHandler)
-				.to.equal(TokenMiddleware.verifyAdmin);
-			expect(find(routes, 'GET', '/transactions/stats')!.preHandler)
-				.to.equal(TokenMiddleware.verifyAdmin);
+			expect(isAdminGuard(find(routes, 'PUT', '/transactions/update-status')!.preHandler)).to.equal(true);
+			expect(isAdminGuard(find(routes, 'GET', '/transactions/stats')!.preHandler)).to.equal(true);
 		});
 	});
 
@@ -174,7 +179,7 @@ describe('[Sécurité] Gardes des routes', () => {
 			it(`${method} ${url} désigne une cible et est réservée aux administrateurs`, () => {
 				const route = find(routes, method, url);
 				expect(route, `route ${method} ${url} introuvable`).to.not.be.undefined;
-				expect(route!.preHandler).to.equal(TokenMiddleware.verifyAdmin);
+				expect(isAdminGuard(route!.preHandler)).to.equal(true);
 			});
 		});
 
@@ -251,7 +256,7 @@ describe('[Sécurité] Gardes des routes', () => {
 			it(`F-04 — ${method} ${url} est réservée aux administrateurs`, () => {
 				const route = find(routes, method, url);
 				expect(route, `route ${method} ${url} introuvable`).to.not.be.undefined;
-				expect(route!.preHandler).to.equal(TokenMiddleware.verifyAdmin);
+				expect(isAdminGuard(route!.preHandler)).to.equal(true);
 			});
 		});
 
@@ -268,7 +273,7 @@ describe('[Sécurité] Gardes des routes', () => {
 			// compte : ce qui doit rester absent, c'est la vérification d'un **jeton utilisateur**.
 			const handlers = Array.isArray(route.preHandler) ? route.preHandler : [route.preHandler];
 			expect(handlers, 'doit rester appelable sans jeton').to.not.include(TokenMiddleware.verify);
-			expect(handlers, 'doit rester appelable sans jeton').to.not.include(TokenMiddleware.verifyAdmin);
+			expect(handlers, 'doit rester appelable sans jeton').to.satisfy((hs: any[]) => !hs.some(isAdminGuard));
 
 			expect(route.config?.rateLimit?.max).to.be.a('number');
 			expect(route.config.rateLimit.max).to.be.at.most(20);
@@ -290,7 +295,7 @@ describe('[Sécurité] Gardes des routes', () => {
 			const withoutUserToken = routes
 				.filter(route => {
 					const handlers = Array.isArray(route.preHandler) ? route.preHandler : [route.preHandler];
-					return !handlers.includes(TokenMiddleware.verify) && !handlers.includes(TokenMiddleware.verifyAdmin);
+					return !handlers.includes(TokenMiddleware.verify) && !handlers.some(isAdminGuard);
 				})
 				.map(route => `${route.method} ${route.url}`);
 
@@ -345,7 +350,7 @@ describe('[Sécurité] Gardes des routes', () => {
 
 		it('toutes les routes du module sont réservées aux administrateurs', () => {
 			const nonAdmin = routes
-				.filter(route => route.preHandler !== TokenMiddleware.verifyAdmin)
+				.filter(route => !isAdminGuard(route.preHandler))
 				.map(route => `${route.method} ${route.url}`);
 
 			expect(nonAdmin).to.deep.equal([]);
@@ -455,7 +460,7 @@ describe('[Sécurité] Gardes des routes', () => {
 			it(`${method} ${url} est réservée aux administrateurs`, () => {
 				const route = find(routes, method, url);
 				expect(route, `route ${method} ${url} introuvable`).to.not.be.undefined;
-				expect(route!.preHandler).to.equal(TokenMiddleware.verifyAdmin);
+				expect(isAdminGuard(route!.preHandler)).to.equal(true);
 			});
 		});
 
@@ -504,7 +509,7 @@ describe('[Sécurité] Gardes des routes', () => {
 
 		it('toutes les routes du module sont réservées aux administrateurs', () => {
 			const nonAdmin = routes
-				.filter(route => route.preHandler !== TokenMiddleware.verifyAdmin)
+				.filter(route => !isAdminGuard(route.preHandler))
 				.map(route => `${route.method} ${route.url}`);
 
 			expect(nonAdmin).to.deep.equal([]);
@@ -541,7 +546,7 @@ describe('[Sécurité] Gardes des routes', () => {
 			const withoutToken = routes
 				.filter(route => {
 					const handlers = Array.isArray(route.preHandler) ? route.preHandler : [route.preHandler];
-					return !handlers.includes(TokenMiddleware.verify) && !handlers.includes(TokenMiddleware.verifyAdmin);
+					return !handlers.includes(TokenMiddleware.verify) && !handlers.some(isAdminGuard);
 				})
 				.map(route => `${route.method} ${route.url}`);
 

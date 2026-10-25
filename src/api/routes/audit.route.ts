@@ -34,7 +34,7 @@ const defaultRoute: any = (fastify: any, options, done) => {
 		},
 		method: 'GET',
 		url: `${routePath}`,
-		preHandler: TokenMiddleware.verifyAdmin,
+		preHandler: TokenMiddleware.can('read', 'audit'),
 		handler: (request, reply) => {
 			const q: any = request.query;
 			return coddyger.api(
@@ -57,7 +57,7 @@ const defaultRoute: any = (fastify: any, options, done) => {
 		schema: { tags, summary: 'Domaines distincts du journal (pour le filtre)' },
 		method: 'GET',
 		url: `${routePath}/subjects`,
-		preHandler: TokenMiddleware.verifyAdmin,
+		preHandler: TokenMiddleware.can('read', 'audit'),
 		handler: (request, reply) => coddyger.api(reply, Controller.subjects())
 	});
 

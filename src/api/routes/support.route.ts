@@ -314,7 +314,7 @@ const defaultRoute: any = (fastify: any, options, done) => {
 		},
 		method: 'GET',
 		url: `${routePath}/admin/tickets`,
-		preHandler: TokenMiddleware.verifyAdmin,
+		preHandler: TokenMiddleware.can('read', 'support'),
 		handler: (request, reply) => {
 			const q: any = request.query;
 			return coddyger.api(
@@ -337,7 +337,7 @@ const defaultRoute: any = (fastify: any, options, done) => {
 		schema: { tags: adminTags, summary: 'Compteurs des demandes (admin)' },
 		method: 'GET',
 		url: `${routePath}/admin/stats`,
-		preHandler: TokenMiddleware.verifyAdmin,
+		preHandler: TokenMiddleware.can('read', 'support'),
 		handler: (request, reply) => coddyger.api(reply, Controller.adminStats())
 	});
 
@@ -355,7 +355,7 @@ const defaultRoute: any = (fastify: any, options, done) => {
 		},
 		method: 'GET',
 		url: `${routePath}/admin/tickets/:id`,
-		preHandler: TokenMiddleware.verifyAdmin,
+		preHandler: TokenMiddleware.can('read', 'support'),
 		handler: (request, reply) => coddyger.api(reply, Controller.adminGetTicket(String(request.params.id)))
 		});
 
@@ -377,7 +377,7 @@ const defaultRoute: any = (fastify: any, options, done) => {
 			},
 			method: 'GET',
 			url: `${routePath}/admin/tickets/:id/context`,
-			preHandler: TokenMiddleware.verifyAdmin,
+			preHandler: TokenMiddleware.can('read', 'support'),
 			handler: (request, reply) => coddyger.api(reply, Controller.adminGetTicketContext(String(request.params.id)))
 		});
 
@@ -396,7 +396,7 @@ const defaultRoute: any = (fastify: any, options, done) => {
 		},
 		method: 'GET',
 		url: `${routePath}/admin/tickets/:id/transactions`,
-		preHandler: TokenMiddleware.verifyAdmin,
+		preHandler: TokenMiddleware.can('read', 'support'),
 		handler: (request, reply) => {
 			const q: any = request.query;
 			return coddyger.api(reply, Controller.adminGetClientTransactions(String(request.params.id), q.page, q.pageSize));
@@ -412,7 +412,7 @@ const defaultRoute: any = (fastify: any, options, done) => {
 		},
 		method: 'GET',
 		url: `${routePath}/admin/tickets/:id/subscriptions`,
-		preHandler: TokenMiddleware.verifyAdmin,
+		preHandler: TokenMiddleware.can('read', 'support'),
 		handler: (request, reply) => coddyger.api(reply, Controller.adminGetClientSubscriptions(String(request.params.id)))
 	});
 
@@ -439,7 +439,7 @@ const defaultRoute: any = (fastify: any, options, done) => {
 		},
 		method: 'POST',
 		url: `${routePath}/admin/tickets/:id/reply`,
-		preHandler: TokenMiddleware.verifyAdmin,
+		preHandler: TokenMiddleware.can('update', 'support'),
 		handler: (request, reply) => {
 			const user: any = request.user;
 			const body: any = request.body;
@@ -473,7 +473,7 @@ const defaultRoute: any = (fastify: any, options, done) => {
 		},
 		method: 'PATCH',
 		url: `${routePath}/admin/tickets/:id`,
-		preHandler: TokenMiddleware.verifyAdmin,
+		preHandler: TokenMiddleware.can('update', 'support'),
 		handler: (request, reply) => {
 			const body: any = request.body;
 			return coddyger.api(

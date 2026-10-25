@@ -48,11 +48,16 @@ const WRITABLE_PARTNER_FIELDS = [
   'openingHours'
 ];
 
-/** Copie du corps limitée aux champs autorisés. */
-const pickWritable = (body: any): any => {
+/**
+ * Copie du corps limitée aux champs autorisés. `status` est réservé aux admins : un marchand
+ * suspendu (ou dont la boutique attend la validation) pouvait se réactiver lui-même. L'appli Pro
+ * envoie `status: 'active'` à la création : il est simplement ignoré.
+ */
+const pickWritable = (body: any, user?: any): any => {
   const out: any = {};
   if (!body || typeof body !== 'object') return out;
   for (const key of WRITABLE_PARTNER_FIELDS) {
+    if (key === 'status' && !user?.isAdmin) continue;
     if (Object.prototype.hasOwnProperty.call(body, key)) out[key] = body[key];
   }
   return out;
@@ -176,7 +181,7 @@ const defaultRoute: any = (fastify: any, options, done) => {
     handler: async (request, reply) => {
       let user: any = request.user;
       // Champs autorisés uniquement (le plafond par achat `maxOrder` n'en fait plus partie).
-      let body: any = pickWritable(request.body);
+      let body: any = pickWritable(request.body, request.user);
       body.user = user._id;
 
       // Une boutique neuve n'est pas boostée : pas de vidéo (avantage YO Boost).
@@ -286,7 +291,7 @@ const defaultRoute: any = (fastify: any, options, done) => {
     handler: async (request, reply) => {
       const _id = (request.body as any)?._id;
       // Champs autorisés uniquement : jamais `user`, `isSponsored`, `maxOrder`, `slug`, opérateurs Mongo…
-      let body: any = pickWritable(request.body);
+      let body: any = pickWritable(request.body, request.user);
 
       let user: any = request.user;
 

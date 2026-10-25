@@ -60,6 +60,9 @@ export class MessageTypes {
     SYSTEM_UPDATE: 'system_update',
     LOGIN_NOTIFICATION: 'login_notification',
     CERTIFICATION_NOTIFICATION: 'certification_notification',
+    // Blocage d'un compte par un administrateur (Excel CMS n°2) et fin du blocage.
+    ACCOUNT_SUSPENDED: 'account_suspended',
+    ACCOUNT_REINSTATED: 'account_reinstated',
     MERCHANT_ACTIVATION: 'merchant_activation',
   };
 
@@ -527,6 +530,31 @@ export class MessageTypes {
         <p>Bonjour <strong>${name ?? 'cher utilisateur'}</strong></p>
         <p>Vos documents ont été vérifiés avec succès.</p>
         ${infoBox([{ label: 'Date de vérification', value: details?.date }])}
+        <p>À très vite,<br>L'équipe YoYo</p>
+      `
+    },
+    // `details.reason` et `details.until` sont échappés par l'appelant (texte saisi dans le CMS).
+    [MessageTypes.TYPES.ACCOUNT_SUSPENDED]: {
+      subject: 'Votre compte YoYo est suspendu',
+      hero: 'Compte suspendu',
+      heroTone: 'neutral',
+      template: (code?: string, name?: string, details?: any) => `
+        <p>Bonjour <strong>${name ?? 'cher utilisateur'}</strong></p>
+        <p>Votre compte YoYo a été suspendu par notre équipe. Vous ne pouvez plus vous connecter pendant cette période.</p>
+        ${infoBox([
+          { label: 'Motif', value: details?.reason },
+          { label: 'Jusqu’au', value: details?.until ?? 'Durée indéterminée' }
+        ])}
+        ${securityNote('Vous pensez qu’il s’agit d’une erreur ? Répondez à cet e-mail ou écrivez au support YoYo pour contester cette décision.')}
+        <p>L'équipe YoYo</p>
+      `
+    },
+    [MessageTypes.TYPES.ACCOUNT_REINSTATED]: {
+      subject: 'Votre compte YoYo est rétabli',
+      hero: 'Compte rétabli',
+      template: (code?: string, name?: string) => `
+        <p>Bonjour <strong>${name ?? 'cher utilisateur'}</strong></p>
+        <p>La suspension de votre compte YoYo est levée : vous pouvez de nouveau vous connecter.</p>
         <p>À très vite,<br>L'équipe YoYo</p>
       `
     }

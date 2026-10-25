@@ -35,7 +35,7 @@ const defaultRoute: any = (fastify: any, options, done) => {
     // Liste de TOUTES les transactions (avec nom, e-mail et contact des clients) : réservée au
     // back-office. Elle était en `verify`, donc lisible par n'importe quel compte connecté ;
     // aucune application mobile ne l'appelle (les clients passent par `user-history`).
-    preHandler: TokenMiddleware.verifyAdmin,
+    preHandler: TokenMiddleware.can('read', 'transactions'),
     handler: (request, reply) => {
       let page: any = request.query.page || 1;
       let pageSize: any = request.query.pageSize;
@@ -234,7 +234,7 @@ const defaultRoute: any = (fastify: any, options, done) => {
     },
     method: 'PUT',
     url: `${routePath}/update-status`,
-    preHandler: TokenMiddleware.verifyAdmin,
+    preHandler: TokenMiddleware.can('update', 'transactions'),
     handler: (request, reply) => {
       const body = request.body;
       
@@ -300,7 +300,7 @@ const defaultRoute: any = (fastify: any, options, done) => {
     },
     method: 'GET',
     url: `${routePath}/stats`,
-    preHandler: TokenMiddleware.verifyAdmin,
+    preHandler: TokenMiddleware.canAny([['read', 'transactions'], ['read', 'dashboard']]),
     handler: (request, reply) => {
       const paymentStatus: any = request.query.paymentStatus;
       const paymentMethod: any = request.query.paymentMethod;
@@ -334,7 +334,7 @@ const defaultRoute: any = (fastify: any, options, done) => {
     },
     method: 'GET',
     url: `${routePath}/timeseries`,
-    preHandler: TokenMiddleware.verifyAdmin,
+    preHandler: TokenMiddleware.canAny([['read', 'transactions'], ['read', 'dashboard']]),
     handler: (request, reply) => {
       const paymentStatus: any = request.query.paymentStatus;
       const from: any = request.query.from;

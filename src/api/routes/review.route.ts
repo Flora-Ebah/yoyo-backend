@@ -56,7 +56,7 @@ const defaultRoute: any = (fastify: any, options, done) => {
     },
     method: 'GET',
     url: `${routePath}`,
-    preHandler: TokenMiddleware.verifyAdmin,
+    preHandler: TokenMiddleware.can('read', 'moderation'),
     handler: (request, reply) => {
       const page: any = request.query.page || 1;
       const pageSize: any = request.query.pageSize || 20;
@@ -71,7 +71,7 @@ const defaultRoute: any = (fastify: any, options, done) => {
     schema: { tags, summary: 'Masquer un avis' },
     method: 'PUT',
     url: `${routePath}/:id/hide`,
-    preHandler: TokenMiddleware.verifyAdmin,
+    preHandler: TokenMiddleware.can('update', 'moderation'),
     handler: (request, reply) => coddyger.api(reply, Controller.hide(String(request.params.id)))
   });
 
@@ -79,7 +79,7 @@ const defaultRoute: any = (fastify: any, options, done) => {
     schema: { tags, summary: 'Supprimer un avis' },
     method: 'DELETE',
     url: `${routePath}/:id`,
-    preHandler: TokenMiddleware.verifyAdmin,
+    preHandler: TokenMiddleware.can('update', 'moderation'),
     handler: (request, reply) => coddyger.api(reply, Controller.remove(String(request.params.id)))
   });
 

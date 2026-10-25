@@ -101,7 +101,7 @@ const defaultRoute: any = (fastify: any, options, done) => {
     },
     method: 'PUT',
     url: `${routePath}`,
-    preHandler: TokenMiddleware.verifyAdmin,
+    preHandler: TokenMiddleware.can('update', 'clients'),
     handler: (request, reply) => {
       let body: any = request.body;
       const _id = body._id;
@@ -328,7 +328,7 @@ const defaultRoute: any = (fastify: any, options, done) => {
     schema: { tags, summary: 'Statistiques globales des utilisateurs (administration)' },
     method: 'GET',
     url: `${routePath}/stats`,
-    preHandler: TokenMiddleware.verifyAdmin,
+    preHandler: TokenMiddleware.canAny([['read', 'clients'], ['read', 'dashboard']]),
     handler: (request, reply) => {
       let Q = Controller.getStats();
       return coddyger.api(reply, Q);
@@ -358,7 +358,7 @@ const defaultRoute: any = (fastify: any, options, done) => {
     },
     method: 'GET',
     url: `${routePath}`,
-    preHandler: TokenMiddleware.verifyAdmin,
+    preHandler: TokenMiddleware.can('read', 'clients'),
     handler: (request, reply) => {
       let page: any = request.query.page || 1;
       let pageSize: any = request.query.pageSize;
@@ -397,7 +397,7 @@ const defaultRoute: any = (fastify: any, options, done) => {
     },
     method: 'GET',
     url: `${routePath}/findByStatus`,
-    preHandler: TokenMiddleware.verifyAdmin,
+    preHandler: TokenMiddleware.can('read', 'clients'),
     handler: (request, reply) => {
       const page: any = request.query.page || 1;
       const pageSize: any = request.query.pageSize;
@@ -426,7 +426,7 @@ const defaultRoute: any = (fastify: any, options, done) => {
     },
     method: 'GET',
     url: `${routePath}/details/:id`,
-    preHandler: TokenMiddleware.verifyAdmin,
+    preHandler: TokenMiddleware.can('read', 'clients'),
     handler: (request, reply) => {
       const _id: any = request.params.id;
 
@@ -479,7 +479,7 @@ const defaultRoute: any = (fastify: any, options, done) => {
     },
     method: 'PATCH',
     url: `${routePath}/remove/:id`,
-    preHandler: TokenMiddleware.verifyAdmin,
+    preHandler: TokenMiddleware.can('delete', 'clients'),
     handler: (request, reply) => {
       let _id: any = request.params.id;
       let reason: string = request.body.reason;
@@ -507,7 +507,7 @@ const defaultRoute: any = (fastify: any, options, done) => {
     },
     method: 'PATCH',
     url: `${routePath}/anonymize/:id`,
-    preHandler: TokenMiddleware.verifyAdmin,
+    preHandler: TokenMiddleware.can('delete', 'clients'),
     handler: (request, reply) => {
       const _id: any = request.params.id;
       const admin: any = request.user;
@@ -571,7 +571,7 @@ const defaultRoute: any = (fastify: any, options, done) => {
     },
     method: 'POST',
     url: `${routePath}/:id/notify`,
-    preHandler: TokenMiddleware.verifyAdmin,
+    preHandler: TokenMiddleware.can('update', 'clients'),
     handler: (request, reply) => {
       const clientId: string = request.params.id;
       const message: string = request.body.message;

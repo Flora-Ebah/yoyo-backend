@@ -31,7 +31,7 @@ const defaultRoute = (fastify: any, options: any, done: any) => {
 		},
 		method: 'GET',
 		url: `${routePath}`,
-		preHandler: TokenMiddleware.verifyAdmin,
+		preHandler: TokenMiddleware.can('read', 'moderation'),
 		handler: (request: any, reply: any) => {
 			const { status, page, pageSize } = request.query;
 			return coddyger.api(reply, Controller.list({ status, page, pageSize }));
@@ -43,7 +43,7 @@ const defaultRoute = (fastify: any, options: any, done: any) => {
 		schema: { tags, summary: 'Compteurs de modération par statut' },
 		method: 'GET',
 		url: `${routePath}/stats`,
-		preHandler: TokenMiddleware.verifyAdmin,
+		preHandler: TokenMiddleware.can('read', 'moderation'),
 		handler: (request: any, reply: any) => coddyger.api(reply, Controller.stats())
 	});
 
@@ -52,7 +52,7 @@ const defaultRoute = (fastify: any, options: any, done: any) => {
 		schema: { tags, summary: "Aperçu d'un média modéré", params: idParams },
 		method: 'GET',
 		url: `${routePath}/:id/preview`,
-		preHandler: TokenMiddleware.verifyAdmin,
+		preHandler: TokenMiddleware.can('read', 'moderation'),
 		handler: (request: any, reply: any) => coddyger.api(reply, Controller.preview(request.params.id))
 	});
 
@@ -71,7 +71,7 @@ const defaultRoute = (fastify: any, options: any, done: any) => {
 		},
 		method: 'PATCH',
 		url: `${routePath}/:id`,
-		preHandler: TokenMiddleware.verifyAdmin,
+		preHandler: TokenMiddleware.can('update', 'moderation'),
 		handler: (request: any, reply: any) => {
 			const user: any = request.user;
 			return coddyger.api(reply, Controller.review(request.params.id, request.body.action, String(user._id)));
@@ -83,7 +83,7 @@ const defaultRoute = (fastify: any, options: any, done: any) => {
 		schema: { tags, summary: "Relancer l'analyse d'un média", params: idParams },
 		method: 'POST',
 		url: `${routePath}/:id/rescan`,
-		preHandler: TokenMiddleware.verifyAdmin,
+		preHandler: TokenMiddleware.can('update', 'moderation'),
 		handler: (request: any, reply: any) => coddyger.api(reply, Controller.rescan(request.params.id))
 	});
 

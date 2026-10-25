@@ -11,6 +11,9 @@ import { DURATION_TOLERANCE_SECONDS, VideoError, extractPoster, probeVideo, remu
 import { MediaModerationService, ModerationVerdict } from '../media-moderation/media-moderation.service';
 const controllerLabel: string = 'MainController';
 
+/** Statuts de compte qui interdisent le renouvellement d'une session. */
+const REFRESH_REFUSED_STATUSES = ['suspended', 'locked', 'removed', 'anonymized'];
+
 export class MainController {
 	private service: MainService;
 	private clientService: ClientService;
@@ -28,15 +31,26 @@ export class MainController {
 
 	verifyToken(payload: any) {
 		return new Promise(async (resolve, reject) => {
-			const client: any = await this.clientService.getOne({ email: payload.email });
+			// Un jeton admin ne se renouvelle pas : la session du CMS repasse par le mot de passe et le
+			// code e-mail (Excel CMS n°10). Sans ce refus, un refresh valide 7 jours contournait le 2FA.
+			if (payload?.isAdmin) {
+				return resolve({ status: defines.status.authError, message: 'Session expirée : reconnectez-vous.', data: null });
+			}
+
+			// Le compte doit encore exister et ne pas être bloqué, suspendu ou supprimé : auparavant, un
+			// compte bloqué gardait l'accès tant que son refresh token (7 jours) restait valide.
+			const client: any = await this.clientService.getOne({ _id: payload?._id });
+			if (!client || REFRESH_REFUSED_STATUSES.includes(client.status)) {
+				return resolve({ status: defines.status.authError, message: 'Session expirée : reconnectez-vous.', data: null });
+			}
 
 			const accessToken: any = TokenMiddleware.generate(
 				{
 					_id: client._id,
-					email: payload.email
+					email: client.email
 				},
 				'accessToken',
-				`${client.securityPreferences.sessionTimeout}m`
+				`${client.securityPreferences?.sessionTimeout || 60}m`
 			);
 
 			const refreshToken: any = TokenMiddleware.generate(

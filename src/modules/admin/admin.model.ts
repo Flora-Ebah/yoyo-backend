@@ -19,6 +19,17 @@ export interface IAdmin {
 	user?: any; // The id of the user that owns or created the document
 	profile?: any; // The id of the user that owns or created the document
 	lastLogin?: Date; // The last login date
+	// Connexion au CMS (Excel CMS n°10) : échecs de mot de passe, verrouillage, code e-mail en cours.
+	failedLogins?: number;
+	lockedUntil?: Date | null;
+	loginChallenge?: {
+		nonce: string;
+		codeHash: string;
+		expiresAt: Date;
+		attempts: number;
+		sentAt: Date;
+		resends: number;
+	} | null;
 }
 
 
@@ -40,12 +51,28 @@ const schema = new mongoose.Schema<IAdmin>(
 		status: { type: String, enum: ['active', 'archived', 'removed'], default: 'active' },
 		user: { type: mongoose.Schema.Types.ObjectId, ref: 'Admin' },
 		profile: { type: mongoose.Schema.Types.ObjectId, ref: 'Profile' },
-		lastLogin: Date
+		lastLogin: Date,
+		failedLogins: { type: Number, default: 0 },
+		lockedUntil: { type: Date, default: null },
+		// Jamais renvoyé par les lectures ordinaires : seul le service de connexion le demande.
+		loginChallenge: {
+			type: {
+				nonce: String,
+				codeHash: String,
+				expiresAt: Date,
+				attempts: Number,
+				sentAt: Date,
+				resends: Number
+			},
+			default: null,
+			select: false
+		}
 	},
 	{ timestamps: true }
 );
 
-const model = mongoose.model<IAdmin>('Admin', schema);
+export const AdminModel = mongoose.model<IAdmin>('Admin', schema);
+const model = AdminModel;
 
 export class AdminSet extends MongoDbDao<Document> implements IData<Document> {
 	defaultModel = model;

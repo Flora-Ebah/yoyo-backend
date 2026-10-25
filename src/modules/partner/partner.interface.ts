@@ -52,6 +52,7 @@ export interface IPartner {
   status?: string;
   /** Statut mémorisé avant suppression de compte, pour restauration exacte à la réactivation. */
   statusBeforeRemoval?: string;
+  suspendedByBlock?: boolean;
   user?: any;
   /** Admin (commercial) auteur de l'enrôlement à distance. */
   createdBy?: any;

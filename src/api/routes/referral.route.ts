@@ -21,7 +21,7 @@ const defaultRoute: any = (fastify: any, options, done) => {
     schema: { tags, summary: 'Parrains en attente de vérification (règle de vitesse)' },
     method: 'GET',
     url: `${routePath}/review`,
-    preHandler: TokenMiddleware.verifyAdmin,
+    preHandler: TokenMiddleware.can('read', 'clients'),
     handler: (request, reply) => coddyger.api(reply, Controller.reviewList())
   });
 
@@ -29,7 +29,7 @@ const defaultRoute: any = (fastify: any, options, done) => {
     schema: { tags, summary: "Parrainage d'un client : parrain, filleuls, mois offerts", params: clientParams },
     method: 'GET',
     url: `${routePath}/:clientId`,
-    preHandler: TokenMiddleware.verifyAdmin,
+    preHandler: TokenMiddleware.can('read', 'clients'),
     handler: (request, reply) => coddyger.api(reply, Controller.detail(request.params.clientId))
   });
 
@@ -37,7 +37,7 @@ const defaultRoute: any = (fastify: any, options, done) => {
     schema: { tags, summary: 'Valider un parrain en revue (sa récompense part si elle est due)', params: clientParams },
     method: 'POST',
     url: `${routePath}/:clientId/approve`,
-    preHandler: TokenMiddleware.verifyAdmin,
+    preHandler: TokenMiddleware.can('update', 'clients'),
     handler: (request, reply) => coddyger.api(reply, Controller.approve(request.params.clientId))
   });
 
@@ -55,7 +55,7 @@ const defaultRoute: any = (fastify: any, options, done) => {
     },
     method: 'POST',
     url: `${routePath}/:clientId/fraud`,
-    preHandler: TokenMiddleware.verifyAdmin,
+    preHandler: TokenMiddleware.can('update', 'clients'),
     handler: (request, reply) => coddyger.api(reply, Controller.fraud(request.params.clientId, request.body.reason))
   });
 

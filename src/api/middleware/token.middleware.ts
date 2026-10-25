@@ -129,6 +129,41 @@ export class TokenMiddleware {
 				})
 			);
 		}
+
+		// Profil « Lecture seule » (Excel CMS n°8) : aucune écriture sur les routes admin gardées par le
+		// seul `verifyAdmin`. Les routes `can()` sont déjà fermées par leur action ; les routes
+		// personnelles (mon profil, mon mot de passe, déconnexion) déclarent `config.allowReadOnly`.
+		if (
+			!request.rbacGuard &&
+			request.method !== 'GET' &&
+			request.method !== 'HEAD' &&
+			!request.routeOptions?.config?.allowReadOnly
+		) {
+			const ability = await TokenMiddleware.abilityOf(request.user?._id);
+			if (TokenMiddleware.isReadOnly(ability)) {
+				return coddyger.api(
+					reply,
+					Promise.resolve({ status: 403, message: 'Accès refusé : profil en lecture seule.', data: null })
+				);
+			}
+		}
+	}
+
+	/** Profil dont toutes les permissions sont des lectures (profil vide exclu : accès complet historique). */
+	static isReadOnly(ability: any[]): boolean {
+		return Array.isArray(ability) && ability.length > 0 && ability.every((a: any) => a?.action === 'read');
+	}
+
+	/** `ability` du profil de l'admin (liste vide si introuvable). */
+	static async abilityOf(adminId: string): Promise<any[]> {
+		try {
+			// eslint-disable-next-line @typescript-eslint/no-var-requires
+			const { AdminSet } = require('../../modules/admin');
+			const admin: any = await new AdminSet().selectOne({ _id: adminId });
+			return admin?.profile?.ability || [];
+		} catch {
+			return [];
+		}
 	}
 
 	static async verifyRefreshToken(request, reply, done) {
@@ -139,6 +174,11 @@ export class TokenMiddleware {
 			}
 
 			const token = authorization.split(' ')[1];
+
+			// Un refresh token mis en liste noire (déconnexion, blocage) ne renouvelle plus rien.
+			if (await TokenMiddleware.isTokenDeactivated(token)) {
+				throw new Error('Votre session a expiré');
+			}
 
 			const user: any = await new Promise((resolve, reject) => {
 				jwt.verify(token, secretAuthKey, (err, user) => {
@@ -155,6 +195,10 @@ export class TokenMiddleware {
 					}
 				});
 			});
+
+			if (!designatesUser(user)) {
+				throw new Error('Jeton non nominatif.');
+			}
 
 			request.user = user;
 		} catch (error: any) {
@@ -193,45 +237,7 @@ export class TokenMiddleware {
 	 * dans l'`ability` de son profil (rôle). À utiliser en `preHandler` sur les routes admin.
 	 */
 	static can(action: string, subject: string) {
-		return async (request: any, reply: any) => {
-			// 1) Authentification admin (réutilise verifyAdmin ; en cas d'échec il répond déjà).
-			await TokenMiddleware.verifyAdmin(request, reply, () => {});
-
-			if (reply.sent) {
-				return;
-			}
-
-			try {
-				// 2) Charge l'admin + son profil (ability) depuis la base.
-				// eslint-disable-next-line @typescript-eslint/no-var-requires
-				const { AdminSet } = require('../../modules/admin');
-				const adminDao: any = new AdminSet();
-				const admin: any = await adminDao.selectOne({ _id: request.user?._id });
-				const ability: any[] = admin?.profile?.ability || [];
-
-				if (TokenMiddleware.abilityAllows(ability, action, subject)) {
-					return;
-				}
-
-				return coddyger.api(
-					reply,
-					Promise.resolve({
-						status: 403,
-						message: "Accès refusé : permission insuffisante.",
-						data: null
-					})
-				);
-			} catch (error: any) {
-				return coddyger.api(
-					reply,
-					Promise.resolve({
-						status: defines.status.authError,
-						message: error?.message || 'Erreur de vérification des permissions',
-						data: null
-					})
-				);
-			}
-		};
+		return TokenMiddleware.guard([[action, subject]], false);
 	}
 
 	/**
@@ -244,7 +250,26 @@ export class TokenMiddleware {
 	 * ne peut régresser.
 	 */
 	static canStrict(action: string, subject: string) {
-		return async (request: any, reply: any) => {
+		return TokenMiddleware.guard([[action, subject]], true);
+	}
+
+	/**
+	 * Accès si **une** des permissions est détenue. Ex. les compteurs du tableau de bord, lisibles
+	 * avec `dashboard` comme avec le module concerné.
+	 */
+	static canAny(permissions: Array<[string, string]>) {
+		return TokenMiddleware.guard(permissions, false);
+	}
+
+	/**
+	 * Construit le preHandler RBAC. La closure porte `adminGuard = true` : les tests de garde
+	 * (`route-guards.security.test.ts`) reconnaissent ainsi une route admin, quel que soit le guard.
+	 */
+	private static guard(permissions: Array<[string, string]>, strict: boolean) {
+		const handler: any = async (request: any, reply: any) => {
+			// 1) Authentification admin (réutilise verifyAdmin ; en cas d'échec il répond déjà).
+			// `rbacGuard` : le contrôle « lecture seule » de verifyAdmin est inutile ici, l'action le couvre.
+			request.rbacGuard = true;
 			await TokenMiddleware.verifyAdmin(request, reply, () => {});
 
 			if (reply.sent) {
@@ -252,24 +277,17 @@ export class TokenMiddleware {
 			}
 
 			try {
-				// eslint-disable-next-line @typescript-eslint/no-var-requires
-				const { AdminSet } = require('../../modules/admin');
-				const adminDao: any = new AdminSet();
-				const admin: any = await adminDao.selectOne({ _id: request.user?._id });
-				const ability: any[] = admin?.profile?.ability || [];
+				// 2) Charge l'admin + son profil (ability) depuis la base.
+				const ability: any[] = await TokenMiddleware.abilityOf(request.user?._id);
+				if (strict && (!Array.isArray(ability) || ability.length === 0)) {
+					return TokenMiddleware.forbidden(reply);
+				}
 
-				if (Array.isArray(ability) && ability.length > 0 && TokenMiddleware.abilityAllows(ability, action, subject)) {
+				if (permissions.some(([action, subject]) => TokenMiddleware.abilityAllows(ability, action, subject))) {
 					return;
 				}
 
-				return coddyger.api(
-					reply,
-					Promise.resolve({
-						status: 403,
-						message: "Accès refusé : permission insuffisante.",
-						data: null
-					})
-				);
+				return TokenMiddleware.forbidden(reply);
 			} catch (error: any) {
 				return coddyger.api(
 					reply,
@@ -281,6 +299,20 @@ export class TokenMiddleware {
 				);
 			}
 		};
+		handler.adminGuard = true;
+		handler.permissions = permissions;
+		return handler;
+	}
+
+	private static forbidden(reply: any) {
+		return coddyger.api(
+			reply,
+			Promise.resolve({
+				status: 403,
+				message: 'Accès refusé : permission insuffisante.',
+				data: null
+			})
+		);
 	}
 
 	/**

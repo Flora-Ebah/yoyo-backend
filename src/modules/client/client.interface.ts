@@ -36,6 +36,8 @@ export interface IClient {
   removedBy?: any;
   /** Anonymisation DCP/RGPD : horodatage du retrait définitif des données nominatives. */
   anonymizedAt?: Date;
+  block?: { reason?: string; until?: Date | null; by?: any; at?: Date } | null;
+  statusBeforeBlock?: string | null;
   /** Réactivation d'un compte supprimé avant la fin du délai de grâce (relance le délai). */
   reactivatedAt?: Date;
   /** Parrainage (#6/#7) — code de parrainage propre à l'utilisateur (unique). */

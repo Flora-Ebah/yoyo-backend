@@ -1,5 +1,6 @@
 import coddyger from 'coddyger';
 import { AdminController } from '../../modules/admin';
+import { adminAuthService } from '../../modules/admin/admin-auth.service';
 import { AppCheckMiddleware, TokenMiddleware } from '../middleware';
 
 const routePath = '/admin';
@@ -29,7 +30,70 @@ const defaultRoute: any = (fastify: any, options, done) => {
 		preHandler: AppCheckMiddleware.verify,
 		handler: (request, reply) => {
 			const body: any = request.body;
-			const Q = Controller.login(body);
+			// Étape 1/2 : aucun jeton ici, seulement un `challenge` et un code envoyé par e-mail.
+			const Q = adminAuthService.login(body.email, body.password);
+			return coddyger.api(reply, Q);
+		}
+	});
+
+	// Login, étape 2/2 : code reçu par e-mail
+	fastify.route({
+		schema: {
+			tags,
+			summary: 'Connexion : vérification du code e-mail',
+			body: {
+				type: 'object',
+				properties: {
+					challenge: { type: 'string', maxLength: 1024 },
+					code: { type: 'string', pattern: '^[0-9]{6}$' }
+				},
+				required: ['challenge', 'code'],
+				additionalProperties: false
+			}
+		},
+		method: 'POST',
+		url: `${routePath}/login/verify`,
+		preHandler: AppCheckMiddleware.verify,
+		handler: (request, reply) => {
+			const body: any = request.body;
+			const Q = adminAuthService.verify(body.challenge, body.code);
+			return coddyger.api(reply, Q);
+		}
+	});
+
+	// Login : renvoi du code
+	fastify.route({
+		schema: {
+			tags,
+			summary: 'Connexion : renvoyer le code e-mail',
+			body: {
+				type: 'object',
+				properties: { challenge: { type: 'string', maxLength: 1024 } },
+				required: ['challenge'],
+				additionalProperties: false
+			}
+		},
+		method: 'POST',
+		url: `${routePath}/login/resend`,
+		preHandler: AppCheckMiddleware.verify,
+		handler: (request, reply) => {
+			const body: any = request.body;
+			const Q = adminAuthService.resend(body.challenge);
+			return coddyger.api(reply, Q);
+		}
+	});
+
+	// Logout : le jeton du CMS est désactivé côté serveur
+	fastify.route({
+		schema: { tags, summary: 'Déconnexion' },
+		method: 'POST',
+		url: `${routePath}/logout`,
+		// Route personnelle : ouverte aussi au profil « Lecture seule ».
+		config: { allowReadOnly: true },
+		preHandler: TokenMiddleware.verifyAdmin,
+		handler: (request, reply) => {
+			const token = String(request.headers.authorization ?? '').split(' ')[1];
+			const Q = adminAuthService.logout(token);
 			return coddyger.api(reply, Q);
 		}
 	});
@@ -224,6 +288,7 @@ const defaultRoute: any = (fastify: any, options, done) => {
 		},
 		method: 'PUT',
 		url: `${routePath}/me`,
+		config: { allowReadOnly: true },
 		preHandler: TokenMiddleware.verifyAdmin,
 		handler: (request, reply) => {
 			const user: any = request.user;
@@ -250,6 +315,8 @@ const defaultRoute: any = (fastify: any, options, done) => {
 		},
 		method: 'PUT',
 		url: `${routePath}/me/password`,
+		// Route personnelle : ouverte aussi au profil « Lecture seule ».
+		config: { allowReadOnly: true },
 		preHandler: TokenMiddleware.verifyAdmin,
 		handler: (request, reply) => {
 			const user: any = request.user;

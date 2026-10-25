@@ -1,3 +1,4 @@
+import mongoose from 'mongoose';
 import { expect } from 'chai';
 import { Main } from '../main';
 import sinon from 'sinon';
@@ -73,6 +74,11 @@ describe('Server', () => {
     // Assert
     expect(true).to.be.true;
     expect(true).to.be.true;
+
+    // `db()` ouvre une vraie connexion Mongoose : la fermer, sinon les suites suivantes qui
+    // démarrent leur propre MongoMemoryServer échouent (« active connection with different
+    // connection strings »).
+    await mongoose.disconnect();
   });
 
   it('should skip database initialization if disabled', async () => {
