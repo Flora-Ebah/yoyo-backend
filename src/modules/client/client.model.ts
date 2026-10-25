@@ -86,6 +86,10 @@ const schema = new mongoose.Schema<IClient>({
 	referralWarnings: { type: Number, default: 0 },
 	referralNudges: { type: Number, default: 0 },
 	referralLastNudgeAt: { type: Date },
+	// Codes & promotions : code saisi à l'inscription, anti-devinette.
+	pendingPromoCode: { type: String },
+	promoFailures: { type: Number, default: 0 },
+	promoFailuresAt: { type: Date },
 	influencerCode: { type: String },
 	// Push proximité (#1).
 	lastLocation: { lat: { type: Number }, lng: { type: Number }, at: { type: Date } },

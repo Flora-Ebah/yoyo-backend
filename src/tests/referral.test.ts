@@ -14,6 +14,9 @@ import { FreeMonthService, FREE_MONTH_DAYS } from '../modules/subscription/free-
 import { ReferralService, REFERRAL_VELOCITY_MAX } from '../modules/referral/referral.service';
 import { PushNotificationService } from '../modules/push-notification/push-notification.service';
 import { REFERRAL_CODE_PATTERN, renderReferralLanding } from '../helpers/referral-landing.view';
+import { CODE_ALPHABET } from '../helpers/code-generator';
+import { ClientService } from '../modules/client/client.service';
+import { isPromoCodeFormat } from '../modules/promo-code/promo-code.service';
 
 /**
  * Parrainage (Excel Parrainage n°2, 5, 6, 9, 11, 12) : validation au 1er abonnement payé, mois
@@ -217,6 +220,18 @@ describe('Parrainage et mois offert', () => {
 			expect(REFERRAL_CODE_PATTERN.test('<script>')).to.equal(false);
 			const html = renderReferralLanding({ code: 'ABC234', androidHref: 'https://play/x?referrer=code%3DABC234', iosUrl: '', logoUrl: '' });
 			expect(html).to.contain('ABC234').and.to.contain('referrer=code%3DABC234').and.not.contain('App Store');
+		});
+
+		it('nouveaux codes au format YO-XXXX, anciens codes de 6 caractères toujours reconnus', async () => {
+			const service = new ClientService();
+			const code = await service.generateUniqueReferralCode();
+			expect(code).to.match(new RegExp(`^YO-[${CODE_ALPHABET}]{4}$`));
+			expect(REFERRAL_CODE_PATTERN.test(code)).to.equal(true);
+			expect(isPromoCodeFormat(code)).to.equal(false);
+			await model(ClientSet).create(base({ referralCode: code }));
+			expect(await service.resolveReferrer(code.toLowerCase())).to.not.equal(null);
+			const legacy = await service.resolveReferrer('abc234');
+			expect(String(legacy._id)).to.equal(REFERRER);
 		});
 
 		it('routes du parrainage : administrateur requis', () => {

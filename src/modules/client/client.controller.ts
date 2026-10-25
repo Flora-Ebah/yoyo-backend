@@ -1,5 +1,6 @@
 import coddyger, { IErrorObject, defines, env } from 'coddyger';
 import { referralService } from '../referral/referral.service';
+import { promoCodeService } from '../promo-code/promo-code.service';
 import { locale } from '../../public';
 import { IClient, IRegister, ClientService, IUpdatePassword } from './';
 import { LoginService } from '../login/login.service';
@@ -158,7 +159,7 @@ export class ClientController {
         // Rétro-compat : si `promoCode` est absent, on retombe sur les anciens champs séparés
         // (`influencerCode` / `referralCode`) envoyés par les versions plus anciennes de l'app.
         // `promo` est renvoyé dans la réponse pour que l'app affiche le type reconnu.
-        let promo: { type: 'influencer' | 'referral' | 'invalid' | 'none'; code: string | null } = {
+        let promo: { type: 'influencer' | 'referral' | 'gift' | 'business' | 'invalid' | 'none'; code: string | null } = {
           type: 'none',
           code: null
         };
@@ -186,8 +187,17 @@ export class ClientController {
               formattedItem.referredBy = referrer._id;
               promo.type = 'referral';
             } else {
-              // c. Code inconnu : on NE bloque PAS l'inscription (code promo facultatif), on l'ignore.
-              promo.type = 'invalid';
+              // c. Code cadeau / YOYO Business (`GIFT-…`, `BIZ-…`) : seul le format est contrôlé ici
+              // (l'inscription ne doit pas révéler si un code existe) ; il est vérifié et activé à
+              // la validation du compte (`promoCodeService.redeemPending`).
+              const gift = promoCodeService.forSignup(promoCode);
+              if (gift) {
+                formattedItem.pendingPromoCode = gift.code;
+                promo.type = gift.type;
+              } else {
+                // d. Code inconnu : on NE bloque PAS l'inscription (code promo facultatif), on l'ignore.
+                promo.type = 'invalid';
+              }
             }
           }
         } else {
@@ -246,6 +256,10 @@ export class ClientController {
         if (formattedItem.referredBy) {
           void referralService.onRegistered(String(formattedItem.referredBy));
           if (!requiresVerification) void referralService.onActivated(String(formattedItem._id));
+        }
+        // Code cadeau / Business : activé tout de suite si le compte est déjà actif.
+        if (formattedItem.pendingPromoCode && !requiresVerification) {
+          void promoCodeService.redeemPending(String(formattedItem._id));
         }
 
         // Le compte existe même si l'email ne part pas : l'utilisateur peut redemander le code

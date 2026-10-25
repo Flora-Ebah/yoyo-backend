@@ -8,7 +8,7 @@
  * être saisi à la main.
  */
 
-/** Codes de parrainage : 6 caractères aujourd'hui, marge pour les futurs préfixes. */
+/** Codes de parrainage : `YO-XXXX`, et les anciens codes de 6 caractères sans préfixe. */
 export const REFERRAL_CODE_PATTERN = /^[A-Z0-9-]{4,16}$/;
 
 const googlePlaySvg = `<svg viewBox="0 0 512 512" width="26" height="26" aria-hidden="true"><path fill="#00A1FF" d="M40 40 300 256 40 472z"/><path fill="#00E676" d="M40 40 470 150 300 256z"/><path fill="#FFC900" d="M470 150 470 362 300 256z"/><path fill="#FF3A44" d="M40 472 300 256 470 362z"/></svg>`;

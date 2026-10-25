@@ -285,6 +285,9 @@ export class OtpController {
 					// Parrainage : le parrain apprend que son filleul a rejoint YoYo (sans bloquer).
 					const { referralService } = require('../referral/referral.service');
 					void referralService.onActivated(String(user._id));
+					// Code cadeau / YOYO Business saisi à l'inscription : activé maintenant.
+					const { promoCodeService } = require('../promo-code/promo-code.service');
+					void promoCodeService.redeemPending(String(user._id));
 					// Un client inscrit par téléphone peut ne pas avoir d'email.
 					if (user.email) {
 						MessageHelper.welcomeClient(user);

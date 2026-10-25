@@ -67,6 +67,11 @@ export interface IClient {
   /** Parrain : relances envoyées (2 au plus) et date de la dernière. */
   referralNudges?: number;
   referralLastNudgeAt?: Date;
+  /** Code cadeau / YOYO Business saisi à l'inscription, activé à la vérification du compte. */
+  pendingPromoCode?: string;
+  /** Anti-devinette des codes : échecs dans l'heure en cours. */
+  promoFailures?: number;
+  promoFailuresAt?: Date;
   /** Parrainage — code influenceur (#17) saisi à l'inscription (distinct du parrainage utilisateur). */
   influencerCode?: string;
   /** Push proximité (#1) — dernière position connue remontée par l'app (background). */

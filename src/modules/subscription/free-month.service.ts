@@ -43,9 +43,18 @@ export class FreeMonthService {
   /**
    * Accorde un mois offert. Idempotent par `(source, ref)` : un second appel pour le même événement
    * renvoie l'octroi existant sans rien prolonger.
+   *
+   * `options` (codes cadeaux et YOYO Business) : plan et durée propres au lot. Par défaut, 30 jours
+   * sur le plan offert du programme.
    */
-  async grant(userId: string, source: FreeMonthSource, ref: string): Promise<IFreeMonthGrant> {
+  async grant(
+    userId: string,
+    source: FreeMonthSource,
+    ref: string,
+    options: { planId?: string | null; days?: number } = {}
+  ): Promise<IFreeMonthGrant> {
     const model: any = this.grants.defaultModel;
+    const days = options.days && options.days > 0 ? Math.round(options.days) : FREE_MONTH_DAYS;
     const existing = await model.findOne({ source, ref }).lean();
     if (existing) return existing;
 
@@ -56,7 +65,7 @@ export class FreeMonthService {
       user: userId,
       source,
       ref,
-      days: FREE_MONTH_DAYS,
+      days,
       status: 'applied'
     };
     try {
@@ -74,17 +83,18 @@ export class FreeMonthService {
         .lean();
 
       if (active) {
-        const set: any = { endDate: shift(active.endDate, FREE_MONTH_DAYS) };
+        const set: any = { endDate: shift(active.endDate, days) };
         if (active.pendingRenewal?.startDate) {
-          set['pendingRenewal.startDate'] = shift(active.pendingRenewal.startDate, FREE_MONTH_DAYS);
-          set['pendingRenewal.endDate'] = shift(active.pendingRenewal.endDate, FREE_MONTH_DAYS);
+          set['pendingRenewal.startDate'] = shift(active.pendingRenewal.startDate, days);
+          set['pendingRenewal.endDate'] = shift(active.pendingRenewal.endDate, days);
         }
         await this.subscriptions.updateOne({ _id: active._id }, { $set: set });
         await model.updateOne({ _id: grant._id }, { subscriptionId: active._id, mode: 'extended', planId: active.planId });
         return { ...grant, subscriptionId: active._id, mode: 'extended', planId: active.planId };
       }
 
-      const plan = await this.offeredPlan();
+      const chosen = options.planId ? await this.plans.findOne({ _id: options.planId, isActive: true }).lean() : null;
+      const plan = chosen ?? (await this.offeredPlan());
       if (!plan) throw new Error('Aucun plan actif à offrir');
       const subscriptionId = coddyger.string.generateObjectId();
       // Écrit directement (sans `createSubscription`) : un mois offert ne doit jamais compter
@@ -94,7 +104,7 @@ export class FreeMonthService {
         userId,
         planId: plan._id,
         startDate: now,
-        endDate: shift(now, FREE_MONTH_DAYS),
+        endDate: shift(now, days),
         status: 'active',
         paymentStatus: 'paid',
         paymentMethod: 'free-month',

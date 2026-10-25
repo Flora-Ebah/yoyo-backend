@@ -1,4 +1,5 @@
 import { MessageHelper } from '../../helpers';
+import { randomCode } from '../../helpers/code-generator';
 import { dateRangeFilter } from '../../shared/date-filter';
 import { PartnerService } from '../partner';
 import { SettingsService } from '../settings';
@@ -183,17 +184,18 @@ export class ClientService {
 
 	// ===================== Parrainage (#6/#7) =====================
 
-	/** Génère un code de parrainage unique (6 caractères alphanumériques majuscules). */
+	/**
+	 * Génère un code de parrainage unique `YO-XXXX` (Excel n°13). Les codes déjà distribués, sur
+	 * 6 caractères sans préfixe, restent valables : `resolveReferrer` compare le code exact.
+	 */
 	async generateUniqueReferralCode(): Promise<string> {
-		const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // sans I,O,0,1 (lisibilité)
-		for (let attempt = 0; attempt < 10; attempt++) {
-			let code = '';
-			for (let i = 0; i < 6; i++) code += alphabet[Math.floor(Math.random() * alphabet.length)];
+		for (let attempt = 0; attempt < 20; attempt++) {
+			const code = `YO-${randomCode(4)}`;
 			const existing: any = await this.dao.selectOne({ referralCode: code });
 			if (!existing) return code;
 		}
-		// Repli extrêmement improbable : suffixe temporel pour garantir l'unicité.
-		return 'R' + Date.now().toString(36).toUpperCase().slice(-6);
+		// Repli extrêmement improbable (espace `YO-XXXX` saturé) : partie aléatoire plus longue.
+		return `YO-${randomCode(6)}`;
 	}
 
 	/** Résout un code de parrainage en client parrain (ou null). Ignore un code vide/inconnu. */
