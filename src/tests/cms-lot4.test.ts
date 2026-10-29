@@ -16,7 +16,6 @@ import { PlatformConfigSet } from '../modules/platform-config/platform-config.mo
 import { MediaModerationService } from '../modules/media-moderation/media-moderation.service';
 import { PushNotificationService } from '../modules/push-notification/push-notification.service';
 import { NotificationHelper } from '../helpers/notification.helper';
-import { EmailService } from '../services/notification';
 import reportRoute from '../api/routes/report.route';
 import partnerValidationRoute from '../api/routes/partner-validation.route';
 import fraudAlertRoute from '../api/routes/fraud-alert.route';
@@ -263,24 +262,6 @@ describe('CMS lot 4 : signalements, validation, fraude, données personnelles', 
 
 			expect((await service.exportForSelf(userId)).status).to.equal(429);
 			expect((await service.exportForAdmin(userId)).status).to.equal(200);
-		});
-
-		it("envoie l'export par e-mail en pièce jointe, et libère le délai si l'envoi échoue", async () => {
-			const userId = await newClient({ email: 'awa.kone@test.ci' });
-			const send = sinon.stub(EmailService.prototype, 'send').resolves({ success: false, message: 'smtp' } as any);
-			const service = new ClientDataExportService();
-
-			const failed = await service.emailForSelf(userId);
-			expect(failed.status).to.equal(500);
-
-			send.resolves({ success: true, message: 'ok' } as any);
-			const ok = await service.emailForSelf(userId);
-			expect(ok.status).to.equal(200);
-			expect(ok.message).to.include('aw•••@test.ci');
-			const mail: any = send.lastCall.args[0];
-			expect(mail.to).to.equal('awa.kone@test.ci');
-			expect(JSON.parse(mail.attachments[0].content).profile.email).to.equal('awa.kone@test.ci');
-			expect((await service.emailForSelf(userId)).status).to.equal(429);
 		});
 
 		it("l'anonymisation efface l'appareil d'inscription, les jetons push et les commentaires", async () => {

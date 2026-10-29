@@ -1,6 +1,5 @@
 import mongoose from 'mongoose';
-import coddyger, { defines, LoggerService, LogLevel } from 'coddyger';
-import { EmailService, MessageTypes } from '../../services/notification';
+import coddyger, { defines } from 'coddyger';
 
 type Result = { status: number; message: any; data: any };
 
@@ -111,43 +110,6 @@ export class ClientDataExportService {
 		const data = await this.build(userId);
 		if (!data) return { status: defines.status.notFound, message: 'Compte introuvable', data: null };
 		return { status: defines.status.requestOK, message: 'Vos données personnelles', data };
-	}
-
-	/**
-	 * POST /clients/me/data-export/email — même export, envoyé en pièce jointe à l'adresse du
-	 * compte. Utilisé par les applis : aucun fichier à enregistrer sur le téléphone.
-	 */
-	async emailForSelf(userId: string): Promise<Result> {
-		const client: any = await model('Client').findById(userId, 'email firstname').lean();
-		if (!client) return { status: defines.status.notFound, message: 'Compte introuvable', data: null };
-		if (!client.email || String(client.email).endsWith('@yoyo.invalid')) {
-			return { status: defines.status.badRequest, message: 'Aucune adresse e-mail sur ce compte. Contactez le support.', data: null };
-		}
-
-		const res = await this.exportForSelf(userId);
-		if (res.status !== defines.status.requestOK) return res;
-
-		const day = new Date().toISOString().slice(0, 10);
-		const escapeHtml = (v: string) => v.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
-		try {
-			const sent = await new EmailService().send({
-				category: 'security',
-				type: 'email',
-				to: client.email,
-				template: MessageTypes.TYPES.DATA_EXPORT,
-				data: { userName: escapeHtml(client.firstname || '') || undefined },
-				attachments: [{ filename: `yoyo-mes-donnees-${day}.json`, content: JSON.stringify(res.data, null, 2), contentType: 'application/json' }]
-			});
-			if (!sent?.success) throw sent?.error ?? new Error('envoi');
-		} catch (error) {
-			LoggerService.log({ type: LogLevel.Error, content: error, location: 'ClientDataExportService', method: 'emailForSelf' });
-			// L'export n'est pas parti : l'utilisateur peut réessayer tout de suite.
-			await model('Client').updateOne({ _id: userId }, { $set: { lastDataExportAt: null } });
-			return { status: defines.status.serverError, message: 'L’e-mail n’a pas pu être envoyé. Réessayez plus tard.', data: null };
-		}
-
-		const masked = String(client.email).replace(/^(.{2}).*(@.*)$/, '$1•••$2');
-		return { status: defines.status.requestOK, message: `Vos données ont été envoyées à ${masked}.`, data: null };
 	}
 
 	/** GET /clients/:id/data-export — demande reçue par le support (tracée dans l'audit). */

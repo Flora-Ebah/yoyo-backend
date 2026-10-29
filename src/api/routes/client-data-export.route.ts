@@ -23,20 +23,6 @@ const defaultRoute: any = (fastify: any, options, done) => {
 	});
 
 	fastify.route({
-		schema: { tags, summary: 'Recevoir mes données personnelles par e-mail (1 fois par 24 h)' },
-		method: 'POST',
-		url: '/clients/me/data-export/email',
-		preHandler: TokenMiddleware.verify,
-		handler: (request, reply) => {
-			const user: any = request.user;
-			if (!user?._id || user.isAdmin) {
-				return coddyger.api(reply, Promise.resolve({ status: defines.status.forbidden, message: 'Réservé aux utilisateurs de l’appli.', data: null }));
-			}
-			return coddyger.api(reply, clientDataExportService.emailForSelf(String(user._id)));
-		}
-	});
-
-	fastify.route({
 		schema: {
 			tags,
 			summary: "Exporter les données personnelles d'un compte (demande reçue par le support)",
