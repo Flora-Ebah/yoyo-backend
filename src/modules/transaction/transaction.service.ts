@@ -9,6 +9,7 @@ import { SubscriptionService } from '../subscription';
 import { locale } from '../../public/locale/locale';
 import { PaymentHelper } from '../../helpers/payment.helper';
 import { WaveHelper } from '../../helpers/wave.helper';
+import { PlatformConfigService } from '../platform-config/platform-config.service';
 
 /** Prestataires de paiement proposés au client. Orange Money reste le défaut historique. */
 export const PAYMENT_PROVIDERS = ['orange-money', 'wave'] as const;
@@ -75,27 +76,43 @@ export class TransactionService {
   }
 
   /**
-   * Prestataires réellement utilisables sur cet environnement. Les applications s'en servent
-   * pour n'afficher que les moyens de paiement disponibles.
-   * @returns Liste des prestataires configurés
+   * État de chaque prestataire : utilisable seulement s'il est activé au BO (`paymentProviders`
+   * de la config plateforme) ET que ses identifiants sont présents sur le serveur. Les applications
+   * affichent tous les prestataires et présentent les autres comme « Bientôt disponible ».
+   * @returns Un état par prestataire, dans l'ordre de `PAYMENT_PROVIDERS`
    */
-  static availableProviders(): PaymentProvider[] {
-    return PAYMENT_PROVIDERS.filter((provider: PaymentProvider) =>
-      provider === 'wave' ? WaveHelper.isConfigured() : true
-    );
+  static async providersStatus(): Promise<{ id: PaymentProvider; label: string; enabled: boolean }[]> {
+    const switches = await new PlatformConfigService().getPaymentProviders();
+    return PAYMENT_PROVIDERS.map((provider: PaymentProvider) => ({
+      id: provider,
+      label: PROVIDER_LABELS[provider],
+      enabled: provider === 'wave'
+        ? switches.wave && WaveHelper.isConfigured()
+        : switches.orangeMoney && PaymentHelper.isConfigured()
+    }));
   }
 
   /**
-   * Refuse un prestataire inconnu ou non configuré, avant toute écriture.
+   * Prestataires réellement utilisables sur cet environnement (forme historique de
+   * `GET /transactions/payment-providers`, lue par les versions d'apps déjà publiées).
+   * @returns Liste des prestataires utilisables
+   */
+  static async availableProviders(): Promise<PaymentProvider[]> {
+    return (await TransactionService.providersStatus()).filter((p) => p.enabled).map((p) => p.id);
+  }
+
+  /**
+   * Refuse un prestataire inconnu, coupé au BO ou non configuré, avant toute écriture et tout
+   * appel à son API.
    * @param provider Prestataire demandé
    * @returns Un échec métier, ou null si le prestataire est utilisable
    */
-  private rejectUnavailableProvider(provider: PaymentProvider): ErrorResult & { status: number } | null {
-    if (TransactionService.availableProviders().includes(provider)) {
+  private async rejectUnavailableProvider(provider: PaymentProvider): Promise<ErrorResult & { status: number } | null> {
+    if ((await TransactionService.availableProviders()).includes(provider)) {
       return null;
     }
 
-    const message = `Le paiement par ${PROVIDER_LABELS[provider] ?? provider} n'est pas disponible pour le moment.`;
+    const message = `Le paiement par ${PROVIDER_LABELS[provider] ?? provider} sera bientôt disponible.`;
     return { success: false, status: 400, error: new Error(message), message };
   }
 
@@ -1024,7 +1041,7 @@ export class TransactionService {
    */
   async createPlanTransaction(userId: string, planId: string, isScheduledRenewal?: boolean, currentSubscriptionId?: string, paymentMethod: PaymentProvider = DEFAULT_PAYMENT_PROVIDER): Promise<any> {
     try {
-      const unavailable = this.rejectUnavailableProvider(paymentMethod);
+      const unavailable = await this.rejectUnavailableProvider(paymentMethod);
       if (unavailable) {
         return unavailable;
       }
@@ -1170,7 +1187,7 @@ export class TransactionService {
    */
   async createSponsorTransaction(merchantId: string, boutiqueId: string, formula: any, paymentMethod: PaymentProvider = DEFAULT_PAYMENT_PROVIDER): Promise<any> {
     try {
-      const unavailable = this.rejectUnavailableProvider(paymentMethod);
+      const unavailable = await this.rejectUnavailableProvider(paymentMethod);
       if (unavailable) {
         return unavailable;
       }
@@ -1258,7 +1275,7 @@ export class TransactionService {
         return { success: false, status: 400, message: 'Aucune boutique à mettre en avant.' };
       }
 
-      const unavailable = this.rejectUnavailableProvider(paymentMethod);
+      const unavailable = await this.rejectUnavailableProvider(paymentMethod);
       if (unavailable) {
         return unavailable;
       }

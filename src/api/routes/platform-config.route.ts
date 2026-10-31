@@ -136,6 +136,15 @@ const defaultRoute: any = (fastify: any, options, done) => {
               boutiqueSpikeMin: { type: 'integer', minimum: 1, maximum: 10000 }
             },
             additionalProperties: false
+          },
+          // Interrupteurs des moyens de paiement (coupé = « Bientôt disponible » dans les apps).
+          paymentProviders: {
+            type: 'object',
+            properties: {
+              orangeMoney: { type: 'boolean' },
+              wave: { type: 'boolean' }
+            },
+            additionalProperties: false
           }
         },
         additionalProperties: false

@@ -39,6 +39,8 @@ const schema = new mongoose.Schema<IPlatformConfig>({
     boutiqueSpikeFactor: { type: Number },
     boutiqueSpikeMin: { type: Number }
   },
+  // Interrupteurs des moyens de paiement (cf. IPlatformConfig).
+  paymentProviders: { orangeMoney: { type: Boolean }, wave: { type: Boolean } },
   status: { type: String, enum: ['active', 'inactive', 'removed'], default: 'active' }
 },
 { timestamps: true, minimize: false });

@@ -189,6 +189,21 @@ const defaultRoute: any = (fastify: any, options, done) => {
     }
   });
 
+  // État de chaque moyen de paiement : les apps affichent ceux qui sont coupés comme « Bientôt disponible ».
+  fastify.route({
+    schema: {
+      tags,
+      summary: 'État des moyens de paiement',
+      description: "Liste tous les prestataires avec leur disponibilité (interrupteur du back-office et identifiants serveur)"
+    },
+    method: 'GET',
+    url: `${routePath}/payment-providers/status`,
+    preHandler: TokenMiddleware.verify,
+    handler: (request, reply) => {
+      return coddyger.api(reply, Controller.getPaymentProvidersStatus());
+    }
+  });
+
   // Vérifier le statut d'un paiement
   fastify.route({
     schema: {

@@ -120,6 +120,14 @@ export const normalizeFraudRules = (rules: any): NonNullable<IPlatformConfig['fr
   };
 };
 
+/** Moyens de paiement : activés par défaut, seul un `false` explicite enregistré au BO les coupe. */
+export const DEFAULT_PAYMENT_PROVIDERS: NonNullable<IPlatformConfig['paymentProviders']> = { orangeMoney: true, wave: true };
+
+export const normalizePaymentProviders = (providers: any): NonNullable<IPlatformConfig['paymentProviders']> => ({
+  orangeMoney: providers?.orangeMoney !== false,
+  wave: providers?.wave !== false
+});
+
 export class PlatformConfigService {
   private readonly dao: PlatformConfigSet;
 
@@ -150,7 +158,8 @@ export class PlatformConfigService {
       referralProgram: normalizeReferralProgram(doc.referralProgram),
       referralRewardsGranted: Number(doc.referralRewardsGranted) || 0,
       supportSla: normalizeSupportSla(doc.supportSla),
-      fraudRules: normalizeFraudRules(doc.fraudRules)
+      fraudRules: normalizeFraudRules(doc.fraudRules),
+      paymentProviders: normalizePaymentProviders(doc.paymentProviders)
     } as IPlatformConfig;
   }
 
@@ -219,6 +228,15 @@ export class PlatformConfigService {
     }
   }
 
+  /** Interrupteurs BO des moyens de paiement (repli : tout activé). */
+  async getPaymentProviders(): Promise<NonNullable<IPlatformConfig['paymentProviders']>> {
+    try {
+      return normalizePaymentProviders((await this.get()).paymentProviders);
+    } catch {
+      return { ...DEFAULT_PAYMENT_PROVIDERS };
+    }
+  }
+
   /** Limites de la vidéo de présentation (durée en secondes, poids en Mo). */
   async getMediaLimits(): Promise<NonNullable<IPlatformConfig['media']>> {
     try {
@@ -271,6 +289,10 @@ export class PlatformConfigService {
 
     if (data.fraudRules) {
       next.fraudRules = normalizeFraudRules({ ...current.fraudRules, ...data.fraudRules });
+    }
+
+    if (data.paymentProviders) {
+      next.paymentProviders = normalizePaymentProviders({ ...current.paymentProviders, ...data.paymentProviders });
     }
 
     const res: any = await this.dao.update({ _id: (current as any)._id }, next);

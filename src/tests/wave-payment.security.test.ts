@@ -4,6 +4,8 @@ import { defines } from 'coddyger';
 import { WaveHelper } from '../helpers/wave.helper';
 import { WaveWebhookMiddleware } from '../api/middleware/wave-webhook.middleware';
 import { TransactionService } from '../modules/transaction/transaction.service';
+import { PaymentHelper } from '../helpers/payment.helper';
+import { PlatformConfigService } from '../modules/platform-config/platform-config.service';
 import waveWebhookRoute from '../api/routes/wave-webhook.route';
 
 /**
@@ -248,7 +250,12 @@ describe('[Wave] Paiement Wave', () => {
 			expect(sessionStub.called).to.be.false;
 		});
 
+		/** Interrupteurs BO simulés (pas de base en test). */
+		const stubSwitches = (orangeMoney: boolean, wave: boolean) =>
+			sinon.stub(PlatformConfigService.prototype, 'getPaymentProviders').resolves({ orangeMoney, wave });
+
 		it('refuse un paiement Wave quand Wave n\'est pas configuré', async () => {
+			stubSwitches(true, true);
 			const service = new TransactionService();
 			const result: any = await service.createPlanTransaction(
 				'507f1f77bcf86cd799439022', '507f1f77bcf86cd799439023', false, undefined, 'wave'
@@ -258,10 +265,54 @@ describe('[Wave] Paiement Wave', () => {
 			expect(result.status).to.equal(400);
 		});
 
-		it('ne propose Wave que s\'il est configuré', () => {
-			expect(TransactionService.availableProviders()).to.deep.equal(['orange-money']);
+		it('ne propose Wave que s\'il est configuré', async () => {
+			stubSwitches(true, true);
+			sinon.stub(PaymentHelper, 'isConfigured').returns(true);
+			expect(await TransactionService.availableProviders()).to.deep.equal(['orange-money']);
 			process.env.WAVE_API_KEY = 'wave_sn_prod_test';
-			expect(TransactionService.availableProviders()).to.deep.equal(['orange-money', 'wave']);
+			expect(await TransactionService.availableProviders()).to.deep.equal(['orange-money', 'wave']);
+		});
+
+		it('présente un prestataire coupé au BO comme indisponible, même configuré', async () => {
+			stubSwitches(false, true);
+			sinon.stub(PaymentHelper, 'isConfigured').returns(true);
+			process.env.WAVE_API_KEY = 'wave_sn_prod_test';
+
+			expect(await TransactionService.providersStatus()).to.deep.equal([
+				{ id: 'orange-money', label: 'Orange Money', enabled: false },
+				{ id: 'wave', label: 'Wave', enabled: true }
+			]);
+			expect(await TransactionService.availableProviders()).to.deep.equal(['wave']);
+		});
+
+		it('laisse Orange Money indisponible sans clé marchand, même activé au BO', async () => {
+			stubSwitches(true, true);
+			const previous = process.env.OM_MERCHANT_KEY;
+			try {
+				process.env.OM_MERCHANT_KEY = 'your-orange-merchant-key';
+				expect(PaymentHelper.isConfigured()).to.be.false;
+				delete process.env.OM_MERCHANT_KEY;
+				expect(PaymentHelper.isConfigured()).to.be.false;
+				expect(await TransactionService.availableProviders()).to.deep.equal([]);
+			} finally {
+				if (previous === undefined) delete process.env.OM_MERCHANT_KEY;
+				else process.env.OM_MERCHANT_KEY = previous;
+			}
+		});
+
+		it('refuse Orange Money coupé au BO sans appeler son API', async () => {
+			stubSwitches(false, true);
+			sinon.stub(PaymentHelper, 'isConfigured').returns(true);
+			const initiate = sinon.stub(PaymentHelper.prototype, 'initiatePayment');
+			const service = new TransactionService();
+			const result: any = await service.createPlanTransaction(
+				'507f1f77bcf86cd799439022', '507f1f77bcf86cd799439023', false, undefined, 'orange-money'
+			);
+
+			expect(result.success).to.be.false;
+			expect(result.status).to.equal(400);
+			expect(result.message).to.equal('Le paiement par Orange Money sera bientôt disponible.');
+			expect(initiate.called).to.be.false;
 		});
 	});
 

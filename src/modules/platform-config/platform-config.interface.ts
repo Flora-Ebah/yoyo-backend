@@ -66,5 +66,12 @@ export interface IPlatformConfig {
     boutiqueSpikeFactor: number;
     boutiqueSpikeMin: number;
   };
+  /**
+   * Interrupteurs des moyens de paiement, pilotés depuis le BO. Un fournisseur coupé reste affiché
+   * dans les apps avec la mention « Bientôt disponible » et toute demande de paiement est refusée
+   * avant d'appeler son API. Un fournisseur activé sans identifiants serveur reste indisponible
+   * (cf. `TransactionService.providersStatus`).
+   */
+  paymentProviders?: { orangeMoney: boolean; wave: boolean };
   status?: string;
 }

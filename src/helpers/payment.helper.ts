@@ -40,6 +40,15 @@ export class PaymentHelper {
   private accessToken: string | null = null;
   private tokenExpiry: number = 0;
 
+  /**
+   * Indique si la clé marchand Orange Money est renseignée (la valeur d'exemple de `.env.sample`
+   * ne compte pas). Sans clé, Orange Money est présenté comme « Bientôt disponible ».
+   */
+  static isConfigured(): boolean {
+    const key = (process.env.OM_MERCHANT_KEY ?? '').trim();
+    return !!key && key !== 'your-orange-merchant-key';
+  }
+
   constructor() {
     this.paymentConfig = {
       OM_HOST: process.env.OM_HOST || 'https://api.orange.com',

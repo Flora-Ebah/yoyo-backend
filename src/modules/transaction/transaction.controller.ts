@@ -439,11 +439,24 @@ export class TransactionController {
    * @returns Les identifiants des prestataires (ex. ['orange-money', 'wave'])
    */
   getPaymentProviders() {
-    return Promise.resolve({
+    return TransactionService.availableProviders().then((data) => ({
       status: defines.status.requestOK,
       message: locale.controller.done,
-      data: TransactionService.availableProviders()
-    });
+      data
+    }));
+  }
+
+  /**
+   * État de chaque prestataire de paiement : les applications les affichent tous et présentent
+   * ceux qui sont coupés comme « Bientôt disponible ».
+   * @returns `[{ id, label, enabled }]`
+   */
+  getPaymentProvidersStatus() {
+    return TransactionService.providersStatus().then((data) => ({
+      status: defines.status.requestOK,
+      message: locale.controller.done,
+      data
+    }));
   }
 
   /**
