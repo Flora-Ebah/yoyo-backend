@@ -32,7 +32,7 @@ const shift = (date, days) => (date ? new Date(new Date(date).getTime() + days *
 
 async function main() {
   const apply = process.argv.includes('--apply');
-  await mongoose.connect(process.env.DB_URI || 'mongodb://localhost:27017', { dbName: process.env.DB_NAME || 'yoyo' });
+  await mongoose.connect(process.env.DB_URI || process.env.MONGODB_URI || 'mongodb://localhost:27017', { dbName: process.env.DB_NAME || 'yoyo' });
   console.log(`📡 Connecté — mode : ${apply ? 'APPLICATION' : 'DRY-RUN (aucune écriture)'}`);
 
   const db = mongoose.connection;

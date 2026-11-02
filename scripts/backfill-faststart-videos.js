@@ -117,7 +117,7 @@ async function main() {
   const apply = process.argv.includes('--apply');
   const limitArg = argValue('--limit');
   const limit = limitArg ? Number(limitArg) : 0;
-  const mongoUri = process.env.DB_URI || 'mongodb://localhost:27017';
+  const mongoUri = process.env.DB_URI || process.env.MONGODB_URI || 'mongodb://localhost:27017';
   const dbName = process.env.DB_NAME || 'yoyo';
 
   await mongoose.connect(mongoUri, { dbName });

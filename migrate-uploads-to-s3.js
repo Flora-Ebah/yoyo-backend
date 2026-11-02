@@ -57,7 +57,7 @@ const main = async () => {
 	console.log(`${APPLY ? '🚚 MIGRATION' : '🔎 SIMULATION (ajouter --apply pour exécuter)'} → s3://${bucket}`);
 
 	// Noms des pièces KYC : elles ne doivent jamais atterrir sous une clé publique.
-	await mongoose.connect(process.env.DB_URI || 'mongodb://localhost:27017', { dbName: process.env.DB_NAME || 'yoyo' });
+	await mongoose.connect(process.env.DB_URI || process.env.MONGODB_URI || 'mongodb://localhost:27017', { dbName: process.env.DB_NAME || 'yoyo' });
 	const kycNames = new Set();
 	const certifications = mongoose.connection.db.collection('certifications').find({}, { projection: { documentFile: 1 } });
 	for await (const certification of certifications) {

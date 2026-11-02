@@ -22,7 +22,7 @@
  *   - `yarn build` effectué (déjà le cas dans l'image Docker) ;
  *   - ffmpeg / ffprobe dans le PATH (présents dans l'image Docker) ;
  *   - exécuter depuis le serveur qui a accès au stockage, avec les mêmes variables que l'API :
- *     STORAGE_DRIVER, S3_BUCKET, AWS_REGION, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, DB_URI,
+ *     STORAGE_DRIVER, S3_BUCKET, AWS_REGION, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, DB_URI (ou MONGODB_URI),
  *     DB_NAME.
  *
  * Le ré-encodage consomme du CPU (≈ 10 à 60 s par vidéo, 2 cœurs) : préférer une heure creuse.
@@ -136,7 +136,7 @@ async function main() {
   const apply = process.argv.includes('--apply');
   const limitArg = argValue('--limit');
   const limit = limitArg ? Number(limitArg) : 0;
-  const mongoUri = process.env.DB_URI || 'mongodb://localhost:27017';
+  const mongoUri = process.env.DB_URI || process.env.MONGODB_URI || 'mongodb://localhost:27017';
   const dbName = process.env.DB_NAME || 'yoyo';
 
   await mongoose.connect(mongoUri, { dbName });
