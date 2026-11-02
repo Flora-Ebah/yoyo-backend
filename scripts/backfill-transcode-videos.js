@@ -75,6 +75,21 @@ const s3 = () => {
   return s3Client;
 };
 
+/**
+ * Clé publique « plate » (miroir de `isPublicKey`) : pas de dossier, pas de `kyc/`, jeu de
+ * caractères fermé. `partners.video` est une chaîne libre en base : sans ce contrôle, une valeur
+ * forgée ferait lire ou écraser un autre fichier (pièce KYC, fichier hors du dossier d'upload).
+ */
+const PUBLIC_KEY_PATTERN = /^[A-Za-z0-9_-][A-Za-z0-9._-]{0,254}$/;
+const isPublicKey = (key) => typeof key === 'string' && PUBLIC_KEY_PATTERN.test(key) && !key.includes('..');
+
+/** Chemin disque d'une clé (pilote local), garanti à l'intérieur du dossier d'upload. */
+const localFile = (key) => {
+  const full = path.resolve(uploadPath, key);
+  if (!full.startsWith(path.resolve(uploadPath) + path.sep)) throw new Error(`Clé de stockage invalide : ${key}`);
+  return full;
+};
+
 /** Télécharge l'objet `key` vers `dest` (fichier local temporaire). */
 async function download(key, dest) {
   if (storageDriver() === 's3') {
@@ -88,7 +103,7 @@ async function download(key, dest) {
     });
     return;
   }
-  await fs.promises.copyFile(path.join(uploadPath, key), dest);
+  await fs.promises.copyFile(localFile(key), dest);
 }
 
 /** Ré-uploade `src` sous la clé `key` (écrase l'existant). */
@@ -101,7 +116,7 @@ async function upload(src, key) {
     }).done();
     return;
   }
-  await fs.promises.copyFile(src, path.join(uploadPath, key));
+  await fs.promises.copyFile(src, localFile(key));
 }
 
 // --- Programme principal ------------------------------------------------------------------------
@@ -155,6 +170,11 @@ async function main() {
     const label = `${p.name || '(sans nom)'} [${p._id}] → ${key}`;
     const inPath = path.join(tmpDir, `${p._id}-in`);
     const outPath = path.join(tmpDir, `${p._id}-720.mp4`);
+    if (!isPublicKey(key)) {
+      failures.push({ id: p._id, key, message: 'clé non publique ignorée' });
+      console.error(`   ⛔ clé non publique ignorée — ${label}`);
+      continue;
+    }
     try {
       await download(key, inPath);
       const probe = await probeVideo(inPath);

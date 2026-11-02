@@ -50,7 +50,9 @@ export const probeVideo = async (file: string): Promise<VideoProbe> => {
 			'ffprobe',
 			[
 				'-v', 'error',
-				'-show_entries', 'format=duration,bit_rate:stream=codec_type,codec_name,width,height,pix_fmt,avg_frame_rate',
+				'-show_entries',
+				'format=duration,bit_rate:stream=codec_type,codec_name,width,height,pix_fmt,avg_frame_rate' +
+					':stream_disposition=attached_pic',
 				'-of', 'json',
 				file
 			],
@@ -62,12 +64,19 @@ export const probeVideo = async (file: string): Promise<VideoProbe> => {
 
 	const info = JSON.parse(stdout || '{}');
 	const streams: any[] = info.streams ?? [];
-	const video = streams.find((stream) => stream.codec_type === 'video');
+	// Pistes vidéo réelles : une pochette (`attached_pic`) n'en est pas une.
+	const videos = streams.filter((stream) => stream.codec_type === 'video' && !stream.disposition?.attached_pic);
+	const video = videos[0];
 	const audio = streams.find((stream) => stream.codec_type === 'audio');
 	const duration = Number(info.format?.duration);
 
 	if (!video || !Number.isFinite(duration) || duration <= 0) {
 		throw new VideoError('Fichier vidéo illisible ou corrompu');
+	}
+	// Une seule piste vidéo : avec plusieurs, la modération pourrait analyser une piste anodine et
+	// le lecteur (ou le ré-encodage) en diffuser une autre. Un téléphone n'en produit jamais deux.
+	if (videos.length > 1) {
+		throw new VideoError('Vidéo refusée : le fichier contient plusieurs pistes vidéo');
 	}
 	return {
 		duration,
@@ -137,8 +146,18 @@ const TRANSCODE_TIMEOUT_MS = 180_000;
  */
 const TRANSCODE_THREADS = '2';
 
-/** Un seul ré-encodage à la fois : plusieurs envois simultanés attendent leur tour. */
+/**
+ * Un seul ré-encodage à la fois : les envois simultanés attendent leur tour, mais pas plus de
+ * `MAX_PENDING_TRANSCODES` (en cours compris). Au-delà, `transcodeForStreaming` échoue
+ * immédiatement et l'appelant se replie sur le remux faststart : une rafale d'envois ne peut pas
+ * faire attendre les suivants plusieurs fois 3 min (ni dépasser le délai d'upload de l'app Pro).
+ */
+const MAX_PENDING_TRANSCODES = 3;
+let pendingTranscodes = 0;
 let transcodeQueue: Promise<unknown> = Promise.resolve();
+
+/** Vrai si une demande de ré-encodage serait refusée faute de place (le rattrapage attend alors). */
+export const transcodeQueueFull = (): boolean => pendingTranscodes >= MAX_PENDING_TRANSCODES;
 
 /**
  * Ré-encode une vidéo au profil de diffusion (`VIDEO_TARGET`), en MP4 « faststart » :
@@ -146,9 +165,14 @@ let transcodeQueue: Promise<unknown> = Promise.resolve();
  * plafonné, AAC stéréo 128 kbit/s. La rotation du téléphone est appliquée aux pixels (portrait
  * conservé) et les métadonnées sont retirées — dont la position GPS que les iPhone y inscrivent.
  *
- * Lève via `toolError`. L'appelant décide du repli (voir `main.controller.ts`).
+ * Lève via `toolError`, ou immédiatement si la file est pleine. L'appelant décide du repli (voir
+ * `main.controller.ts`).
  */
 export const transcodeForStreaming = (input: string, output: string): Promise<void> => {
+	if (transcodeQueueFull()) {
+		return Promise.reject(new Error('File de ré-encodage pleine'));
+	}
+	pendingTranscodes += 1;
 	const task = transcodeQueue.then(async () => {
 		const side = VIDEO_TARGET.shortSide;
 		// Paysage : hauteur ramenée à 720 ; portrait : largeur. `-2` garde le ratio en dimension paire
@@ -162,7 +186,8 @@ export const transcodeForStreaming = (input: string, output: string): Promise<vo
 				[
 					'-v', 'error',
 					'-i', input,
-					'-map', '0:v:0',
+					// `V` majuscule : 1re piste vidéo hors pochette, la même que modération et aperçu.
+					'-map', '0:V:0',
 					'-map', '0:a:0?',
 					'-map_metadata', '-1',
 					'-vf', scale,
@@ -189,7 +214,9 @@ export const transcodeForStreaming = (input: string, output: string): Promise<vo
 	});
 	// La file continue même si ce ré-encodage échoue.
 	transcodeQueue = task.catch(() => undefined);
-	return task;
+	return task.finally(() => {
+		pendingTranscodes -= 1;
+	});
 };
 
 /** Extrait une image d'aperçu (JPEG, 720 px de large) prise vers la 1re seconde. */
@@ -198,7 +225,7 @@ export const extractPoster = async (file: string, output: string, duration: numb
 	try {
 		await run(
 			'ffmpeg',
-			['-v', 'error', '-ss', at, '-i', file, '-frames:v', '1', '-vf', 'scale=720:-2', '-q:v', '4', '-y', output],
+			['-v', 'error', '-ss', at, '-i', file, '-map', '0:V:0', '-frames:v', '1', '-vf', 'scale=720:-2', '-q:v', '4', '-y', output],
 			{ timeout: TOOL_TIMEOUT_MS }
 		);
 	} catch (error) {
@@ -216,7 +243,11 @@ export const extractFrame = async (file: string, output: string, at?: number): P
 	try {
 		await run(
 			'ffmpeg',
-			['-v', 'error', ...seek, '-i', file, '-frames:v', '1', '-vf', "scale='min(1280,iw)':-2", '-q:v', '4', '-y', output],
+			// `-map 0:V:0` : la piste analysée est celle qui sera diffusée (ré-encodage, aperçu).
+			[
+				'-v', 'error', ...seek, '-i', file, '-map', '0:V:0',
+				'-frames:v', '1', '-vf', "scale='min(1280,iw)':-2", '-q:v', '4', '-y', output
+			],
 			{ timeout: TOOL_TIMEOUT_MS }
 		);
 	} catch (error) {

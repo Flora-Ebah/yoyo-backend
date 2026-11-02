@@ -121,6 +121,40 @@ describe('[Upload] Vidéos de présentation', () => {
 			expect(error).to.be.instanceOf(VideoError);
 		});
 
+		it('refuse une vidéo à plusieurs pistes vidéo (piste modérée ≠ piste diffusée)', async () => {
+			const file = path.join(dir, 'deux-pistes.mp4');
+			execFileSync('ffmpeg', [
+				'-v', 'error',
+				'-f', 'lavfi', '-i', 'testsrc=duration=1:size=160x120:rate=10',
+				'-f', 'lavfi', '-i', 'testsrc2=duration=1:size=640x480:rate=10',
+				'-map', '0:v', '-map', '1:v', '-pix_fmt', 'yuv420p', '-y', file
+			]);
+			let error: any;
+			try {
+				await probeVideo(file);
+			} catch (e) {
+				error = e;
+			}
+			expect(error).to.be.instanceOf(VideoError);
+			expect(error.message).to.match(/plusieurs pistes/);
+		});
+
+		it('borne la file de ré-encodage : au-delà, échec immédiat (repli sur le remux)', async function () {
+			this.timeout(120_000);
+			const source = makeVideo(2);
+			const runs = Array.from({ length: 4 }, (_, i) =>
+				transcodeForStreaming(source, path.join(dir, `file-${i}.mp4`)).then(
+					() => 'ok',
+					(e: Error) => e.message
+				)
+			);
+			const results = await Promise.all(runs);
+			expect(results.slice(0, 3)).to.deep.equal(['ok', 'ok', 'ok']);
+			expect(results[3]).to.equal('File de ré-encodage pleine');
+			// La place est rendue une fois les ré-encodages terminés.
+			await transcodeForStreaming(source, path.join(dir, 'file-apres.mp4'));
+		});
+
 		it('extrait une image d\'aperçu JPEG', async () => {
 			const video = makeVideo(3);
 			const poster = path.join(dir, 'poster.jpg');
