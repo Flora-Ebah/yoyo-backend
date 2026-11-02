@@ -158,6 +158,45 @@ describe('Remarques testeurs — app Pro', () => {
 			expect((await partnerModel().findById(PARTNER_ID).lean()).video).to.equal('clip.mp4');
 		});
 
+		it('refuse une clé de vidéo ou d’aperçu qui n’est pas un fichier public (kyc/, chemin, URL)', async () => {
+			await partnerModel().updateOne({ _id: PARTNER_ID }, { $set: { isSponsored: true } });
+			const forged = [
+				{ video: 'kyc/piece.pdf' },
+				{ video: '../../etc/passwd' },
+				{ video: 'https://exemple.com/v.mp4' },
+				{ videoPoster: 'kyc/piece.jpg' }
+			];
+			for (const media of forged) {
+				const state = await put({ body: { _id: PARTNER_ID, ...media }, user: { _id: OWNER_ID } }, fakeReply());
+				expect(state.code, JSON.stringify(media)).to.equal(400);
+			}
+			// Même pour un admin.
+			const admin = await put(
+				{ body: { _id: PARTNER_ID, video: 'kyc/piece.pdf' }, user: { _id: STRANGER_ID, isAdmin: true } },
+				fakeReply()
+			);
+			expect(admin.code).to.equal(400);
+			const p: any = await partnerModel().findById(PARTNER_ID).lean();
+			expect(p.video).to.equal(undefined);
+			expect(p.videoPoster).to.equal(undefined);
+		});
+
+		it('laisse passer une valeur déjà en base, même ancienne et non conforme (renvoi du formulaire Pro)', async () => {
+			await partnerModel().updateOne(
+				{ _id: PARTNER_ID },
+				{ $set: { isSponsored: true, video: 'ancien dossier/v.mp4', videoPoster: 'ancien dossier/v.jpg' } }
+			);
+			const state = await put(
+				{
+					body: { _id: PARTNER_ID, name: 'Boutique Pro 2', video: 'ancien dossier/v.mp4', videoPoster: 'ancien dossier/v.jpg' },
+					user: { _id: OWNER_ID }
+				},
+				fakeReply()
+			);
+			expect(state.code).to.not.equal(400);
+			expect((await partnerModel().findById(PARTNER_ID).lean()).name).to.equal('Boutique Pro 2');
+		});
+
 		it('ignore maxOrder et la commande minimale hors catégorie éligible (n°5)', async () => {
 			await put({ body: { _id: PARTNER_ID, minOrder: 2000, maxOrder: 9000 }, user: { _id: OWNER_ID } }, fakeReply());
 			let p: any = await partnerModel().findById(PARTNER_ID).lean();

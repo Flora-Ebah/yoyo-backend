@@ -6,6 +6,7 @@ import { PartnerMediaHelper } from '../../helpers/partner-media.helper';
 import { PartnerAccessHelper } from '../../helpers/partner-access.helper';
 import { PartnerSet } from '../../modules/partner';
 import { PartnerValidationService, partnerValidationService } from '../../modules/partner/partner-validation.service';
+import { isPublicKey } from '../../services/storage/storage.service';
 
 /** Refus 403 au format `{ status, message, data }` attendu par `coddyger.api`. */
 const forbidden = (reply: any, message: string) =>
@@ -22,7 +23,7 @@ const loadManagedPartner = async (reply: any, id: any, user: any, ownerOnly = fa
   }
   const partnerModel: any = (new PartnerSet() as any).defaultModel;
   const partner: any = await partnerModel
-    .findOne({ _id: id, status: { $nin: ['removed', 'archived'] } }, '_id user isSponsored video categories')
+    .findOne({ _id: id, status: { $nin: ['removed', 'archived'] } }, '_id user isSponsored video videoPoster categories')
     .lean();
   if (!partner) {
     coddyger.api(reply, Promise.resolve({ status: defines.status.notFound, message: 'Boutique introuvable.', data: null }));
@@ -65,6 +66,38 @@ const pickWritable = (body: any, user?: any): any => {
 };
 
 const VIDEO_BOOST_ONLY = 'La vidéo est réservée aux boutiques boostées. Activez YO Boost pour en ajouter une.';
+
+/** Champs qui portent une clé de stockage de la vidéo (nom renvoyé par `POST /upload`). */
+const VIDEO_KEY_FIELDS = ['video', 'videoPoster'];
+
+/**
+ * [SÉCURITÉ] `video` / `videoPoster` doivent être une clé publique « plate » (`<hex>.mp4`), ou vide
+ * pour retirer la vidéo. Sans ce contrôle, une valeur forgée (`kyc/<pièce>.pdf`, `../…`) était
+ * enregistrée telle quelle puis lue ou réécrite par les scripts de maintenance qui parcourent ces
+ * champs (rattrapage du ré-encodage vidéo). Une valeur identique à celle déjà en base reste
+ * acceptée : l'app Pro renvoie la vidéo existante à chaque enregistrement du formulaire.
+ * Renvoie le nom du premier champ invalide, ou `null`.
+ */
+const invalidVideoKey = (body: any, current?: any): string | null => {
+  for (const field of VIDEO_KEY_FIELDS) {
+    const value = body?.[field];
+    if (value === undefined || value === null || value === '') continue;
+    if (current && value === current[field]) continue;
+    if (typeof value !== 'string' || !isPublicKey(value)) return field;
+  }
+  return null;
+};
+
+/** Réponse 400 pour une clé de vidéo invalide. */
+const badVideoKey = (reply: any, field: string) =>
+  coddyger.api(
+    reply,
+    Promise.resolve({
+      status: defines.status.badRequest,
+      message: `Fichier ${field === 'video' ? 'vidéo' : "d'aperçu vidéo"} invalide : envoyez la vidéo avant d'enregistrer la boutique.`,
+      data: null
+    })
+  );
 
 const routePath = '/partners';
 const Controller: PartnerController = new PartnerController();
@@ -184,6 +217,9 @@ const defaultRoute: any = (fastify: any, options, done) => {
       // Champs autorisés uniquement (le plafond par achat `maxOrder` n'en fait plus partie).
       let body: any = pickWritable(request.body, request.user);
       body.user = user._id;
+
+      const badField = invalidVideoKey(body);
+      if (badField) return badVideoKey(reply, badField);
 
       // Une boutique neuve n'est pas boostée : pas de vidéo (avantage YO Boost).
       if (!user?.isAdmin && body.video) return forbidden(reply, VIDEO_BOOST_ONLY);
@@ -312,6 +348,9 @@ const defaultRoute: any = (fastify: any, options, done) => {
 
       const current: any = await loadManagedPartner(reply, _id, user);
       if (!current) return;
+
+      const badField = invalidVideoKey(body, current);
+      if (badField) return badVideoKey(reply, badField);
 
       // Vidéo = avantage YO Boost : on peut la retirer, pas en ajouter une sans boost.
       if (!user?.isAdmin && body.video && body.video !== current.video && !current.isSponsored) {
@@ -746,6 +785,9 @@ const defaultRoute: any = (fastify: any, options, done) => {
     handler: (request, reply) => {
       const body: any = request.body;
       const admin: any = request.user;
+
+      const badField = invalidVideoKey(body);
+      if (badField) return badVideoKey(reply, badField);
 
       // Le propriétaire est le marchand ciblé par l'URL ; l'admin est l'auteur de la création.
       body.user = request.params.userId;
