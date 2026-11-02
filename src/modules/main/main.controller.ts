@@ -7,7 +7,16 @@ import fs from 'fs/promises';
 import { ClientService } from '../client/client.service';
 import { PlatformConfigService } from '../platform-config/platform-config.service';
 import { storage } from '../../services/storage/storage.service';
-import { DURATION_TOLERANCE_SECONDS, VideoError, extractPoster, probeVideo, remuxFaststart } from '../../helpers/video.helper';
+import {
+	DURATION_TOLERANCE_SECONDS,
+	VideoError,
+	VideoProbe,
+	extractPoster,
+	needsTranscode,
+	probeVideo,
+	remuxFaststart,
+	transcodeForStreaming
+} from '../../helpers/video.helper';
 import { MediaModerationService, ModerationVerdict } from '../media-moderation/media-moderation.service';
 const controllerLabel: string = 'MainController';
 
@@ -101,7 +110,13 @@ export class MainController {
 
 			try {
 				const limits = await new PlatformConfigService().getMediaLimits();
-				const checked: Array<{ file: any; contentType: string; duration?: number; verdict?: ModerationVerdict }> = [];
+				const checked: Array<{
+					file: any;
+					contentType: string;
+					duration?: number;
+					probe?: VideoProbe;
+					verdict?: ModerationVerdict;
+				}> = [];
 				// Modération (contenu sexuel / pédopornographique) des images et vidéos, avant tout
 				// enregistrement. Les envois de l'admin ne sont pas analysés.
 				const moderate = !options.uploader?.isAdmin;
@@ -152,7 +167,8 @@ export class MainController {
 					if (file.size > limits.maxVideoSizeMb * 1024 * 1024) {
 						return refuse(`Vidéo trop lourde (maximum ${limits.maxVideoSizeMb} Mo)`);
 					}
-					const { duration } = await probeVideo(file.path);
+					const probe = await probeVideo(file.path);
+					const { duration } = probe;
 					if (duration > limits.maxVideoSeconds + DURATION_TOLERANCE_SECONDS) {
 						return refuse(`Vidéo trop longue : ${Math.round(duration)} s (maximum ${limits.maxVideoSeconds} s)`);
 					}
@@ -162,11 +178,11 @@ export class MainController {
 						if (!result) return;
 						verdict = result.verdict;
 					}
-					checked.push({ file, contentType, duration, verdict });
+					checked.push({ file, contentType, duration, probe, verdict });
 				}
 
 				const files: Array<any> = [];
-				for (const { file, contentType, duration, verdict } of checked) {
+				for (const { file, contentType, duration, probe, verdict } of checked) {
 					let poster: string | undefined;
 					if (duration !== undefined) {
 						const posterTemp = `${file.path}-poster.jpg`;
@@ -180,31 +196,46 @@ export class MainController {
 					}
 
 					let save: any;
-					// Taille réellement sauvegardée (le remux faststart la modifie légèrement).
+					// Taille réellement sauvegardée (ré-encodage ou remux la modifient).
 					let savedSize = file.size;
 
 					if (duration !== undefined) {
-						// VIDÉO : on remux en « faststart » AVANT de sauvegarder, pour la lecture
-						// progressive du feed « Découvrir ». Le temporaire remuxé est enregistré à la
-						// place du fichier brut (même clé, même contentType video/mp4).
+						// VIDÉO : avant sauvegarde, mise au profil de diffusion mobile, du plus utile au
+						// plus sûr :
+						//  1. ré-encodage H.264 720p plafonné (~6 Mo pour 20 s au lieu de 40-120 Mo),
+						//     sauf si la vidéo y est déjà ;
+						//  2. sinon, ou s'il échoue, remux « faststart » sans ré-encodage (lecture
+						//     progressive : la 1re image s'affiche avant la fin du téléchargement) ;
+						//  3. en dernier recours, le fichier d'origine (lisible, moins fluide).
+						// Ne JAMAIS faire échouer tout l'upload pour une de ces optimisations.
 						const fsTemp = `${file.path}-fs.mp4`;
 						try {
-							let remuxed = false;
-							try {
-								await remuxFaststart(file.path, fsTemp);
-								remuxed = true;
-							} catch (remuxError) {
-								// Repli non bloquant : on conserve la vidéo d'origine (lisible, juste
-								// moins fluide). Ne JAMAIS faire échouer tout l'upload pour le faststart.
-								console.error('Remux faststart échoué, conservation du fichier original :', remuxError);
+							let prepared = false;
+							if (probe && needsTranscode(probe)) {
+								try {
+									await transcodeForStreaming(file.path, fsTemp);
+									prepared = true;
+								} catch (transcodeError) {
+									console.error('Ré-encodage vidéo échoué, repli sur le remux faststart :', transcodeError);
+								}
+							}
+							if (!prepared) {
+								try {
+									await remuxFaststart(file.path, fsTemp);
+									prepared = true;
+								} catch (remuxError) {
+									console.error('Remux faststart échoué, conservation du fichier original :', remuxError);
+								}
 							}
 
 							// `FileUpload.save` lit `path` et supprime ce temporaire en sortie : on lui
-							// confie le remuxé via une copie du descripteur, sans toucher l'original.
-							const source = remuxed ? { ...file, path: fsTemp } : file;
-							if (remuxed) savedSize = (await fs.stat(fsTemp)).size;
+							// confie le fichier préparé via une copie du descripteur, sans toucher
+							// l'original. Le fichier préparé est un MP4 : clé `.mp4` et type video/mp4,
+							// même si l'envoi était un .mov.
+							const source = prepared ? { ...file, path: fsTemp } : file;
+							if (prepared) savedSize = (await fs.stat(fsTemp)).size;
 
-							save = await FileUpload.save(source, contentType);
+							save = await FileUpload.save(source, prepared ? 'video/mp4' : contentType);
 						} finally {
 							// Nettoyage du temporaire remuxé ET du temporaire multer d'origine
 							// (quel que soit le chemin pris : succès, repli ou erreur).

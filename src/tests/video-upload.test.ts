@@ -5,7 +5,14 @@ import os from 'os';
 import path from 'path';
 import crypto from 'crypto';
 import { FileUpload } from '../helpers/file-upload.helper';
-import { VideoError, extractPoster, probeVideo } from '../helpers/video.helper';
+import {
+	VideoError,
+	VideoProbe,
+	extractPoster,
+	needsTranscode,
+	probeVideo,
+	transcodeForStreaming
+} from '../helpers/video.helper';
 
 const hasFfmpeg = (() => {
 	try {
@@ -33,6 +40,40 @@ describe('[Upload] Vidéos de présentation', () => {
 		it('un .mov est stocké en .mov (et non .qt)', () => {
 			expect(FileUpload.buildExt('video/quicktime')).to.equal('mov');
 			expect(FileUpload.buildExt('video/mp4')).to.equal('mp4');
+		});
+	});
+
+	describe('décision de ré-encodage (profil de diffusion 720p)', () => {
+		const conforme: VideoProbe = {
+			duration: 20,
+			bitRate: 2_600_000,
+			video: { codec: 'h264', width: 720, height: 1280, pixFmt: 'yuv420p', fps: 30 },
+			audioCodec: 'aac'
+		};
+		const avec = (patch: Partial<VideoProbe['video']>, rest: Partial<VideoProbe> = {}): VideoProbe => ({
+			...conforme,
+			...rest,
+			video: { ...conforme.video, ...patch }
+		});
+
+		it('ne ré-encode pas une vidéo déjà conforme (rattrapage idempotent)', () => {
+			expect(needsTranscode(conforme)).to.equal(false);
+			expect(needsTranscode({ ...conforme, audioCodec: null })).to.equal(false);
+			expect(needsTranscode(avec({ width: 1280, height: 720, fps: 29.97 }))).to.equal(false);
+		});
+
+		it('ré-encode une vidéo de téléphone 1080p / 4K', () => {
+			expect(needsTranscode(avec({ width: 1080, height: 1920 }))).to.equal(true);
+			expect(needsTranscode(avec({ width: 3840, height: 2160 }))).to.equal(true);
+		});
+
+		it('ré-encode le HEVC, le 10 bits, le 60 i/s, un débit trop élevé ou un audio non AAC', () => {
+			expect(needsTranscode(avec({ codec: 'hevc' }))).to.equal(true);
+			expect(needsTranscode(avec({ pixFmt: 'yuv420p10le' }))).to.equal(true);
+			expect(needsTranscode(avec({ fps: 60 }))).to.equal(true);
+			expect(needsTranscode({ ...conforme, bitRate: 12_000_000 })).to.equal(true);
+			expect(needsTranscode({ ...conforme, bitRate: 0 })).to.equal(true);
+			expect(needsTranscode({ ...conforme, audioCodec: 'pcm_s16le' })).to.equal(true);
 		});
 	});
 
@@ -86,6 +127,65 @@ describe('[Upload] Vidéos de présentation', () => {
 			await extractPoster(video, poster, 3);
 			const header = fs.readFileSync(poster).subarray(0, 3);
 			expect([...header]).to.deep.equal([0xff, 0xd8, 0xff]);
+		});
+
+		describe('ré-encodage au profil de diffusion', function () {
+			this.timeout(120_000);
+
+			/** Vidéo d'essai « téléphone » (.mov) : grande, 60 i/s, ~20 Mbit/s, son PCM non compressé. */
+			const makePhoneVideo = (name: string, size: string): string => {
+				const file = path.join(dir, name);
+				execFileSync('ffmpeg', [
+					'-v', 'error',
+					'-f', 'lavfi', '-i', `testsrc2=duration=3:size=${size}:rate=60`,
+					'-f', 'lavfi', '-i', 'sine=frequency=440:duration=3',
+					'-c:v', 'libx264', '-preset', 'ultrafast', '-b:v', '20M',
+					'-c:a', 'pcm_s16le', '-shortest', '-y', file
+				]);
+				return file;
+			};
+
+			it('ramène une vidéo portrait 1080×1920 / 60 i/s en 720×1280 / 30 i/s, H.264 + AAC', async () => {
+				const source = makePhoneVideo('portrait.mov', '1080x1920');
+				expect(needsTranscode(await probeVideo(source))).to.equal(true);
+
+				const out = path.join(dir, 'portrait-720.mp4');
+				await transcodeForStreaming(source, out);
+				const probe = await probeVideo(out);
+
+				expect(probe.video.codec).to.equal('h264');
+				expect(probe.video.pixFmt).to.equal('yuv420p');
+				expect([probe.video.width, probe.video.height]).to.deep.equal([720, 1280]);
+				expect(probe.video.fps).to.be.at.most(30.5);
+				expect(probe.audioCodec).to.equal('aac');
+				expect(probe.duration).to.be.closeTo(3, 0.3);
+				expect(fs.statSync(out).size).to.be.lessThan(fs.statSync(source).size);
+				// Profil atteint : un second passage (rattrapage) ne ré-encoderait pas.
+				expect(needsTranscode(probe)).to.equal(false);
+			});
+
+			it('ramène une vidéo paysage 1920×1080 en 1280×720', async () => {
+				const out = path.join(dir, 'paysage-720.mp4');
+				await transcodeForStreaming(makePhoneVideo('paysage.mov', '1920x1080'), out);
+				const { video } = await probeVideo(out);
+				expect([video.width, video.height]).to.deep.equal([1280, 720]);
+			});
+
+			it('n\'agrandit pas une petite vidéo et accepte une vidéo muette', async () => {
+				const out = path.join(dir, 'petite.mp4');
+				await transcodeForStreaming(makeVideo(2), out); // 320×240, sans piste audio
+				const probe = await probeVideo(out);
+				expect([probe.video.width, probe.video.height]).to.deep.equal([320, 240]);
+				expect(probe.audioCodec).to.equal(null);
+			});
+
+			it('place l\'index (moov) en tête de fichier : lecture progressive', async () => {
+				const out = path.join(dir, 'faststart.mp4');
+				await transcodeForStreaming(makeVideo(2), out);
+				const head = fs.readFileSync(out).subarray(0, 64 * 1024).toString('latin1');
+				expect(head.indexOf('moov')).to.be.greaterThan(-1);
+				expect(head.indexOf('moov')).to.be.lessThan(head.indexOf('mdat'));
+			});
 		});
 	});
 });

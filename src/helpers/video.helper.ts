@@ -20,13 +20,40 @@ const toolError = (error: any, tool: string): Error =>
 		? new Error(`${tool} introuvable sur le serveur : traitement vidéo indisponible`)
 		: new VideoError('Fichier vidéo illisible ou corrompu');
 
-/** Durée réelle (secondes) d'une vidéo ; échoue si le fichier ne contient aucune piste vidéo. */
-export const probeVideo = async (file: string): Promise<{ duration: number }> => {
+/** Caractéristiques d'une vidéo utiles pour décider d'un ré-encodage. */
+export interface VideoProbe {
+	/** Durée réelle, en secondes. */
+	duration: number;
+	/** Débit global du fichier (bit/s), 0 si inconnu. */
+	bitRate: number;
+	video: { codec: string; width: number; height: number; pixFmt: string; fps: number };
+	/** Codec de la 1re piste audio, `null` si la vidéo est muette. */
+	audioCodec: string | null;
+}
+
+const toNumber = (value: any): number => {
+	const n = Number(value);
+	return Number.isFinite(n) ? n : 0;
+};
+
+/** « 30000/1001 » → 29,97 ; 0 si absent ou illisible. */
+const parseRate = (rate: any): number => {
+	const [num, den] = String(rate ?? '').split('/').map(Number);
+	return num > 0 && den > 0 ? num / den : 0;
+};
+
+/** Durée réelle et caractéristiques d'une vidéo ; échoue si le fichier ne contient aucune piste vidéo. */
+export const probeVideo = async (file: string): Promise<VideoProbe> => {
 	let stdout: string;
 	try {
 		({ stdout } = await run(
 			'ffprobe',
-			['-v', 'error', '-show_entries', 'format=duration:stream=codec_type', '-of', 'json', file],
+			[
+				'-v', 'error',
+				'-show_entries', 'format=duration,bit_rate:stream=codec_type,codec_name,width,height,pix_fmt,avg_frame_rate',
+				'-of', 'json',
+				file
+			],
 			{ timeout: TOOL_TIMEOUT_MS }
 		));
 	} catch (error) {
@@ -34,13 +61,135 @@ export const probeVideo = async (file: string): Promise<{ duration: number }> =>
 	}
 
 	const info = JSON.parse(stdout || '{}');
-	const hasVideo = (info.streams ?? []).some((stream: any) => stream.codec_type === 'video');
+	const streams: any[] = info.streams ?? [];
+	const video = streams.find((stream) => stream.codec_type === 'video');
+	const audio = streams.find((stream) => stream.codec_type === 'audio');
 	const duration = Number(info.format?.duration);
 
-	if (!hasVideo || !Number.isFinite(duration) || duration <= 0) {
+	if (!video || !Number.isFinite(duration) || duration <= 0) {
 		throw new VideoError('Fichier vidéo illisible ou corrompu');
 	}
-	return { duration };
+	return {
+		duration,
+		bitRate: toNumber(info.format?.bit_rate),
+		video: {
+			codec: String(video.codec_name ?? ''),
+			width: toNumber(video.width),
+			height: toNumber(video.height),
+			pixFmt: String(video.pix_fmt ?? ''),
+			fps: parseRate(video.avg_frame_rate)
+		},
+		audioCodec: audio ? String(audio.codec_name ?? '') : null
+	};
+};
+
+/**
+ * Profil de diffusion des vidéos de boutique : ce que le téléphone télécharge réellement.
+ *
+ * Une vidéo de téléphone (1080p/4K, HEVC, 15 à 50 Mbit/s) pèse 40 à 120 Mo pour 20 s : sur une 4G
+ * moyenne le lecteur s'interrompt sans cesse pour recharger. Ramenée en H.264 720p plafonné à
+ * ~2,5 Mbit/s, la même vidéo pèse ~6 Mo, se lit sur tous les Android (HEVC et 10 bits ne le sont
+ * pas partout) et reste nette sur un écran de téléphone.
+ *
+ * Le poids final dépend du DÉBIT, pas de la durée réglée au BO : poids ≈ débit × durée.
+ */
+export const VIDEO_TARGET = {
+	/** Plus petit côté (720 = « 720p », en paysage comme en portrait). */
+	shortSide: 720,
+	/** Plafond d'images par seconde (les 60 i/s doublent le débit sans gain visible ici). */
+	maxFps: 30,
+	/** Débit vidéo maximal (bit/s) et tampon du contrôle de débit. */
+	maxVideoBitRate: 2_500_000,
+	bufSize: 5_000_000,
+	/** Qualité visée (x264) : 23 = très bon, 28 = correct ; 26 est un bon compromis mobile. */
+	crf: 26,
+	audioBitRate: 128_000,
+	/** Débit global en dessous duquel un fichier déjà conforme n'est pas ré-encodé. */
+	acceptedTotalBitRate: 3_200_000
+};
+
+/**
+ * Faut-il ré-encoder ? Non si la vidéo est déjà au profil de diffusion (H.264 8 bits, ≤ 720p,
+ * ≤ 30 i/s, débit raisonnable, audio AAC ou muette) : on se contente alors du remux faststart.
+ * Rend le rattrapage idempotent et évite de dégrader une vidéo déjà optimisée.
+ */
+export const needsTranscode = (probe: VideoProbe): boolean => {
+	const { video, bitRate, audioCodec } = probe;
+	const shortSide = Math.min(video.width, video.height);
+	return !(
+		video.codec === 'h264' &&
+		video.pixFmt === 'yuv420p' &&
+		shortSide > 0 &&
+		shortSide <= VIDEO_TARGET.shortSide &&
+		video.fps <= VIDEO_TARGET.maxFps + 1 &&
+		bitRate > 0 &&
+		bitRate <= VIDEO_TARGET.acceptedTotalBitRate &&
+		(audioCodec === null || audioCodec === 'aac')
+	);
+};
+
+/** Délai maximal d'un ré-encodage : une source 4K HEVC de 20 s demande plusieurs dizaines de secondes. */
+const TRANSCODE_TIMEOUT_MS = 180_000;
+
+/**
+ * Cœurs alloués à un ré-encodage. ffmpeg tourne hors de la boucle d'événements Node, mais il
+ * partage le CPU du VPS avec l'API : on le bride pour que les autres requêtes restent fluides.
+ */
+const TRANSCODE_THREADS = '2';
+
+/** Un seul ré-encodage à la fois : plusieurs envois simultanés attendent leur tour. */
+let transcodeQueue: Promise<unknown> = Promise.resolve();
+
+/**
+ * Ré-encode une vidéo au profil de diffusion (`VIDEO_TARGET`), en MP4 « faststart » :
+ * H.264 High 8 bits, plus petit côté ramené à 720 px (jamais agrandi), 30 i/s au plus, débit
+ * plafonné, AAC stéréo 128 kbit/s. La rotation du téléphone est appliquée aux pixels (portrait
+ * conservé) et les métadonnées sont retirées — dont la position GPS que les iPhone y inscrivent.
+ *
+ * Lève via `toolError`. L'appelant décide du repli (voir `main.controller.ts`).
+ */
+export const transcodeForStreaming = (input: string, output: string): Promise<void> => {
+	const task = transcodeQueue.then(async () => {
+		const side = VIDEO_TARGET.shortSide;
+		// Paysage : hauteur ramenée à 720 ; portrait : largeur. `-2` garde le ratio en dimension paire
+		// (exigée par yuv420p) ; `trunc(…/2)*2` rend paire une source étroite non agrandie.
+		const scale =
+			`scale='if(gte(iw,ih),-2,trunc(min(${side},iw)/2)*2)'` +
+			`:'if(gte(iw,ih),trunc(min(${side},ih)/2)*2,-2)'`;
+		try {
+			await run(
+				'ffmpeg',
+				[
+					'-v', 'error',
+					'-i', input,
+					'-map', '0:v:0',
+					'-map', '0:a:0?',
+					'-map_metadata', '-1',
+					'-vf', scale,
+					'-fpsmax', String(VIDEO_TARGET.maxFps),
+					'-c:v', 'libx264',
+					'-preset', 'veryfast',
+					'-profile:v', 'high',
+					'-pix_fmt', 'yuv420p',
+					'-crf', String(VIDEO_TARGET.crf),
+					'-maxrate', String(VIDEO_TARGET.maxVideoBitRate),
+					'-bufsize', String(VIDEO_TARGET.bufSize),
+					'-threads', TRANSCODE_THREADS,
+					'-c:a', 'aac',
+					'-b:a', String(VIDEO_TARGET.audioBitRate),
+					'-ac', '2',
+					'-movflags', '+faststart',
+					'-y', output
+				],
+				{ timeout: TRANSCODE_TIMEOUT_MS }
+			);
+		} catch (error) {
+			throw toolError(error, 'ffmpeg');
+		}
+	});
+	// La file continue même si ce ré-encodage échoue.
+	transcodeQueue = task.catch(() => undefined);
+	return task;
 };
 
 /** Extrait une image d'aperçu (JPEG, 720 px de large) prise vers la 1re seconde. */

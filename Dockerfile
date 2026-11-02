@@ -15,8 +15,9 @@ RUN yarn build
 FROM ${NODE_IMAGE}
 WORKDIR /usr/src/app
 
-# ffmpeg (fournit aussi ffprobe) : mesure la durée réelle des vidéos envoyées et en extrait
-# l'image d'aperçu. Contrôle côté serveur : la limite ne dépend pas de la bonne foi de l'app.
+# ffmpeg (fournit aussi ffprobe) : mesure la durée réelle des vidéos envoyées, en extrait
+# l'image d'aperçu et les ré-encode en H.264 720p pour la lecture mobile (libx264 inclus).
+# Contrôle côté serveur : la limite ne dépend pas de la bonne foi de l'app.
 RUN apk add --no-cache ffmpeg
 
 # Create non-root user and set up directories
