@@ -107,14 +107,23 @@ export const VIDEO_TARGET = {
 	shortSide: 720,
 	/** Plafond d'images par seconde (les 60 i/s doublent le débit sans gain visible ici). */
 	maxFps: 30,
-	/** Débit vidéo maximal (bit/s) et tampon du contrôle de débit. */
-	maxVideoBitRate: 2_500_000,
-	bufSize: 5_000_000,
+	/**
+	 * Débit vidéo maximal (bit/s) et tampon du contrôle de débit (2 × le débit).
+	 * 1,5 Mbit/s (02/11/2026, contre 2,5 auparavant) : à 2,5 Mbit/s, le débit vidéo frôlait le débit
+	 * mobile mesuré (~3,2 Mbit/s) et AVPlayer attendait presque tout le fichier avant de lire. Ordre
+	 * de grandeur des flux courts type TikTok en 720p ; le CRF fait le reste sur les plans simples.
+	 */
+	maxVideoBitRate: 1_500_000,
+	bufSize: 3_000_000,
 	/** Qualité visée (x264) : 23 = très bon, 28 = correct ; 26 est un bon compromis mobile. */
 	crf: 26,
 	audioBitRate: 128_000,
-	/** Débit global en dessous duquel un fichier déjà conforme n'est pas ré-encodé. */
-	acceptedTotalBitRate: 3_200_000
+	/**
+	 * Débit global (vidéo + audio) en dessous duquel un fichier déjà conforme n'est pas ré-encodé.
+	 * Marge au-dessus de 1,5 + 0,128 Mbit/s pour les pointes que le tampon autorise sur une vidéo
+	 * courte ; reste sous 2,6 Mbit/s pour que le rattrapage reprenne les vidéos de l'ancien profil.
+	 */
+	acceptedTotalBitRate: 2_000_000
 };
 
 /**

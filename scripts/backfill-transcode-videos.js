@@ -2,7 +2,7 @@
  * Rattrapage du ré-encodage « diffusion mobile » des vidéos de boutiques déjà en ligne.
  *
  * Contexte : depuis le 02/11/2026, toute vidéo envoyée est ré-encodée à l'upload en H.264 720p à
- * débit plafonné (~2,5 Mbit/s), en MP4 « faststart » (voir src/helpers/video.helper.ts →
+ * débit plafonné (~1,5 Mbit/s), en MP4 « faststart » (voir src/helpers/video.helper.ts →
  * transcodeForStreaming et src/modules/main/main.controller.ts). Les vidéos antérieures sont restées
  * dans leur qualité d'origine (1080p/4K, HEVC, 15 à 50 Mbit/s) : lourdes à télécharger, elles font
  * « ramer » la lecture sur réseau mobile.

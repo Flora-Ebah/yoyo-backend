@@ -46,7 +46,7 @@ describe('[Upload] Vidéos de présentation', () => {
 	describe('décision de ré-encodage (profil de diffusion 720p)', () => {
 		const conforme: VideoProbe = {
 			duration: 20,
-			bitRate: 2_600_000,
+			bitRate: 1_700_000,
 			video: { codec: 'h264', width: 720, height: 1280, pixFmt: 'yuv420p', fps: 30 },
 			audioCodec: 'aac'
 		};
@@ -72,6 +72,8 @@ describe('[Upload] Vidéos de présentation', () => {
 			expect(needsTranscode(avec({ pixFmt: 'yuv420p10le' }))).to.equal(true);
 			expect(needsTranscode(avec({ fps: 60 }))).to.equal(true);
 			expect(needsTranscode({ ...conforme, bitRate: 12_000_000 })).to.equal(true);
+			// Vidéo de l'ancien profil (2,5 Mbit/s + audio) : reprise par le rattrapage au profil 1,5 Mbit/s.
+			expect(needsTranscode({ ...conforme, bitRate: 2_600_000 })).to.equal(true);
 			expect(needsTranscode({ ...conforme, bitRate: 0 })).to.equal(true);
 			expect(needsTranscode({ ...conforme, audioCodec: 'pcm_s16le' })).to.equal(true);
 		});
