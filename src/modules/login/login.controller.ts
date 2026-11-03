@@ -118,7 +118,7 @@ export class LoginController {
 				}
 
 				// Vérifier si le compte est verrouillé (maintenant que nous avons l'ID du client)
-				const lockCheck = await this.service.checkAccountLock(client._id);
+				const lockCheck = await this.service.checkAccountLock(client._id, item.userAgent);
 				if (lockCheck.isLocked) {
 					return resolve({
 						status: defines.status.forbidden,

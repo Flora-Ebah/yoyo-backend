@@ -216,22 +216,38 @@ export class LoginService {
 
 	/**
 	 * Vérifie si le compte est verrouillé
+	 *
+	 * Les tentatives sont enregistrées par appareil (`user` + `userAgent`, voir `saveLoginAttempt`).
+	 * Le verrou, lui, vaut pour tout le compte : on cherche donc un document verrouillé et non expiré
+	 * parmi TOUS ceux du compte. Avant, `selectOne({ user })` lisait un document au hasard : un verrou
+	 * posé sur un autre appareil pouvait être manqué, ou lu à la place du bon document.
+	 *
 	 * @param clientId ID du client
+	 * @param userAgent Agent utilisateur : sert à renvoyer le document de CET appareil, celui que
+	 * `handleFailedLogin` met à jour
 	 * @returns Objet contenant le résultat de la vérification et le message d'erreur si verrouillé
 	 */
 	async checkAccountLock(
-		clientId: string
+		clientId: string,
+		userAgent?: string
 	): Promise<{ isLocked: boolean; message?: string; loginAttempts?: any }> {
+		let activeLock: any = null;
 		let loginAttempts: any = null;
 		try {
-			loginAttempts = await this.getLoginAttempts(clientId);
+			activeLock = await this.dao.selectOne({
+				user: clientId,
+				locked: true,
+				lockExpiration: { $gt: new Date() }
+			});
+			if (activeLock?.error) activeLock = null;
+			loginAttempts = await this.getLoginAttempts(clientId, userAgent);
 		} catch (err) {
 			console.error('Erreur lors de la récupération des tentatives de connexion:', err);
 			return { isLocked: false, loginAttempts: null };
 		}
 
-		if (loginAttempts?.locked && loginAttempts.lockExpiration && loginAttempts.lockExpiration > new Date()) {
-			const remainingTime = Math.ceil((loginAttempts.lockExpiration.getTime() - Date.now()) / 1000 / 60);
+		if (activeLock?.lockExpiration) {
+			const remainingTime = Math.ceil((new Date(activeLock.lockExpiration).getTime() - Date.now()) / 1000 / 60);
 			return {
 				isLocked: true,
 				message: `Compte temporairement verrouillé. Réessayez dans ${remainingTime} minutes.`,
@@ -245,17 +261,41 @@ export class LoginService {
 	/**
 	 * Récupère les tentatives de connexion pour un utilisateur
 	 * @param clientId ID du client
+	 * @param userAgent Agent utilisateur : même clé que `saveLoginAttempt` / `resetLoginAttempts`
 	 * @returns Tentatives de connexion ou null si aucune
 	 */
-	async getLoginAttempts(clientId: string): Promise<ILogin | null> {
-		const result: any = await this.dao.selectOne({ user: clientId });
-		
+	async getLoginAttempts(clientId: string, userAgent?: string): Promise<ILogin | null> {
+		const query: any = { user: clientId };
+		if (userAgent) {
+			query.userAgent = userAgent;
+		}
+		const result: any = await this.dao.selectOne(query);
+
 		if (result && result.error) {
 			console.error('Erreur lors de la récupération des tentatives de connexion:', result.error);
 			throw new Error(result);
 		}
-		
+
 		return result;
+	}
+
+	/**
+	 * Lève le verrou et remet à zéro les tentatives sur TOUS les appareils du compte.
+	 *
+	 * Appelé après une réinitialisation de mot de passe par OTP : l'OTP vient de prouver la
+	 * propriété du compte. Sans cela, le verrou (vérifié avant le mot de passe au login) bloquait
+	 * encore jusqu'à 30 minutes l'utilisateur qui venait justement de redéfinir son mot de passe.
+	 *
+	 * @param clientId ID du client
+	 */
+	async clearLoginLock(clientId: string): Promise<void> {
+		const result: any = await this.dao.updateMany(
+			{ user: clientId },
+			{ attempts: 0, locked: false, lockExpiration: null }
+		);
+		if (result && result.error) {
+			throw result;
+		}
 	}
 
 	/**
@@ -317,7 +357,12 @@ export class LoginService {
 			let locked = false;
 			let lockExpiration: Date | undefined = undefined;
 
-			if (loginAttempts) {
+			// Verrou précédent arrivé à expiration : le décompte repart de zéro. Sans cela `attempts`
+			// restait à 3 et une seule erreur après le délai reverrouillait le compte 30 minutes.
+			const previousLockExpired =
+				!!loginAttempts?.lockExpiration && new Date(loginAttempts.lockExpiration).getTime() <= Date.now();
+
+			if (loginAttempts && !previousLockExpired) {
 				// S'assurer que attempts est un nombre
 				attempts = (typeof loginAttempts.attempts === 'number' ? loginAttempts.attempts : 0) + 1;
 
@@ -386,7 +431,9 @@ export class LoginService {
 						attempts: loginData.attempts,
 						lastAttempt: new Date(),
 						locked: loginData.locked,
-						lockExpiration: loginData.lockExpiration,
+						// `null` explicite : `undefined` est ignoré par Mongoose et laisserait en base la date
+						// d'un verrou expiré, que `handleFailedLogin` prendrait pour un verrou à solder.
+						lockExpiration: loginData.lockExpiration ?? null,
 						success: loginData.success,
 						ip: loginData.ip ?? existingAttempt.ip
 					}
@@ -445,7 +492,7 @@ export class LoginService {
 					attempts: 0,
 					lastAttempt: new Date(),
 					locked: false,
-					lockExpiration: undefined,
+					lockExpiration: null,
 					success: true,
 					ip: ip ?? existingAttempt.ip
 				}

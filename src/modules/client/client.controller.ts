@@ -394,6 +394,15 @@ export class ClientController {
         // Mise à jour du mot de passe
         await this.service.updatePassword(id, item);
 
+        // L'OTP a prouvé la propriété du compte : on lève le verrou de connexion (3 échecs ⇒ 30 min).
+        // Sans cela, le nouveau mot de passe restait inutilisable jusqu'à la fin du verrou, celui-ci
+        // étant vérifié avant le mot de passe au login. Un échec ici ne doit pas annuler le changement.
+        try {
+          await this.serviceLogin.clearLoginLock(id);
+        } catch (lockError) {
+          console.error('Erreur lors de la levée du verrou de connexion:', lockError);
+        }
+
         // Réactivation (DCP/RGPD) : un compte supprimé qui réinitialise son code via OTP prouve la
         // propriété ⇒ on le restaure et on relance le délai de grâce.
         if (existingItem.status === 'removed') {
