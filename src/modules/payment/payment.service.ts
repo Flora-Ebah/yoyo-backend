@@ -664,7 +664,7 @@ export class PaymentService {
 
       const [subscription, partner] = await Promise.all([
         this.subscriptionService.getCurrentSubscriptionWithPlanDetails(from),
-        // Boutique en service uniquement : ni en attente de validation, ni suspendue (Excel CMS n°14).
+        // Boutique en service uniquement : ni masquée après un refus de validation, ni suspendue (Excel CMS n°14).
         partnerModel.findOne({ _id: effectiveTo, status: 'active' }, '_id name user maxDiscount minOrder categories').lean()
       ]);
 

@@ -59,7 +59,7 @@ export class GeoService {
     }
 
     // 4) Partenaires géolocalisés (option : sponsorisés uniquement).
-    // Seules les boutiques visibles dans l'appli (ni en attente de validation, ni suspendues).
+    // Seules les boutiques visibles dans l'appli (ni masquées après un refus de validation, ni suspendues).
     const params: any = {
       status: 'active',
       latitude: { $ne: null },

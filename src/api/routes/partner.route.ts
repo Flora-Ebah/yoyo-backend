@@ -228,8 +228,8 @@ const defaultRoute: any = (fastify: any, options, done) => {
         body.minOrder = 0;
       }
 
-      // Boutique créée par le marchand lui-même : en attente de validation par l'équipe YoYo
-      // (Excel CMS n°14). Un admin (commercial) la crée directement active.
+      // Boutique créée par le marchand lui-même : en ligne tout de suite, contrôlée ensuite par
+      // l'équipe YoYo (Excel CMS n°14). Un admin (commercial) la crée active, sans validation.
       const selfService = !user?.isAdmin;
       if (selfService) Object.assign(body, PartnerValidationService.pendingFields());
 
@@ -397,7 +397,7 @@ const defaultRoute: any = (fastify: any, options, done) => {
         }
       }
 
-      // Boutique refusée puis modifiée par le marchand : renvoyée en validation.
+      // Boutique refusée puis modifiée par le marchand : renvoyée en validation (toujours masquée).
       let Q = Controller.update(String(current._id), body).then(async (res: any) => {
         if (!isAdmin && res?.status === defines.status.requestOK) await partnerValidationService.resubmitIfRejected(String(current._id));
         return res;
@@ -531,7 +531,7 @@ const defaultRoute: any = (fastify: any, options, done) => {
       const _id: any = request.params.id;
       const user: any = request.user;
 
-      // Boutique en attente, refusée ou suspendue : visible seulement de son propriétaire, de ses
+      // Boutique masquée (refusée) ou suspendue : visible seulement de son propriétaire, de ses
       // gérants et du back-office (Excel CMS n°14).
       const guarded = Controller.getById(_id).then(async (res: any) => {
         const partner = res?.data;

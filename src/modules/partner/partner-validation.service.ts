@@ -9,21 +9,40 @@ type Result = { status: number; message: any; data: any };
 
 const serviceLabel = 'PartnerValidationService';
 
+/** Boutiques encore présentes (ni supprimées ni archivées). */
+const NOT_REMOVED = { $nin: ['removed', 'archived'] };
+
 /**
  * Validation des boutiques créées par les marchands eux-mêmes (Excel CMS n°14).
  *
- * Une boutique créée depuis l'appli Pro naît `pending` : invisible dans l'appli Client et sans
- * réduction possible tant que l'équipe YoYo ne l'a pas validée. Un refus garde la boutique
- * `pending` avec le motif ; une modification du marchand la renvoie en validation.
+ * Contrôle **a posteriori**, non bloquant pour le marchand : une boutique créée depuis l'appli Pro
+ * naît `active` (visible dans l'appli Client, réductions possibles) avec `validation.status: 'pending'`.
+ * Deux champs distincts : `status` dit si la boutique est en ligne, `validation.status` où en est le
+ * contrôle de l'équipe YoYo.
+ * - Validation : `approved`, la boutique reste (ou revient) en ligne.
+ * - Refus : `rejected` avec le motif, la boutique est masquée (`status: 'pending'`).
+ * - Modification après refus : renvoyée en validation mais **toujours masquée** jusqu'à la décision
+ *   suivante, pour qu'une retouche anodine ne suffise pas à contourner un refus.
+ * Le boost reste réservé aux boutiques validées (voir `isBoostEligible`).
  */
 export class PartnerValidationService {
 	private get partners(): any {
 		return new PartnerSet().defaultModel;
 	}
 
-	/** Champs à poser sur une boutique créée par le marchand. */
+	/** Champs à poser sur une boutique créée par le marchand : en ligne, contrôle à venir. */
 	static pendingFields(): any {
-		return { status: 'pending', validation: { status: 'pending', submittedAt: new Date() } };
+		return { status: 'active', validation: { status: 'pending', submittedAt: new Date() } };
+	}
+
+	/**
+	 * Une boutique peut être boostée si elle a été validée, ou si elle n'est jamais passée par la
+	 * validation (boutiques antérieures ou enrôlées par un commercial). Un boost payé puis suivi d'un
+	 * refus serait perdu pour le marchand.
+	 */
+	static isBoostEligible(partner: { validation?: { status?: string } } | null | undefined): boolean {
+		const s = partner?.validation?.status;
+		return s !== 'pending' && s !== 'rejected';
 	}
 
 	/** Alerte l'équipe Partenaires d'une boutique à valider (nouvelle ou renvoyée après refus). */
@@ -36,14 +55,15 @@ export class PartnerValidationService {
 		});
 	}
 
-	/** File des boutiques à valider (`pending`) ou refusées (`rejected`). */
+	/**
+	 * File des boutiques à valider (`pending`) ou refusées (`rejected`). Une boutique à valider peut
+	 * être en ligne (nouvelle) ou masquée (renvoyée après refus) : le CMS l'affiche d'après `status`.
+	 */
 	async list(payloads: { tab?: string; q?: string; page?: number; pageSize?: number }): Promise<Result> {
 		const page = Math.max(1, Number(payloads.page) || 1);
 		const pageSize = Math.min(100, Math.max(1, Number(payloads.pageSize) || 20));
 		const rejected = payloads.tab === 'rejected';
-		const params: any = rejected
-			? { status: 'pending', 'validation.status': 'rejected' }
-			: { status: 'pending', 'validation.status': { $ne: 'rejected' } };
+		const params: any = { status: NOT_REMOVED, 'validation.status': rejected ? 'rejected' : 'pending' };
 		const q = String(payloads.q ?? '').trim();
 		if (q) {
 			const rx = new RegExp(escapeRegex(q), 'i');
@@ -73,55 +93,78 @@ export class PartnerValidationService {
 	/** Compteurs du menu CMS. */
 	async counts(): Promise<{ pending: number; rejected: number }> {
 		const [pending, rejected] = await Promise.all([
-			this.partners.countDocuments({ status: 'pending', 'validation.status': { $ne: 'rejected' } }),
-			this.partners.countDocuments({ status: 'pending', 'validation.status': 'rejected' })
+			this.partners.countDocuments({ status: NOT_REMOVED, 'validation.status': 'pending' }),
+			this.partners.countDocuments({ status: NOT_REMOVED, 'validation.status': 'rejected' })
 		]);
 		return { pending, rejected };
 	}
 
-	/** Valide la boutique : elle devient visible et peut accorder des réductions. */
+	/**
+	 * Valide la boutique (à valider, ou refusée que l'équipe décide finalement d'accepter). Une boutique
+	 * masquée par un refus revient en ligne ; une boutique suspendue le reste.
+	 */
 	async validate(id: string, adminId: string): Promise<Result> {
 		if (!coddyger.string.isValidObjectId(id)) return { status: defines.status.badRequest, message: 'Identifiant invalide', data: null };
-		const partner = await this.partners
+		const decided = await this.partners
 			.findOneAndUpdate(
-				{ _id: id, status: 'pending' },
-				{ $set: { status: 'active', 'validation.status': 'approved', 'validation.by': adminId, 'validation.at': new Date() }, $unset: { 'validation.reason': '' } },
+				{ _id: id, status: NOT_REMOVED, 'validation.status': { $in: ['pending', 'rejected'] } },
+				{ $set: { 'validation.status': 'approved', 'validation.by': adminId, 'validation.at': new Date() }, $unset: { 'validation.reason': '' } },
 				{ new: true }
 			)
 			.lean();
-		if (!partner) return { status: defines.status.conflict, message: 'Cette boutique n’est plus en attente de validation.', data: null };
+		if (!decided) return { status: defines.status.conflict, message: 'Cette boutique n’est plus en attente de validation.', data: null };
 
-		await this.push(partner, 'Boutique validée 🎉', `Votre boutique « ${partner.name} » est en ligne sur YoYo.`, 'boutique_validated');
-		return { status: defines.status.requestOK, message: 'Boutique validée et mise en ligne.', data: partner };
+		// Seul le masquage dû au refus est levé : jamais une suspension.
+		const partner =
+			decided.status === 'pending'
+				? (await this.partners.findOneAndUpdate({ _id: id, status: 'pending' }, { $set: { status: 'active' } }, { new: true }).lean()) ?? decided
+				: decided;
+
+		await this.push(partner, 'Boutique validée 🎉', `Votre boutique « ${partner.name} » a été validée par l’équipe YoYo.`, 'boutique_validated');
+		return { status: defines.status.requestOK, message: 'Boutique validée.', data: partner };
 	}
 
-	/** Refuse la boutique avec un motif ; elle reste invisible jusqu'à une modification du marchand. */
+	/**
+	 * Refuse la boutique avec un motif : elle est retirée de l'appli Client jusqu'à une nouvelle
+	 * validation. Une boutique suspendue par l'admin le reste ; une boutique suspendue par le blocage
+	 * de son propriétaire est masquée, pour que le déblocage ne la remette pas en ligne.
+	 */
 	async reject(id: string, reason: string, adminId: string): Promise<Result> {
 		if (!coddyger.string.isValidObjectId(id)) return { status: defines.status.badRequest, message: 'Identifiant invalide', data: null };
 		const motive = String(reason ?? '').trim();
 		if (motive.length < 3) return { status: defines.status.badRequest, message: 'Indiquez le motif du refus.', data: null };
 
-		const partner = await this.partners
+		const decided = await this.partners
 			.findOneAndUpdate(
-				{ _id: id, status: 'pending', 'validation.status': { $ne: 'rejected' } },
+				{ _id: id, status: NOT_REMOVED, 'validation.status': 'pending' },
 				{ $set: { 'validation.status': 'rejected', 'validation.reason': motive, 'validation.by': adminId, 'validation.at': new Date() } },
 				{ new: true }
 			)
 			.lean();
-		if (!partner) return { status: defines.status.conflict, message: 'Cette boutique n’est plus en attente de validation.', data: null };
+		if (!decided) return { status: defines.status.conflict, message: 'Cette boutique n’est plus en attente de validation.', data: null };
+
+		const partner =
+			(await this.partners
+				.findOneAndUpdate(
+					{ _id: id, $or: [{ status: 'active' }, { status: 'suspended', suspendedByBlock: true }] },
+					{ $set: { status: 'pending', suspendedByBlock: false } },
+					{ new: true }
+				)
+				.lean()) ?? decided;
 
 		await this.push(partner, 'Boutique à compléter', `Votre boutique « ${partner.name} » n’a pas été validée : ${motive}`, 'boutique_rejected');
-		return { status: defines.status.requestOK, message: 'Boutique refusée, le marchand est prévenu.', data: partner };
+		return { status: defines.status.requestOK, message: 'Boutique refusée et retirée de l’appli, le marchand est prévenu.', data: partner };
 	}
 
 	/**
-	 * Une modification par le marchand d'une boutique refusée la renvoie en validation.
+	 * Une modification par le marchand d'une boutique refusée la renvoie en validation. Elle reste
+	 * masquée jusqu'à la décision de l'équipe.
 	 * @returns vrai si la boutique a été renvoyée
 	 */
 	async resubmitIfRejected(id: string): Promise<boolean> {
 		const partner = await this.partners
 			.findOneAndUpdate(
-				{ _id: id, status: 'pending', 'validation.status': 'rejected' },
+				{ _id: id, status: NOT_REMOVED, 'validation.status': 'rejected' },
 				{ $set: { 'validation.status': 'pending', 'validation.submittedAt': new Date() } },
 				{ new: true }
 			)

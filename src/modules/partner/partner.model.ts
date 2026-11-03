@@ -60,6 +60,8 @@ const schema = new mongoose.Schema<IPartner>({
     default: 'active'
   },
   // Validation par l'équipe YoYo d'une boutique créée par le marchand lui-même (Excel CMS n°14).
+  // Contrôle a posteriori : `pending` n'empêche pas la boutique d'être en ligne (`status: 'active'`) ;
+  // seul un refus (`rejected`) la masque (`status: 'pending'`). Voir `PartnerValidationService`.
   // Absent sur les boutiques antérieures ou enrôlées par un commercial (créées directement actives).
   validation: {
     status: { type: String, enum: ['pending', 'approved', 'rejected'] },

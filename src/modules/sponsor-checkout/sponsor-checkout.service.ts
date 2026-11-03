@@ -1,7 +1,10 @@
 import coddyger from 'coddyger';
 import { PartnerSet } from '../partner/partner.model';
+import { PartnerValidationService } from '../partner/partner-validation.service';
 import { SponsorPlanService } from '../sponsor-plan/sponsor-plan.service';
 import { DEFAULT_PAYMENT_PROVIDER, PaymentProvider, TransactionService } from '../transaction/transaction.service';
+
+const BOOST_AWAITING_VALIDATION = 'Le boost sera disponible dès que l’équipe YoYo aura validé votre boutique.';
 
 /**
  * [MISE EN AVANT] Parcours marchand self-service : un marchand souscrit lui-même à une formule
@@ -57,6 +60,11 @@ export class SponsorCheckoutService {
       // On masque l'existence de la boutique d'autrui (anti-IDOR).
       // TODO DIAGNOSTIC TEMPORAIRE - à retirer (stage reflète la vraie cause : propriété)
       return { ok: false, status: 404, message: 'Boutique introuvable.', data: { stage: 'boutique_forbidden' } };
+    }
+
+    // Boutique non encore validée par l'équipe YoYo : un boost payé puis suivi d'un refus serait perdu.
+    if (!PartnerValidationService.isBoostEligible(boutique)) {
+      return { ok: false, status: 403, message: BOOST_AWAITING_VALIDATION, data: { stage: 'boutique_not_validated' } };
     }
 
     // Formule : doit exister et être active. Le prix provient d'ICI, jamais du client.
@@ -152,6 +160,14 @@ export class SponsorCheckoutService {
       const ownerId = boutique.user?._id ?? boutique.user;
       if (!ownerId || String(ownerId) !== String(merchantId)) {
         return { ok: false, status: 404, message: 'Boutique introuvable.', data: { stage: 'boutique_forbidden' } };
+      }
+      if (!PartnerValidationService.isBoostEligible(boutique)) {
+        return {
+          ok: false,
+          status: 403,
+          message: `Le boost de « ${boutique.name ?? 'votre boutique'} » sera disponible dès que l’équipe YoYo l’aura validée.`,
+          data: { stage: 'boutique_not_validated', boutiqueId: String(id) }
+        };
       }
     }
 

@@ -160,10 +160,22 @@ describe('CMS lot 4 : signalements, validation, fraude, données personnelles', 
 	});
 
 	describe('Validation des boutiques (n°14)', () => {
-		it('valide une boutique en attente puis refuse une seconde décision', async () => {
+		beforeEach(async () => {
+			await model(PartnerSet).deleteMany({});
+		});
+
+		it('une boutique créée par le marchand est en ligne dès sa création, validation à venir', async () => {
 			const service = new PartnerValidationService();
 			const shop: any = await newPartner(PartnerValidationService.pendingFields());
+			expect(shop.status).to.equal('active');
+			expect(shop.validation.status).to.equal('pending');
 			expect((await service.counts()).pending).to.equal(1);
+			expect((await service.list({})).data).to.have.length(1);
+		});
+
+		it('valide une boutique en ligne sans la toucher, puis refuse une seconde décision', async () => {
+			const service = new PartnerValidationService();
+			const shop: any = await newPartner(PartnerValidationService.pendingFields());
 
 			const ok = await service.validate(String(shop._id), adminId);
 			expect(ok.status).to.equal(200);
@@ -171,9 +183,10 @@ describe('CMS lot 4 : signalements, validation, fraude, données personnelles', 
 			expect(updated.status).to.equal('active');
 			expect(updated.validation.status).to.equal('approved');
 			expect((await service.validate(String(shop._id), adminId)).status).to.equal(409);
+			expect((await service.counts()).pending).to.equal(0);
 		});
 
-		it('un refus garde la boutique invisible ; une modification la renvoie en validation', async () => {
+		it('un refus masque la boutique ; une modification la renvoie en validation sans la remettre en ligne', async () => {
 			const service = new PartnerValidationService();
 			const shop: any = await newPartner(PartnerValidationService.pendingFields());
 			expect((await service.reject(String(shop._id), 'x', adminId)).status).to.equal(400);
@@ -188,8 +201,35 @@ describe('CMS lot 4 : signalements, validation, fraude, données personnelles', 
 			expect(await service.resubmitIfRejected(String(shop._id))).to.equal(true);
 			doc = await model(PartnerSet).findById(shop._id).lean();
 			expect(doc.validation.status).to.equal('pending');
+			expect(doc.status).to.equal('pending');
 			expect(notify.calledWith('pros')).to.equal(true);
 			expect(await service.resubmitIfRejected(String(shop._id))).to.equal(false);
+
+			// La validation qui suit la remet en ligne.
+			expect((await service.validate(String(shop._id), adminId)).status).to.equal(200);
+			doc = await model(PartnerSet).findById(shop._id).lean();
+			expect(doc.status).to.equal('active');
+			expect(doc.validation.status).to.equal('approved');
+		});
+
+		it("ne lève jamais une suspension : ni à la validation, ni au déblocage d'un compte après refus", async () => {
+			const service = new PartnerValidationService();
+			const suspended: any = await newPartner({ ...PartnerValidationService.pendingFields(), status: 'suspended' });
+			await service.validate(String(suspended._id), adminId);
+			expect((await model(PartnerSet).findById(suspended._id).lean()).status).to.equal('suspended');
+
+			const blocked: any = await newPartner({ ...PartnerValidationService.pendingFields(), status: 'suspended', suspendedByBlock: true });
+			await service.reject(String(blocked._id), 'Adresse fausse', adminId);
+			const doc: any = await model(PartnerSet).findById(blocked._id).lean();
+			expect(doc.status).to.equal('pending');
+			expect(doc.suspendedByBlock).to.equal(false);
+		});
+
+		it('réserve le boost aux boutiques validées ou hors validation', () => {
+			expect(PartnerValidationService.isBoostEligible({ validation: { status: 'pending' } })).to.equal(false);
+			expect(PartnerValidationService.isBoostEligible({ validation: { status: 'rejected' } })).to.equal(false);
+			expect(PartnerValidationService.isBoostEligible({ validation: { status: 'approved' } })).to.equal(true);
+			expect(PartnerValidationService.isBoostEligible({})).to.equal(true);
 		});
 	});
 
