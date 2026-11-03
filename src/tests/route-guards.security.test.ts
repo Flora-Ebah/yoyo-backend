@@ -331,6 +331,17 @@ describe('[Sécurité] Gardes des routes', () => {
 			expect(route.config.rateLimit.max).to.be.at.most(20);
 		});
 
+		// Chacune de ces routes envoie un e-mail sans exiger de compte : sans plafond, elles servent à
+		// inonder une boîte de codes.
+		for (const url of ['/otp/password-reset/request', '/otp/activation/request', '/otp/account-verification/resend']) {
+			it(`l'envoi d'un code (${url}) est plafonné en débit`, () => {
+				const route: any = find(routes, 'POST', url);
+				expect(route, `route POST ${url} introuvable`).to.not.be.undefined;
+				expect(route.config?.rateLimit?.max).to.be.a('number');
+				expect(route.config.rateLimit.max).to.be.at.most(10);
+			});
+		}
+
 		it("la réponse documentée n'expose plus l'identifiant du compte", () => {
 			const response: any = find(routes, 'POST', '/otp/verify')!.schema.response;
 			const data = response[200].properties.data;

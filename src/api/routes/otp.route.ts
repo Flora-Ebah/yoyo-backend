@@ -226,6 +226,15 @@ const defaultRoute: any = (fastify: any, options, done) => {
 		url: `${routePath}/password-reset/request`,
 		// [App Check] Entrée du parcours « mot de passe oublié », donc atteignable sans compte.
 		preHandler: AppCheckMiddleware.verify,
+		// Chaque appel envoie un e-mail : sans plafond, la route servait à inonder une boîte de codes
+		// (et à faire payer l'envoi). Même seuil que `account-verification/resend`. Sans jeton, le
+		// rate limit compte par IP (voir `router.ts`).
+		config: {
+			rateLimit: {
+				max: 5,
+				timeWindow: '1 minute'
+			}
+		},
 		handler: (request, reply) => {
 			const { login } = request.body;
 			let Q = Controller.generate(login, 'PASSWORD_RESET');
@@ -251,6 +260,13 @@ const defaultRoute: any = (fastify: any, options, done) => {
 		method: 'POST',
 		url: `${routePath}/activation/request`,
 		preHandler: AppCheckMiddleware.verify,
+		// Même risque que `password-reset/request` : un e-mail par appel, atteignable sans compte.
+		config: {
+			rateLimit: {
+				max: 5,
+				timeWindow: '1 minute'
+			}
+		},
 		handler: (request, reply) => {
 			const { login } = request.body;
 			let Q = Controller.generate(login, 'MERCHANT_ACTIVATION_OTP');
