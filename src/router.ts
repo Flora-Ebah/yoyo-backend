@@ -263,6 +263,10 @@ export default class Router {
 			const teamId = (process.env.IOS_TEAM_ID ?? '').trim();
 			const bundleId = (process.env.IOS_BUNDLE_ID ?? '').trim();
 			const clientBundleId = (process.env.IOS_CLIENT_BUNDLE_ID ?? 'com.yoyo.yoyoafrica').trim();
+			// L'app Client est publiée sous un AUTRE compte Apple que l'app Pro : son Team ID diffère.
+			// (Valeur par défaut = équipe du projet iOS Client `ios/YoYo.xcodeproj`.) Sans cet identifiant
+			// correct, iOS ignore silencieusement les universal links `/r/*` et `/q/*` de l'app Client.
+			const clientTeamId = (process.env.IOS_CLIENT_TEAM_ID ?? 'ZYHFG5KVBQ').trim() || teamId;
 
 			return reply
 				.status(defines.status.requestOK)
@@ -278,7 +282,7 @@ export default class Router {
 								components: [{ '/': '/activation*', comment: 'Activation marchand' }]
 							},
 							{
-								appIDs: [`${teamId}.${clientBundleId}`],
+								appIDs: [`${clientTeamId}.${clientBundleId}`],
 								// Appli Client : liens de parrainage ET stickers QR des boutiques.
 								components: [
 									{ '/': '/r/*', comment: 'Lien de parrainage' },
