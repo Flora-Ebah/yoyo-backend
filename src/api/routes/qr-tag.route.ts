@@ -120,6 +120,29 @@ const defaultRoute: any = (fastify: any, options: any, done: any) => {
 		handler: (request: any, reply: any) => coddyger.api(reply, Controller.setActive(request.params.id, true))
 	});
 
+	// Self-service : le propriétaire d'une boutique rattache un sticker vierge à SA boutique (app).
+	fastify.route({
+		schema: {
+			tags,
+			summary: 'Rattacher un sticker vierge à sa propre boutique',
+			body: {
+				type: 'object',
+				properties: {
+					code: { type: 'string', maxLength: 60 },
+					id: { type: 'string', pattern: OBJECT_ID },
+					boutiqueId: { type: 'string', pattern: OBJECT_ID }
+				},
+				required: ['boutiqueId'],
+				additionalProperties: false
+			}
+		},
+		method: 'POST',
+		url: `${routePath}/claim`,
+		preHandler: TokenMiddleware.verify,
+		handler: (request: any, reply: any) =>
+			coddyger.api(reply, Controller.claim(request.body, String(request.user?._id)))
+	});
+
 	// ---- Application cliente ---------------------------------------------------------------------
 
 	// Résolution d'un code scanné → boutique cible (puis flux de scan/redeem habituel).

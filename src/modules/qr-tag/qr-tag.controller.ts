@@ -39,6 +39,15 @@ export class QrTagController {
 		}).catch((e: IErrorObject) => coddyger.catchReturn(e, controllerLabel, 'assign'));
 	}
 
+	claim(payload: { code?: string; id?: string; boutiqueId: string }, userId: string) {
+		return new Promise(async (resolve) => {
+			const key = payload.id || payload.code || '';
+			const res: any = await qrTagService.claim(key, payload.boutiqueId, userId);
+			if (!res.ok) return resolve(bad(res.message, res.status));
+			resolve(ok('Sticker affecté à votre boutique.', res.tag));
+		}).catch((e: IErrorObject) => coddyger.catchReturn(e, controllerLabel, 'claim'));
+	}
+
 	unassign(id: string) {
 		return new Promise(async (resolve) => {
 			const res: any = await qrTagService.unassign(id);

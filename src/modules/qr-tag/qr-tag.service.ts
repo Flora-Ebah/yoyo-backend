@@ -160,6 +160,37 @@ export class QrTagService {
 		return { ok: true, tag: { ...updated, qrValue: this.qrValue(updated.code) } };
 	}
 
+	/**
+	 * Self-service : le propriétaire d'une boutique rattache un sticker **vierge** à SA boutique
+	 * (ex. marchand qui s'inscrit depuis l'app et scanne un sticker à la création). Contrôles stricts :
+	 * le sticker doit être vierge (on ne vole pas celui d'une autre boutique) et la boutique doit
+	 * appartenir à l'utilisateur.
+	 */
+	async claim(
+		idOrCode: string,
+		boutiqueId: string,
+		userId: string
+	): Promise<{ ok: true; tag: any } | { ok: false; status: number; message: string }> {
+		const tag = await this.findTag(idOrCode);
+		if (!tag) return { ok: false, status: 404, message: 'Ce code QR est introuvable.' };
+		if (tag.status !== 'vierge') return { ok: false, status: 409, message: 'Ce sticker est déjà utilisé ou désactivé.' };
+		if (!coddyger.string.isValidObjectId(boutiqueId)) return { ok: false, status: 400, message: 'Boutique invalide.' };
+
+		const boutique: any = await this.partners.selectOne(
+			{ _id: boutiqueId, status: { $nin: ['removed', 'archived'] } },
+			'name ville status user'
+		);
+		if (!boutique || boutique.error) return { ok: false, status: 404, message: "Cette boutique n'existe pas." };
+		if (String(boutique.user) !== String(userId)) return { ok: false, status: 403, message: 'Cette boutique ne vous appartient pas.' };
+
+		await QrTagModel.updateOne(
+			{ _id: tag._id, status: 'vierge' },
+			{ $set: { boutique: boutiqueId, status: 'affecte', assignedBy: null, assignedAt: new Date(), deactivatedAt: null } }
+		);
+		const updated: any = await QrTagModel.findById(tag._id).populate({ path: 'boutique', select: 'name ville status' }).lean();
+		return { ok: true, tag: { ...updated, qrValue: this.qrValue(updated.code) } };
+	}
+
 	/** Détache un sticker de sa boutique (redevient vierge, réutilisable). */
 	async unassign(id: string): Promise<{ ok: boolean; status?: number; message?: string }> {
 		if (!coddyger.string.isValidObjectId(id)) return { ok: false, status: 400, message: 'Identifiant invalide.' };
