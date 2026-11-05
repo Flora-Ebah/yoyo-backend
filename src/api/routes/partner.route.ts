@@ -6,6 +6,7 @@ import { PartnerMediaHelper } from '../../helpers/partner-media.helper';
 import { PartnerAccessHelper } from '../../helpers/partner-access.helper';
 import { PartnerSet } from '../../modules/partner';
 import { ClientSet } from '../../modules/client/client.model';
+import { qrTagService } from '../../modules/qr-tag';
 import { PartnerValidationService, partnerValidationService } from '../../modules/partner/partner-validation.service';
 import { isPublicKey } from '../../services/storage/storage.service';
 
@@ -774,7 +775,10 @@ const defaultRoute: any = (fastify: any, options, done) => {
           videoPoster: { type: 'string', maxLength: 255 },
           maxDiscount: { type: 'number', minimum: 0, maximum: 100 },
           minOrder: { type: 'number', minimum: 0 },
-          maxOrder: { type: 'number', minimum: 0 }
+          maxOrder: { type: 'number', minimum: 0 },
+          // Sticker QR collé sur place, à affecter à la nouvelle boutique (un marchand peut avoir
+          // plusieurs boutiques, chacune avec son propre sticker).
+          qrTagCode: { type: 'string', maxLength: 60 }
         },
         required: ['name'],
         additionalProperties: true
@@ -794,7 +798,25 @@ const defaultRoute: any = (fastify: any, options, done) => {
       body.user = request.params.userId;
       body.createdBy = admin._id;
 
-      const Q = Controller.create(body);
+      // On retire le code sticker du corps avant la création de la boutique (champ non-boutique).
+      const qrTagCode = String(body.qrTagCode ?? '').trim();
+      delete body.qrTagCode;
+
+      const Q = (async () => {
+        const res: any = await Controller.create(body);
+        // Création OK + sticker demandé → on l'affecte à la boutique créée (best-effort : un échec
+        // d'affectation ne doit pas annuler la boutique, on le signale seulement).
+        const boutiqueId = res?.data?._id ?? res?.data?.id;
+        if (qrTagCode && boutiqueId && [defines.status.created, defines.status.requestOK].includes(res?.status)) {
+          try {
+            const qr: any = await qrTagService.assign(qrTagCode, String(boutiqueId), String(admin._id));
+            res.data = { ...(res.data ?? {}), qrAssigned: qr.ok === true, qrMessage: qr.ok ? undefined : qr.message };
+          } catch {
+            res.data = { ...(res.data ?? {}), qrAssigned: false, qrMessage: "Le sticker n'a pas pu être affecté." };
+          }
+        }
+        return res;
+      })();
       return coddyger.api(reply, Q);
     }
   });
