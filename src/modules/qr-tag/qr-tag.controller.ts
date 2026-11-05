@@ -64,6 +64,21 @@ export class QrTagController {
 		}).catch((e: IErrorObject) => coddyger.catchReturn(e, controllerLabel, 'setActive'));
 	}
 
+	/**
+	 * Résolution PUBLIQUE (page d'atterrissage web, scan par l'appareil photo natif). Ne renvoie que
+	 * des informations non sensibles (sticker affecté ou non + nom/ville de la boutique) et répond
+	 * toujours 200, pour que la page « Ouvrez l'app YoYo » s'affiche quel que soit l'état du sticker.
+	 */
+	publicResolve(code: string) {
+		return new Promise(async (resolve) => {
+			const res = await qrTagService.resolve(code);
+			if (res.status === 'affecte') {
+				return resolve(ok('OK', { assigned: true, boutique: { name: res.boutique?.name ?? null, ville: res.boutique?.ville ?? null } }));
+			}
+			return resolve(ok('OK', { assigned: false }));
+		}).catch((e: IErrorObject) => coddyger.catchReturn(e, controllerLabel, 'publicResolve'));
+	}
+
 	resolve(code: string) {
 		return new Promise(async (resolve) => {
 			const res = await qrTagService.resolve(code);

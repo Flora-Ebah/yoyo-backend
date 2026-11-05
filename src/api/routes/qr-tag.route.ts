@@ -143,6 +143,22 @@ const defaultRoute: any = (fastify: any, options: any, done: any) => {
 			coddyger.api(reply, Controller.claim(request.body, String(request.user?._id)))
 	});
 
+	// ---- Public (page d'atterrissage web, scan appareil photo natif) -----------------------------
+
+	// Résolution publique minimale : alimente la page « Ouvrez l'app YoYo ». Aucune donnée sensible.
+	fastify.route({
+		schema: {
+			tags,
+			summary: "Infos publiques d'un sticker (page d'atterrissage)",
+			params: { type: 'object', properties: { code: { type: 'string', maxLength: 60 } }, required: ['code'] }
+		},
+		method: 'GET',
+		url: `${routePath}/public/:code`,
+		// Public : pas de jeton (un navigateur ne peut pas s'authentifier). Ne renvoie qu'un nom de boutique.
+		config: { rateLimit: { max: 60, timeWindow: '1 minute' } },
+		handler: (request: any, reply: any) => coddyger.api(reply, Controller.publicResolve(request.params.code))
+	});
+
 	// ---- Application cliente ---------------------------------------------------------------------
 
 	// Résolution d'un code scanné → boutique cible (puis flux de scan/redeem habituel).
