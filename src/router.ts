@@ -15,6 +15,8 @@ import { sendStoredFile } from './helpers/file-upload.helper';
 import { getSocketIO } from './main';
 import { AuditService } from './modules/audit';
 import { REFERRAL_CODE_PATTERN, renderReferralLanding } from './helpers/referral-landing.view';
+import { STICKER_CODE_PATTERN, renderStickerLanding } from './helpers/qr-sticker-landing.view';
+import { QrTagService } from './modules/qr-tag';
 
 const packageJsonPath = path.join(__dirname, '.', '..', 'package.json');
 const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
@@ -277,8 +279,11 @@ export default class Router {
 							},
 							{
 								appIDs: [`${teamId}.${clientBundleId}`],
-								// Appli Client : uniquement les liens de parrainage.
-								components: [{ '/': '/r/*', comment: 'Lien de parrainage' }]
+								// Appli Client : liens de parrainage ET stickers QR des boutiques.
+								components: [
+									{ '/': '/r/*', comment: 'Lien de parrainage' },
+									{ '/': '/q/*', comment: 'Sticker QR boutique' }
+								]
 							}
 						]
 					}
@@ -377,6 +382,38 @@ export default class Router {
 			const html = renderReferralLanding({
 				code,
 				androidHref,
+				iosUrl: (process.env.CLIENT_IOS_STORE_URL ?? '').trim(),
+				logoUrl: `${assetsBase}/favicon.png`
+			});
+			return reply.status(defines.status.requestOK).type('text/html; charset=utf-8').send(html);
+		});
+
+		// Sticker QR `/q/CODE` : App Link / Universal Link de l'appli Client. App installée → le système
+		// ouvre l'app (écran de réduction) avant cette page. Sinon (ou scan appareil photo natif) → page
+		// d'invitation vers le store. On NE débloque JAMAIS de réduction ici : uniquement une invitation.
+		this.router.get('/q/:code', async (request, reply) => {
+			const raw = String((request.params as any)?.code ?? '').trim().toUpperCase();
+			const code = STICKER_CODE_PATTERN.test(raw) ? raw : null;
+
+			let boutique: string | null = null;
+			if (code) {
+				try {
+					const res = await new QrTagService().resolve(code);
+					if (res.status === 'affecte') boutique = (res as any).boutique?.name ?? null;
+				} catch {
+					// Base indisponible / code inconnu : on affiche la page générique d'invitation.
+				}
+			}
+
+			const androidUrl = (process.env.CLIENT_ANDROID_STORE_URL ?? '').trim()
+				|| `https://play.google.com/store/apps/details?id=${process.env.CLIENT_ANDROID_PACKAGE_NAME ?? 'com.yoyousers.yoyoafrica'}`;
+			const assetsBase = (
+				process.env.MAIL_ASSETS_URL ??
+				`${(process.env.SERVER_HOST ?? '').replace(/\/+$/, '')}/${process.env.API_VERSION ?? 'v1'}${process.env.SERVER_PATH ?? ''}/assets`
+			).replace(/\/+$/, '');
+			const html = renderStickerLanding({
+				boutique,
+				androidHref: androidUrl,
 				iosUrl: (process.env.CLIENT_IOS_STORE_URL ?? '').trim(),
 				logoUrl: `${assetsBase}/favicon.png`
 			});
