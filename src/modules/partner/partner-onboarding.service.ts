@@ -11,6 +11,7 @@ import { ClientService } from '../client/client.service';
 import { EnrolmentService } from '../enrolment/enrolment.service';
 import { SettingsService } from '../settings';
 import { PartnerService } from './partner.service';
+import { qrTagService } from '../qr-tag';
 
 const serviceLabel = 'PartnerOnboardingService';
 
@@ -19,7 +20,7 @@ export interface IOnboardPayload {
   merchant: {
     firstname: string;
     lastname: string;
-    email: string;
+    email?: string;
     contact: string;
     ville?: string;
   };
@@ -40,6 +41,12 @@ export interface IOnboardPayload {
     }>;
   };
   channels?: { email?: boolean; sms?: boolean };
+  /** Activation immédiate sur le terrain : compte `active`, sans lien à distance. */
+  activateOnSite?: boolean;
+  /** Mot de passe défini sur place. Absent en mode sur place → un code provisoire est généré. */
+  merchantPassword?: string;
+  /** Code du sticker QR collé sur place, à affecter à la boutique créée (optionnel). */
+  qrTagCode?: string;
 }
 
 /** Commercial authentifié, tel que déduit du jeton. */
@@ -199,18 +206,30 @@ export class PartnerOnboardingService {
       const merchant = payload.merchant ?? ({} as any);
       const shop = payload.shop ?? ({} as any);
       const channels = payload.channels ?? { email: true, sms: true };
+      const activateOnSite = payload.activateOnSite === true;
 
       // --- 1. Normalisation --------------------------------------------------------------
-      const email = this.clientService.formatEmail(merchant.email ?? '');
+      const rawEmail = (merchant.email ?? '').trim();
+      const email = rawEmail ? this.clientService.formatEmail(rawEmail) : '';
       const contact = this.clientService.formatIvorianPhoneNumber(merchant.contact ?? '');
       const firstname = this.clientService.formatName(merchant.firstname ?? '');
       const lastname = this.clientService.formatName(merchant.lastname ?? '');
       const shopName = (shop.name ?? '').trim();
 
       // --- 2. Validation -----------------------------------------------------------------
-      const emailValidation = this.clientService.validateEmail(email);
-      if (!emailValidation.isValid) {
-        return { ok: false, status: defines.status.badRequest, message: emailValidation.message! };
+      // L'e-mail est facultatif pour une activation sur place (le marchand n'en a pas toujours).
+      // S'il est fourni, il doit être valide ; sinon, il est indispensable pour l'activation à distance.
+      if (email) {
+        const emailValidation = this.clientService.validateEmail(email);
+        if (!emailValidation.isValid) {
+          return { ok: false, status: defines.status.badRequest, message: emailValidation.message! };
+        }
+      } else if (!activateOnSite) {
+        return {
+          ok: false,
+          status: defines.status.badRequest,
+          message: "Un e-mail est requis pour l'activation à distance. Sinon, activez le compte sur place."
+        };
       }
 
       const phoneValidation = this.clientService.validateIvorianPhoneNumber(contact);
@@ -245,20 +264,28 @@ export class PartnerOnboardingService {
       // --- 4. Compte marchand ------------------------------------------------------------
       merchantId = coddyger.string.generateObjectId();
 
-      // Mot de passe aléatoire : le schéma l'exige, mais il n'est ni journalisé, ni transmis, ni
-      // utilisable — le compte reste `pending` jusqu'à ce que le marchand définisse le sien.
-      const throwawayPassword = crypto.randomBytes(32).toString('hex');
+      // Mode d'activation :
+      //  - à distance : mot de passe aléatoire inutilisable, compte `pending` jusqu'au lien ;
+      //  - sur place : mot de passe choisi avec le marchand (`merchantPassword`) ou code provisoire
+      //    généré et renvoyé au commercial, compte directement `active`.
+      const providedPassword = (payload.merchantPassword ?? '').trim();
+      const generatedTempPassword = activateOnSite && !providedPassword ? crypto.randomBytes(4).toString('hex') : null;
+      const passwordToStore = activateOnSite
+        ? providedPassword || generatedTempPassword!
+        : crypto.randomBytes(32).toString('hex');
 
       const savedClient: any = await this.clientService.create({
         _id: merchantId,
-        email,
+        // E-mail stocké seulement s'il est fourni (marchand sans e-mail = activation sur place).
+        ...(email ? { email } : {}),
         firstname,
         lastname,
         contact,
-        password: await coddyger.string.encryptPassword(throwawayPassword),
+        password: await coddyger.string.encryptPassword(passwordToStore),
         isPartner: true,
-        mustChangePassword: true,
-        status: 'pending',
+        // Doit changer son mot de passe sauf s'il l'a choisi lui-même sur place.
+        mustChangePassword: !activateOnSite || !!generatedTempPassword,
+        status: activateOnSite ? 'active' : 'pending',
         isEmailConfirmed: false,
         isPhoneConfirmed: false,
         createdBy: commercial._id
@@ -282,7 +309,7 @@ export class PartnerOnboardingService {
         ville: shop.ville ?? merchant.ville,
         address: shop.address,
         phone: shop.phone,
-        email,
+        ...(email ? { email } : {}),
         // Le contrat expose un `categoryId` unique ; le modèle stocke un tableau. Ranger la valeur
         // ici évite un changement de schéma et laisse la porte ouverte au multi-catégories.
         categories: [shop.categoryId],
@@ -317,13 +344,15 @@ export class PartnerOnboardingService {
         partner: savedPartner._id,
         commercial: commercial._id,
         merchantName: `${firstname} ${lastname}`.trim(),
-        merchantEmail: email,
+        merchantEmail: email || '',
         merchantPhone: contact,
         shopName,
         ville: shop.ville ?? merchant.ville,
         category: category.name,
         commercialName,
-        enrolmentStatus: 'pending'
+        // Sur place : l'enrôlement est directement « activé » (base de commission), sans lien à distance.
+        enrolmentStatus: activateOnSite ? 'activated' : 'pending',
+        ...(activateOnSite ? { activatedAt: new Date() } : {})
       });
 
       if (!enrolment || enrolment.error) {
@@ -344,18 +373,31 @@ export class PartnerOnboardingService {
       }
 
       // --- 7 & 8. Jeton + envoi ----------------------------------------------------------
-      const sent = await this.issueAndSendActivation(
-        enrolment,
-        { email, contact, name: `${firstname} ${lastname}`.trim() },
-        channels
-      );
+      // Sur place : aucun lien à distance (le compte est déjà actif). À distance : on envoie le lien.
+      const sent = activateOnSite
+        ? []
+        : await this.issueAndSendActivation(enrolment, { email, contact, name: `${firstname} ${lastname}`.trim() }, channels);
+
+      // --- 8bis. Sticker QR collé sur place (best-effort : n'échoue pas l'enrôlement) -----
+      let qrAssigned: boolean | undefined;
+      let qrMessage: string | undefined;
+      const qrTagCode = (payload.qrTagCode ?? '').trim();
+      if (qrTagCode) {
+        const qr: any = await qrTagService.assign(qrTagCode, String(savedPartner._id), commercial._id);
+        qrAssigned = qr.ok === true;
+        if (!qr.ok) qrMessage = qr.message;
+      }
 
       // --- 9. Notification du commercial -------------------------------------------------
       await NotificationHelper.notifyAdminInApp({
         to: commercial._id,
         title: 'Partenaire créé',
         message: `Le compte de ${firstname} ${lastname} et sa boutique « ${shopName} » ont été créés.${
-          sent.length > 0 ? " Lien d'activation envoyé." : " Le lien d'activation n'a pas pu être envoyé."
+          activateOnSite
+            ? ' Compte activé sur place.'
+            : sent.length > 0
+              ? " Lien d'activation envoyé."
+              : " Le lien d'activation n'a pas pu être envoyé."
         }`,
         category: NotificationCategory.INFO,
         metadata: {
@@ -381,19 +423,30 @@ export class PartnerOnboardingService {
       });
 
       // --- 10. Réponse -------------------------------------------------------------------
+      const message = activateOnSite
+        ? generatedTempPassword
+          ? 'Marchand enrôlé et activé. Communiquez-lui le mot de passe provisoire : il devra le changer à la première connexion.'
+          : 'Marchand enrôlé et activé. Le compte est utilisable immédiatement.'
+        : sent.length > 0
+          ? "Marchand enrôlé. Le lien d'activation lui a été envoyé."
+          : "Marchand enrôlé, mais le lien d'activation n'a pas pu être envoyé. Utilisez « Renvoyer le lien ».";
+
       return {
         ok: true,
         status: defines.status.created,
-        message:
-          sent.length > 0
-            ? "Marchand enrôlé. Le lien d'activation lui a été envoyé."
-            : "Marchand enrôlé, mais le lien d'activation n'a pas pu être envoyé. Utilisez « Renvoyer le lien ».",
+        message,
         data: {
           merchantId: String(merchantId),
           partnerId: String(savedPartner._id),
           enrolmentId: String(enrolment._id),
+          activatedOnSite: activateOnSite,
+          // Identifiant de connexion du marchand (téléphone, et e-mail s'il en a un).
+          login: { contact, email: email || null },
+          // Mot de passe provisoire renvoyé une seule fois, uniquement s'il a été généré.
+          temporaryPassword: generatedTempPassword ?? undefined,
           activationSent: sent.length > 0,
-          channels: sent
+          channels: sent,
+          ...(qrTagCode ? { qrAssigned, qrMessage } : {})
         }
       };
     } catch (error) {

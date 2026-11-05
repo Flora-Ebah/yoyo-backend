@@ -919,7 +919,7 @@ const defaultRoute: any = (fastify: any, options, done) => {
       tags,
       summary: 'Enrôler un marchand à distance (compte + boutique)',
       description:
-        "Réservé aux comptes disposant de la permission `pros:create` (rôle Commercial). Crée le compte marchand sans OTP, sa boutique, puis envoie un lien d'activation par e-mail et SMS. L'attribution (`createdBy`) est déduite du jeton.",
+        "Réservé aux comptes disposant de la permission `pros:create` (rôle Commercial). Crée le compte marchand sans OTP, sa boutique, puis envoie un lien d'activation par e-mail et SMS. Avec `activateOnSite:true`, le compte est activé immédiatement (mot de passe fourni dans `merchantPassword` ou provisoire renvoyé) : l'e-mail devient facultatif et aucun lien à distance n'est envoyé. L'attribution (`createdBy`) est déduite du jeton.",
       body: {
         type: 'object',
         properties: {
@@ -932,7 +932,8 @@ const defaultRoute: any = (fastify: any, options, done) => {
               contact: { type: 'string', minLength: 8, maxLength: 20 },
               ville: { type: 'string', maxLength: 100 }
             },
-            required: ['firstname', 'lastname', 'email', 'contact'],
+            // E-mail non requis : un marchand sans e-mail est enrôlé avec activation sur place.
+            required: ['firstname', 'lastname', 'contact'],
             // Verrouillé : sans cela, un corps de requête pourrait tenter d'injecter
             // `createdBy`, `status` ou `isPartner`.
             additionalProperties: false
@@ -987,7 +988,13 @@ const defaultRoute: any = (fastify: any, options, done) => {
               sms: { type: 'boolean' }
             },
             additionalProperties: false
-          }
+          },
+          // Activation sur place (terrain) : le compte est utilisable immédiatement, sans lien à distance.
+          activateOnSite: { type: 'boolean' },
+          // Mot de passe choisi sur place avec le marchand. Absent → un code provisoire est généré et renvoyé.
+          merchantPassword: { type: 'string', minLength: 6, maxLength: 100 },
+          // Code du sticker QR collé sur place, affecté à la boutique créée (optionnel).
+          qrTagCode: { type: 'string', maxLength: 60 }
         },
         required: ['merchant', 'shop'],
         additionalProperties: false

@@ -18,6 +18,14 @@ export const MAX_RESENDS = 3;
 /** Durée de vie du `challenge` remis entre les deux étapes. */
 const CHALLENGE_TTL = '10m';
 const CHALLENGE_PURPOSE = 'admin-2fa';
+/**
+ * Appareil de confiance (Excel CMS n°10) : après une 2FA réussie, un jeton long est remis au poste.
+ * Tant qu'il est valide, une reconnexion sur ce poste n'exige plus le code e-mail (le mot de passe
+ * reste requis : le jeton remplace le second facteur, il ne l'offre pas gratuitement). Signé avec le
+ * secret des refresh tokens et désigné par `purpose`, il ne vaut que pour cet usage.
+ */
+const DEVICE_PURPOSE = 'admin-device';
+export const DEVICE_TTL_DAYS = Math.max(1, Number(process.env.ADMIN_DEVICE_TTL_DAYS) || 7);
 
 /** Même réponse pour un e-mail inconnu et un mauvais mot de passe : on ne révèle aucun compte. */
 const BAD_CREDENTIALS = 'Identifiants incorrects.';
@@ -40,8 +48,8 @@ const sameHash = (a: string, b: string): boolean =>
 export class AdminAuthService {
 	private readonly serviceLabel = 'AdminAuthService';
 
-	/** Étape 1 : vérifie le mot de passe et envoie le code. */
-	async login(email: string, password: string): Promise<Result> {
+	/** Étape 1 : vérifie le mot de passe, puis envoie le code — ou émet la session si le poste est reconnu. */
+	async login(email: string, password: string, deviceToken?: string): Promise<Result> {
 		const admin: any = await AdminModel.findOne({ email: String(email ?? '').trim() })
 			.populate('profile')
 			.lean();
@@ -67,6 +75,15 @@ export class AdminAuthService {
 		}
 
 		await AdminModel.updateOne({ _id: admin._id }, { $set: { failedLogins: 0, lockedUntil: null } });
+
+		// Appareil de confiance : la 2FA a déjà été passée sur ce poste. Le mot de passe vient d'être
+		// vérifié ci-dessus ; on peut donc émettre directement la session sans renvoyer de code.
+		if (this.readDeviceToken(deviceToken) === String(admin._id)) {
+			const session = this.issueSession(admin);
+			await AdminModel.updateOne({ _id: admin._id }, { $set: { lastLogin: new Date() } });
+			return { status: defines.status.requestOK, message: 'Connexion réussie.', data: { step: 'authenticated', ...session } };
+		}
+
 		return this.sendCode(admin, null);
 	}
 
@@ -104,12 +121,42 @@ export class AdminAuthService {
 		);
 		if (!consumed.modifiedCount) return bad('Code expiré : reconnectez-vous.', { code: 'CHALLENGE_EXPIRED' });
 
+		// 2FA réussie : on émet la session et on remet un jeton d'appareil de confiance, que le front
+		// conservera pour éviter de redemander un code à la prochaine connexion sur ce poste.
+		const session = this.issueSession(admin);
+		return { status: defines.status.requestOK, message: 'Connexion réussie.', data: session };
+	}
+
+	/**
+	 * Émet une session CMS : jetons d'accès/rafraîchissement, profil nettoyé, et un jeton d'appareil
+	 * de confiance (frais à chaque émission, pour prolonger la fenêtre de reconnaissance du poste).
+	 */
+	private issueSession(admin: any): { accessToken: string; refreshToken: string; deviceToken: string; user: any } {
 		const claimsOut = { _id: String(admin._id), email: admin.email, isAdmin: true };
 		const accessToken = TokenMiddleware.generate(claimsOut, 'accessToken');
 		const refreshToken = TokenMiddleware.generate(claimsOut, 'refreshToken');
+		const deviceToken = this.mintDeviceToken(String(admin._id));
 		const { password, loginChallenge, failedLogins, lockedUntil, __v, ...user } = admin;
+		return { accessToken, refreshToken, deviceToken, user };
+	}
 
-		return { status: defines.status.requestOK, message: 'Connexion réussie.', data: { accessToken, refreshToken, user } };
+	/** Jeton d'appareil de confiance pour `adminId` (JWT, secret des refresh tokens, purpose dédié). */
+	private mintDeviceToken(adminId: string): string {
+		return jwt.sign({ sub: adminId, purpose: DEVICE_PURPOSE }, env.jwt.secretAuth!, {
+			expiresIn: `${DEVICE_TTL_DAYS}d` as jwt.SignOptions['expiresIn']
+		});
+	}
+
+	/** Renvoie l'`adminId` d'un jeton d'appareil valide, sinon `null` (jeton absent, expiré ou falsifié). */
+	private readDeviceToken(token?: string): string | null {
+		if (!token) return null;
+		try {
+			const claims: any = jwt.verify(String(token), env.jwt.secretAuth!);
+			if (claims?.purpose !== DEVICE_PURPOSE || !claims.sub) return null;
+			return String(claims.sub);
+		} catch {
+			return null;
+		}
 	}
 
 	/** Renvoi du code (même `challenge`), avec délai d'attente et nombre limité. */

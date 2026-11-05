@@ -17,7 +17,10 @@ const defaultRoute: any = (fastify: any, options, done) => {
 				type: 'object',
 				properties: {
 					email: { type: 'string' },
-					password: { type: 'string' }
+					password: { type: 'string' },
+					// Appareil de confiance (Excel CMS n°10) : jeton remis après une 2FA réussie sur ce
+					// poste. S'il est présent et valide, la connexion n'exige plus de code par e-mail.
+					deviceToken: { type: 'string', maxLength: 2048 }
 				},
 				required: ['email', 'password'],
 				additionalProperties: false
@@ -30,8 +33,9 @@ const defaultRoute: any = (fastify: any, options, done) => {
 		preHandler: AppCheckMiddleware.verify,
 		handler: (request, reply) => {
 			const body: any = request.body;
-			// Étape 1/2 : aucun jeton ici, seulement un `challenge` et un code envoyé par e-mail.
-			const Q = adminAuthService.login(body.email, body.password);
+			// Étape 1/2 : sans appareil de confiance, aucun jeton ici (seulement un `challenge` + code
+			// e-mail). Avec un appareil reconnu, la session est émise directement.
+			const Q = adminAuthService.login(body.email, body.password, body.deviceToken);
 			return coddyger.api(reply, Q);
 		}
 	});

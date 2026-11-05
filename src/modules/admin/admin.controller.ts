@@ -26,10 +26,15 @@ export class AdminController {
 	// Function to save Admin
 	save(item: IAdmin) {
 		return new Promise(async (resolve, reject) => {
-			const { email, profile, password }: any = item;
+			const { email, profile, password, matricule }: any = item;
 
 			const isEmailExists: any = await this.dao.exist({ email });
 			const isProfileExists: any = await this.daoProfile.exist({ _id: profile });
+			// Matricule unique (hors comptes supprimés/archivés) : évite le doublon muet (cas Yann/Franck).
+			const isMatriculeExists: any =
+				matricule && String(matricule).trim()
+					? await this.dao.exist({ matricule: String(matricule).trim(), status: { $nin: ['removed', 'archived'] } })
+					: false;
 
 			if (isEmailExists) {
 				resolve({
@@ -37,6 +42,8 @@ export class AdminController {
 					message: locale.exist('cet email'),
 					data: null
 				});
+			} else if (isMatriculeExists) {
+				resolve(AdminService.matriculeExistsResponse());
 			} else if (!isProfileExists) {
 				resolve({
 					status: defines.status.badRequest,
@@ -109,6 +116,19 @@ export class AdminController {
 				const ownEmail: any = await this.dao.exist({ $and: [{ email }, { _id }] });
 				if (isEmailExists && !ownEmail) {
 					return resolve(AdminService.emailExistsResponse());
+				}
+
+				// Matricule unique (hors comptes supprimés/archivés), en autorisant celui du compte édité.
+				const matricule = (item as any).matricule;
+				if (matricule && String(matricule).trim()) {
+					const taken: any = await this.dao.exist({
+						matricule: String(matricule).trim(),
+						status: { $nin: ['removed', 'archived'] },
+						_id: { $ne: _id }
+					});
+					if (taken) {
+						return resolve(AdminService.matriculeExistsResponse());
+					}
 				}
 
 				if (profile) {

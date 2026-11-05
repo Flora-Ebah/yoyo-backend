@@ -4,7 +4,9 @@ import { IClient } from './client.interface';
 
 const schema = new mongoose.Schema<IClient>({
   _id: Schema.Types.ObjectId,
-  email: { type: String, required: true },
+  // Facultatif : un marchand enrôlé sur le terrain peut n'avoir qu'un téléphone (activation sur
+  // place). Les parcours grand public continuent d'exiger l'e-mail via leur validation applicative.
+  email: { type: String },
   firstname: { type: String, required: true },
   lastname: { type: String, required: true },
   password: { type: String, required: true },
@@ -107,6 +109,15 @@ const schema = new mongoose.Schema<IClient>({
 	lastProximityPushAt: { type: Date },
 },
 { timestamps: true });
+
+// Index : les lookups par e-mail/téléphone sont sur le chemin critique (connexion à chaque requête
+// mobile, contrôle d'unicité à l'enrôlement) et balayaient toute la collection. Non uniques : un
+// compte anonymisé libère son e-mail/numéro, des doublons « vides » peuvent coexister.
+schema.index({ email: 1 });
+schema.index({ contact: 1 });
+schema.index({ status: 1, createdAt: -1 });   // liste utilisateurs (tri récent)
+schema.index({ isPartner: 1, status: 1 });     // marchands vs clients (listes + stats dashboard)
+schema.index({ createdBy: 1 });                // marchands enrôlés par un commercial
 
 const model = mongoose.model<IClient>('Client', schema);
 

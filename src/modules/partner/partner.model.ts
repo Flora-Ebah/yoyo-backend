@@ -82,6 +82,16 @@ const schema = new mongoose.Schema<IPartner>({
 },
 { timestamps: true });
 
+// Index (la collection est lue bien plus souvent qu'écrite). Sans eux, chaque liste boutiques, le
+// feed Découvrir, les stats, la géo et les contrôles de propriété balayaient toute la collection.
+// Chemin chaud : liste admin + feed (filtre statut, boutiques mises en avant d'abord, puis récentes).
+schema.index({ status: 1, isSponsored: -1, createdAt: -1 });
+schema.index({ user: 1 });                 // boutiques d'un marchand, contrôle de propriété
+schema.index({ createdBy: 1 });            // boutiques enrôlées par un commercial (attribution)
+schema.index({ categories: 1 });           // filtre par catégorie (multikey)
+schema.index({ ville: 1 });                // filtre ville, distinct(ville), répartition géo
+schema.index({ 'validation.status': 1 });  // file des boutiques à valider / refusées
+
 const model = mongoose.model<IPartner>('Partner', schema);
 
 export class PartnerSet extends MongoDbDao<IPartner & Document> implements IData<IPartner & Document> {

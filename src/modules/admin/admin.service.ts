@@ -43,10 +43,23 @@ export class AdminService {
 	 * @returns Réponse formatée
 	 */
 	static emailExistsResponse() {
-		return { 
-			status: defines.status.badRequest, 
-			message: locale.exist('cet email'), 
-			data: null 
+		return {
+			status: defines.status.badRequest,
+			message: locale.exist('cet email'),
+			data: null
+		};
+	}
+
+	/**
+	 * Génère une réponse pour un matricule déjà existant.
+	 * Le matricule identifie un commercial/agent : deux comptes ne peuvent pas le partager, sinon un
+	 * doublon « muet » apparaît (cas Yann/Franck CTS2) — on refuse explicitement plutôt qu'enregistrer.
+	 */
+	static matriculeExistsResponse() {
+		return {
+			status: defines.status.badRequest,
+			message: locale.exist('ce matricule'),
+			data: null
 		};
 	}
 	
