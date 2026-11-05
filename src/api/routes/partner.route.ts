@@ -5,6 +5,7 @@ import { AppCheckMiddleware, TokenMiddleware } from '../middleware';
 import { PartnerMediaHelper } from '../../helpers/partner-media.helper';
 import { PartnerAccessHelper } from '../../helpers/partner-access.helper';
 import { PartnerSet } from '../../modules/partner';
+import { ClientSet } from '../../modules/client/client.model';
 import { PartnerValidationService, partnerValidationService } from '../../modules/partner/partner-validation.service';
 import { isPublicKey } from '../../services/storage/storage.service';
 
@@ -905,6 +906,44 @@ const defaultRoute: any = (fastify: any, options, done) => {
       const certified: any = request.query.certified;
 
       let Q = Controller.getStats({ from, to, certified });
+      return coddyger.api(reply, Q);
+    }
+  });
+
+  // Recherche de marchands existants (pour rattacher une boutique). Accessible aux détenteurs de
+  // `pros` (admin ET commercial), contrairement à la liste des clients (réservée à `clients:read`).
+  fastify.route({
+    schema: {
+      tags,
+      summary: 'Rechercher des marchands existants',
+      query: {
+        type: 'object',
+        properties: { q: { type: 'string', maxLength: 100 } },
+        additionalProperties: false
+      }
+    },
+    method: 'GET',
+    url: `${routePath}/merchants`,
+    preHandler: TokenMiddleware.canAny([['read', 'pros'], ['create', 'pros']]),
+    handler: (request: any, reply: any) => {
+      const q = String(request.query?.q ?? '').trim();
+      const Q = (async () => {
+        const params: any = { isPartner: true, status: { $nin: ['removed', 'archived', 'anonymized'] } };
+        if (q) {
+          const rx = { $regex: q, $options: 'i' };
+          params.$or = [{ firstname: rx }, { lastname: rx }, { email: rx }, { contact: rx }];
+        }
+        const dao: any = new ClientSet();
+        const data: any = await dao.select({ params, page: 1, pageSize: 20 });
+        const rows = (data?.rows ?? []).map((c: any) => ({
+          _id: String(c._id),
+          firstname: c.firstname ?? '',
+          lastname: c.lastname ?? '',
+          email: c.email ?? '',
+          contact: c.contact ?? ''
+        }));
+        return { status: defines.status.requestOK, message: { total: rows.length }, data: rows };
+      })();
       return coddyger.api(reply, Q);
     }
   });
