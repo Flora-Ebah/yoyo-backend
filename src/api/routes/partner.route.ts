@@ -1,4 +1,4 @@
-import coddyger, { defines } from 'coddyger';
+import coddyger, { defines, LoggerService, LogLevel } from 'coddyger';
 import { PartnerController } from '../../modules/partner/partner.controller';
 import { SettingsService } from '../../modules/settings';
 import { AppCheckMiddleware, TokenMiddleware } from '../middleware';
@@ -819,22 +819,28 @@ const defaultRoute: any = (fastify: any, options, done) => {
             );
             const merchantName = `${client?.firstname ?? ''} ${client?.lastname ?? ''}`.trim();
             const commercialName = `${admin?.firstname ?? ''} ${admin?.lastname ?? ''}`.trim() || admin?.email || 'Commercial';
-            await new EnrolmentService().create({
+            // merchantEmail / merchantPhone sont `required` dans le modèle : on garantit une valeur
+            // non vide (un marchand existant peut ne pas avoir d'email) sinon la validation échoue.
+            const enr: any = await new EnrolmentService().create({
               client: request.params.userId,
               partner: boutiqueId,
               commercial: admin._id,
-              merchantName: merchantName || client?.email || 'Marchand',
-              merchantEmail: client?.email || '',
-              merchantPhone: client?.contact || '',
-              shopName: String(body.name ?? ''),
+              merchantName: merchantName || client?.email || client?.contact || 'Marchand',
+              merchantEmail: client?.email || '—',
+              merchantPhone: client?.contact || '—',
+              shopName: String(body.name ?? '') || 'Boutique',
               ville: body.ville,
               commercialName,
               // Marchand déjà actif → la boutique est en ligne tout de suite.
               enrolmentStatus: 'activated',
               activatedAt: new Date()
             } as any);
-          } catch {
-            /* trace best-effort : on n'échoue pas la création pour une trace manquante */
+            if (enr?.error) {
+              LoggerService.log({ type: LogLevel.Error, content: enr.data, location: 'partner.route', method: 'for-user:enrolment' });
+            }
+          } catch (e) {
+            // trace best-effort : on n'échoue pas la création pour une trace manquante
+            LoggerService.log({ type: LogLevel.Error, content: e, location: 'partner.route', method: 'for-user:enrolment' });
           }
         }
 
