@@ -19,7 +19,7 @@ export interface IEnrolment {
 
   // --- Instantané figé à l'enrôlement -------------------------------------------------
   merchantName: string;
-  merchantEmail: string;
+  merchantEmail?: string;
   merchantPhone: string;
   shopName: string;
   ville?: string;

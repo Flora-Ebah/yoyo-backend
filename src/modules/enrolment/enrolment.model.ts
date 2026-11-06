@@ -11,7 +11,8 @@ const schema = new mongoose.Schema<IEnrolment>({
 
   // Instantané figé : voir la justification dans enrolment.interface.ts
   merchantName: { type: String, required: true },
-  merchantEmail: { type: String, required: true },
+  // Email FACULTATIF : un marchand enrôlé sur place n'en a pas forcément (le téléphone suffit).
+  merchantEmail: { type: String, default: '' },
   merchantPhone: { type: String, required: true },
   shopName: { type: String, required: true },
   ville: { type: String },

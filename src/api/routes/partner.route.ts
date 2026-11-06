@@ -819,14 +819,13 @@ const defaultRoute: any = (fastify: any, options, done) => {
             );
             const merchantName = `${client?.firstname ?? ''} ${client?.lastname ?? ''}`.trim();
             const commercialName = `${admin?.firstname ?? ''} ${admin?.lastname ?? ''}`.trim() || admin?.email || 'Commercial';
-            // merchantEmail / merchantPhone sont `required` dans le modèle : on garantit une valeur
-            // non vide (un marchand existant peut ne pas avoir d'email) sinon la validation échoue.
+            // Email facultatif (marchand enrôlé sur place). Le téléphone sert d'identifiant.
             const enr: any = await new EnrolmentService().create({
               client: request.params.userId,
               partner: boutiqueId,
               commercial: admin._id,
               merchantName: merchantName || client?.email || client?.contact || 'Marchand',
-              merchantEmail: client?.email || '—',
+              merchantEmail: client?.email || '',
               merchantPhone: client?.contact || '—',
               shopName: String(body.name ?? '') || 'Boutique',
               ville: body.ville,
