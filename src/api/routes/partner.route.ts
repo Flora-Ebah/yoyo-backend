@@ -7,6 +7,7 @@ import { PartnerAccessHelper } from '../../helpers/partner-access.helper';
 import { PartnerSet } from '../../modules/partner';
 import { ClientSet } from '../../modules/client/client.model';
 import { qrTagService } from '../../modules/qr-tag';
+import { EnrolmentService } from '../../modules/enrolment/enrolment.service';
 import { PartnerValidationService, partnerValidationService } from '../../modules/partner/partner-validation.service';
 import { isPublicKey } from '../../services/storage/storage.service';
 
@@ -804,10 +805,41 @@ const defaultRoute: any = (fastify: any, options, done) => {
 
       const Q = (async () => {
         const res: any = await Controller.create(body);
-        // Création OK + sticker demandé → on l'affecte à la boutique créée (best-effort : un échec
-        // d'affectation ne doit pas annuler la boutique, on le signale seulement).
         const boutiqueId = res?.data?._id ?? res?.data?.id;
-        if (qrTagCode && boutiqueId && [defines.status.created, defines.status.requestOK].includes(res?.status)) {
+        const createdOk = boutiqueId && [defines.status.created, defines.status.requestOK].includes(res?.status);
+
+        // Trace commerciale : ajouter une boutique à un marchand EXISTANT doit aussi apparaître dans
+        // « Mes enrôlements » du commercial (comme un onboarding). Best-effort : un échec n'annule
+        // pas la boutique.
+        if (createdOk) {
+          try {
+            const client: any = await new ClientSet().selectOne(
+              { _id: request.params.userId },
+              'firstname lastname email contact'
+            );
+            const merchantName = `${client?.firstname ?? ''} ${client?.lastname ?? ''}`.trim();
+            const commercialName = `${admin?.firstname ?? ''} ${admin?.lastname ?? ''}`.trim() || admin?.email || 'Commercial';
+            await new EnrolmentService().create({
+              client: request.params.userId,
+              partner: boutiqueId,
+              commercial: admin._id,
+              merchantName: merchantName || client?.email || 'Marchand',
+              merchantEmail: client?.email || '',
+              merchantPhone: client?.contact || '',
+              shopName: String(body.name ?? ''),
+              ville: body.ville,
+              commercialName,
+              // Marchand déjà actif → la boutique est en ligne tout de suite.
+              enrolmentStatus: 'activated',
+              activatedAt: new Date()
+            } as any);
+          } catch {
+            /* trace best-effort : on n'échoue pas la création pour une trace manquante */
+          }
+        }
+
+        // Sticker demandé → on l'affecte à la boutique créée (best-effort).
+        if (qrTagCode && createdOk) {
           try {
             const qr: any = await qrTagService.assign(qrTagCode, String(boutiqueId), String(admin._id));
             res.data = { ...(res.data ?? {}), qrAssigned: qr.ok === true, qrMessage: qr.ok ? undefined : qr.message };
