@@ -71,6 +71,18 @@ export class EnrolmentService {
     }
   }
 
+  /** Un enrôlement existe-t-il déjà pour cette boutique (optionnellement ce commercial) ? */
+  async existsForPartner(partnerId: string, commercialId?: string): Promise<boolean> {
+    try {
+      const model: any = (this.dao as any).defaultModel;
+      const q: any = { partner: partnerId };
+      if (commercialId) q.commercial = commercialId;
+      return (await model.countDocuments(q)) > 0;
+    } catch {
+      return false;
+    }
+  }
+
   /**
    * Retire (soft-delete) tous les enrôlements rattachés à un client. Appelé quand le compte
    * marchand est supprimé/anonymisé côté admin : sans cela, l'enrôlement — qui alimente la vue

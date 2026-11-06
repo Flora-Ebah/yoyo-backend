@@ -805,13 +805,18 @@ const defaultRoute: any = (fastify: any, options, done) => {
 
       const Q = (async () => {
         const res: any = await Controller.create(body);
-        const boutiqueId = res?.data?._id ?? res?.data?.id;
+        // Le contrôleur renvoie `data: null` ; l'id de la boutique créée est posé sur `body._id` par
+        // le service (PartnerService.create). On le lit donc là (sinon enrôlement + sticker ignorés).
+        const boutiqueId = body._id ?? body.id ?? res?.data?._id ?? res?.data?.id;
         const createdOk = boutiqueId && [defines.status.created, defines.status.requestOK].includes(res?.status);
 
         // Trace commerciale : ajouter une boutique à un marchand EXISTANT doit aussi apparaître dans
         // « Mes enrôlements » du commercial (comme un onboarding). Best-effort : un échec n'annule
         // pas la boutique.
-        if (createdOk) {
+        const enrolmentSvc = new EnrolmentService();
+        // On n'ajoute notre trace (attribuée au commercial courant) que si le contrôleur ne l'a pas
+        // déjà créée pour cette boutique (évite un doublon avec createEnrolmentIfAgentLinked).
+        if (createdOk && !(await enrolmentSvc.existsForPartner(String(boutiqueId)))) {
           try {
             const client: any = await new ClientSet().selectOne(
               { _id: request.params.userId },
@@ -820,7 +825,7 @@ const defaultRoute: any = (fastify: any, options, done) => {
             const merchantName = `${client?.firstname ?? ''} ${client?.lastname ?? ''}`.trim();
             const commercialName = `${admin?.firstname ?? ''} ${admin?.lastname ?? ''}`.trim() || admin?.email || 'Commercial';
             // Email facultatif (marchand enrôlé sur place). Le téléphone sert d'identifiant.
-            const enr: any = await new EnrolmentService().create({
+            const enr: any = await enrolmentSvc.create({
               client: request.params.userId,
               partner: boutiqueId,
               commercial: admin._id,
