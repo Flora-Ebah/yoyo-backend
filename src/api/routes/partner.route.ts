@@ -835,11 +835,16 @@ const defaultRoute: any = (fastify: any, options, done) => {
               activatedAt: new Date()
             } as any);
             if (enr?.error) {
+              const msg = enr?.data?.message ?? String(enr?.data ?? 'inconnue');
               LoggerService.log({ type: LogLevel.Error, content: enr.data, location: 'partner.route', method: 'for-user:enrolment' });
+              res.data = { ...(res.data ?? {}), enrolmentOk: false, enrolmentError: msg };
+            } else {
+              res.data = { ...(res.data ?? {}), enrolmentOk: true };
             }
-          } catch (e) {
+          } catch (e: any) {
             // trace best-effort : on n'échoue pas la création pour une trace manquante
             LoggerService.log({ type: LogLevel.Error, content: e, location: 'partner.route', method: 'for-user:enrolment' });
+            res.data = { ...(res.data ?? {}), enrolmentOk: false, enrolmentError: e?.message ?? String(e) };
           }
         }
 
