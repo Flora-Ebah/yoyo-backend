@@ -26,7 +26,16 @@ const bodyProps = {
 const OBJECT_ID = '^[0-9a-fA-F]{24}$';
 
 const defaultRoute: any = (fastify: any, _options: any, done: any) => {
-  // Liste (admin + résolution côté CMS)
+  // Espaces ACTIFS — pour la résolution (tout admin connecté : un commercial n'a pas le droit `roles`).
+  fastify.route({
+    schema: { tags, summary: 'Espaces actifs (résolution)' },
+    method: 'GET',
+    url: `${routePath}/active`,
+    preHandler: TokenMiddleware.verifyAdmin,
+    handler: (_req: any, reply: any) => coddyger.api(reply, Controller.listActive()),
+  });
+
+  // Liste complète (gestion admin)
   fastify.route({
     schema: { tags, summary: 'Liste des espaces' },
     method: 'GET',

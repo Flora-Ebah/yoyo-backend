@@ -26,6 +26,14 @@ export class SpaceController {
     }).catch((e: IErrorObject) => coddyger.catchReturn(e, controllerLabel, 'list'));
   }
 
+  /** Espaces actifs (résolution) — accessible à tout admin connecté. */
+  listActive() {
+    return new Promise(async (resolve) => {
+      const rows = await this.service.listActive();
+      resolve({ status: defines.status.requestOK, message: 'OK', data: rows });
+    }).catch((e: IErrorObject) => coddyger.catchReturn(e, controllerLabel, 'listActive'));
+  }
+
   create(body: any) {
     return new Promise(async (resolve) => {
       const data = sanitize(body);
