@@ -433,7 +433,10 @@ const defaultRoute: any = (fastify: any, options, done) => {
           },
           from: { type: 'string' },
           to: { type: 'string' },
-          ville: { type: 'string' }
+          ville: { type: 'string' },
+          // Feed Découvrir géolocalisé (Client) : position de l'utilisateur → tri par distance.
+          lat: { type: 'number', minimum: -90, maximum: 90 },
+          lng: { type: 'number', minimum: -180, maximum: 180 }
         },
         required: [],
         additionalProperties: false
@@ -453,6 +456,8 @@ const defaultRoute: any = (fastify: any, options, done) => {
       let from: any = request.query.from;
       let to: any = request.query.to;
       let ville: any = request.query.ville;
+      let lat: any = request.query.lat;
+      let lng: any = request.query.lng;
       const user: any = request.user;
 
       // `createdBy=me` est résolu ici, à partir du jeton : le client ne choisit pas l'identité
@@ -465,7 +470,7 @@ const defaultRoute: any = (fastify: any, options, done) => {
       if (!user?.isAdmin) status = 'active';
 
       // Vidéo réservée aux boutiques boostées (sauf admin / propriétaire).
-      let Q = PartnerMediaHelper.apply(Controller.getAll({ page, pageSize, status, query, category, createdBy, sort, from, to, ville }), user);
+      let Q = PartnerMediaHelper.apply(Controller.getAll({ page, pageSize, status, query, category, createdBy, sort, from, to, ville, lat, lng }), user);
       return coddyger.api(reply, Q);
     }
   });

@@ -168,7 +168,7 @@ export class PartnerService {
     return [...seen.values()].sort((a, b) => a.localeCompare(b, 'fr'));
   }
 
-  async getAll(payloads: { page?: number; pageSize?: number; query?: string; status?: string; category?: string; createdBy?: string; sort?: string; from?: string; to?: string; ville?: string }): Promise<any> {
+  async getAll(payloads: { page?: number; pageSize?: number; query?: string; status?: string; category?: string; createdBy?: string; sort?: string; from?: string; to?: string; ville?: string; lat?: number; lng?: number }): Promise<any> {
     try {
       let page: number = payloads.page ?? 1;
 			let pageSize: number = payloads.pageSize ?? 10;
@@ -209,7 +209,16 @@ export class PartnerService {
 				const rx = { $regex: escapeRegex(query), $options: 'i' };
 				params.$or = ['slug', 'name', 'description', 'ville', 'address', 'phone', 'email'].map((f) => ({ [f]: rx }));
 			}
-			data = await this.dao.select({ params, page, pageSize: Math.min(500, Number(pageSize) || 10), ...sortOpts });
+			// Feed Découvrir géolocalisé (Client) : si la position de l'utilisateur est fournie, on
+			// classe boutiques BOOSTÉES d'abord, puis par DISTANCE croissante, puis par réduction.
+			// Le tri doit être GLOBAL (avant pagination) : on classe en mémoire puis on pagine.
+			const lat = Number(payloads.lat);
+			const lng = Number(payloads.lng);
+			const geoMode = Number.isFinite(lat) && Number.isFinite(lng);
+
+			data = geoMode
+				? await this.selectByDistance({ params, page, pageSize: Math.min(500, Number(pageSize) || 10), lat, lng })
+				: await this.dao.select({ params, page, pageSize: Math.min(500, Number(pageSize) || 10), ...sortOpts });
 
 			if (data.error) {
 				throw data;
@@ -233,6 +242,77 @@ export class PartnerService {
       });
       throw error;
     }
+  }
+
+  /**
+   * Classement géolocalisé du feed Découvrir, puis pagination.
+   *
+   * Règle (validée) : BOOSTÉES d'abord → DISTANCE croissante → réduction décroissante → récence.
+   * Le tri étant global (avant pagination), on charge les boutiques correspondant aux filtres en
+   * version légère (id + coordonnées + critères), on les classe en mémoire, puis on ne recharge en
+   * détail (avec populate) que les `pageSize` de la page demandée, dans l'ordre.
+   *
+   * Plafond `CAP` : borne mémoire/CPU. Suffisant pour le lancement (déploiement national = quelques
+   * centaines de boutiques) ; au-delà, le classement ne porte que sur les `CAP` premières.
+   */
+  private async selectByDistance(opts: { params: any; page: number; pageSize: number; lat: number; lng: number }): Promise<any> {
+    const { params, page, pageSize, lat, lng } = opts;
+    const model: any = (this.dao as any).defaultModel;
+    const CAP = 2000;
+
+    // 1) Version légère de toutes les boutiques correspondant aux filtres.
+    const slim: any[] = await model
+      .find(params, '_id latitude longitude isSponsored maxDiscount createdAt')
+      .limit(CAP)
+      .lean();
+
+    // 2) Distance haversine (km) depuis la position de l'utilisateur ; sans coordonnées → repoussée.
+    const R = 6371;
+    const toRad = (d: number) => (d * Math.PI) / 180;
+    const distanceKm = (lat2: number, lng2: number) => {
+      const dLat = toRad(lat2 - lat);
+      const dLng = toRad(lng2 - lng);
+      const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+      return 2 * R * Math.asin(Math.min(1, Math.sqrt(a)));
+    };
+
+    const ranked = slim.map((p) => {
+      const hasGeo = typeof p.latitude === 'number' && typeof p.longitude === 'number' && (p.latitude !== 0 || p.longitude !== 0);
+      return {
+        id: p._id,
+        sponsored: p.isSponsored ? 1 : 0,
+        dist: hasGeo ? distanceKm(p.latitude, p.longitude) : Number.POSITIVE_INFINITY,
+        discount: typeof p.maxDiscount === 'number' ? p.maxDiscount : 0,
+        createdAt: p.createdAt ? new Date(p.createdAt).getTime() : 0,
+      };
+    });
+
+    // 3) Tri : boostées d'abord, puis plus proches, puis plus forte réduction, puis plus récentes.
+    ranked.sort(
+      (a, b) =>
+        b.sponsored - a.sponsored ||
+        a.dist - b.dist ||
+        b.discount - a.discount ||
+        b.createdAt - a.createdAt,
+    );
+
+    const totalRows = ranked.length;
+    const totalPages = Math.max(1, Math.ceil(totalRows / pageSize));
+    const start = (Math.max(1, page) - 1) * pageSize;
+    const pageIds = ranked.slice(start, start + pageSize).map((r) => r.id);
+
+    // 4) Rechargement détaillé (populate) des seules boutiques de la page, dans l'ordre classé.
+    const docs: any[] = pageIds.length
+      ? await model
+          .find({ _id: { $in: pageIds } }, '-password -__v')
+          .populate('user', 'firstname lastname email isDocumentVerified')
+          .populate('categories')
+          .lean()
+      : [];
+    const byId = new Map(docs.map((d) => [String(d._id), d]));
+    const rows = pageIds.map((id) => byId.get(String(id))).filter(Boolean);
+
+    return { rows, totalRows, totalPages, countRowsPerPage: rows.length, totalPagesPerQuery: totalPages };
   }
 
   /**

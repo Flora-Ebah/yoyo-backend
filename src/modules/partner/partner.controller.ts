@@ -204,7 +204,7 @@ export class PartnerController {
     }).catch((e: IErrorObject) => coddyger.catchReturn(e, controllerLabel, 'villes'));
   }
 
-  getAll(payloads: { page?: number; pageSize?: number; query?: string; status?: string; category?: string; createdBy?: string; sort?: string; from?: string; to?: string; ville?: string }) {
+  getAll(payloads: { page?: number; pageSize?: number; query?: string; status?: string; category?: string; createdBy?: string; sort?: string; from?: string; to?: string; ville?: string; lat?: number; lng?: number }) {
     return new Promise(async (resolve, reject) => {
       try {
         const items = await this.service.getAll(payloads);
