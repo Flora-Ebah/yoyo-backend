@@ -170,20 +170,31 @@ export class ProfileService {
    * @param id ID de l'élément à supprimer
    * @returns Résultat de l'opération
    */
+  /** Suppression DÉFINITIVE du rôle (plus de soft-delete : « Supprimer » retire vraiment le rôle). */
   async delete(id: string): Promise<void> {
     try {
-      const result:any = await this.dao.update({ _id: id }, { status: 'removed' });
-      if (result.error) {
-        throw new Error(result);
-      }
+      const model: any = (this.dao as any).defaultModel;
+      await model.deleteOne({ _id: id });
     } catch (error) {
-      LoggerService.log({ 
-        type: LogLevel.Error, 
-        content: error, 
-        location: this.serviceLabel, 
-        method: 'delete' 
-      });
+      LoggerService.log({ type: LogLevel.Error, content: error, location: this.serviceLabel, method: 'delete' });
       throw error;
+    }
+  }
+
+  /** Le rôle existe-t-il en base (quel que soit son statut, removed inclus) ? */
+  async existsRaw(id: string): Promise<boolean> {
+    const model: any = (this.dao as any).defaultModel;
+    return !!(await model.exists({ _id: id }));
+  }
+
+  /** Nombre de comptes admin (non supprimés) qui utilisent ce rôle — garde avant suppression. */
+  async countAdminsUsing(id: string): Promise<number> {
+    try {
+      const mongoose = require('mongoose');
+      const Admin = mongoose.model('Admin');
+      return await Admin.countDocuments({ profile: id, status: { $nin: ['removed'] } });
+    } catch {
+      return 0;
     }
   }
 }

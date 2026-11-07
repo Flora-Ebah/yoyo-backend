@@ -154,20 +154,29 @@ export class ProfileController {
           });
         }
         
-        // Vérification de l'existence de l'élément
-        const existingItem = await this.service.getById(id);
-        
-        if (!existingItem) {
+        // Existence brute (removed inclus) : on doit pouvoir supprimer définitivement un rôle même
+        // s'il avait été « removed » auparavant.
+        if (!(await this.service.existsRaw(id))) {
           return resolve({
             status: defines.status.notFound,
             message: locale.notfound('Profile'),
             data: null
           });
         }
-        
-        // Suppression
+
+        // Garde : un rôle utilisé par des comptes ne peut pas être supprimé (réaffecter d'abord).
+        const inUse = await this.service.countAdminsUsing(id);
+        if (inUse > 0) {
+          return resolve({
+            status: defines.status.conflict,
+            message: `Ce rôle est utilisé par ${inUse} compte(s). Réaffectez-les à un autre rôle avant de le supprimer.`,
+            data: null
+          });
+        }
+
+        // Suppression DÉFINITIVE
         await this.service.delete(id);
-        
+
         resolve({
           status: defines.status.requestOK,
           message: locale.controller.done,
