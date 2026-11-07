@@ -60,7 +60,7 @@ const defaultRoute: any = (fastify: any, options, done) => {
 		},
 		method: 'GET',
 		url: '/admin/reports',
-		preHandler: TokenMiddleware.can('read', 'moderation'),
+		preHandler: TokenMiddleware.can('read', 'moderation.reports'),
 		handler: (request, reply) => coddyger.api(reply, reportService.adminList(request.query ?? {}))
 	});
 
@@ -82,7 +82,7 @@ const defaultRoute: any = (fastify: any, options, done) => {
 		},
 		method: 'POST',
 		url: '/admin/reports/resolve',
-		preHandler: TokenMiddleware.can('update', 'moderation'),
+		preHandler: TokenMiddleware.can('update', 'moderation.reports'),
 		handler: (request, reply) => coddyger.api(reply, reportService.resolve(request.body, String(request.user._id)))
 	});
 

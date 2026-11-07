@@ -224,8 +224,13 @@ export class TokenMiddleware {
 			return true;
 		}
 
+		// Hiérarchie par convention pointée : un sous-sujet `parent.enfant` est accordé si le profil
+		// possède le sujet exact, OU son sujet parent (`parent`), OU le joker `all`. Ainsi, accorder
+		// `moderation` donne accès à `moderation.media`, `moderation.reports`, etc. (compat ascendante).
+		const parent = subject.includes('.') ? subject.split('.')[0] : null;
+
 		return ability.some((a: any) => {
-			const subjectOk = a?.subject === subject || a?.subject === 'all';
+			const subjectOk = a?.subject === subject || (parent && a?.subject === parent) || a?.subject === 'all';
 			const actionOk = a?.action === action || a?.action === 'manage';
 
 			return subjectOk && actionOk;
