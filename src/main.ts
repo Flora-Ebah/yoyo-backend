@@ -1,6 +1,7 @@
 import coddyger, { env, getDatabaseAccess } from "coddyger";
 import Router from "./router";
 import { MainHelper, SocketIOHelper } from "./helpers";
+import { SpaceService } from "./modules/space";
 import { startCleanupCron } from './cron/cleanup-clients.cron';
 import { startSubscriptionRenewalCron } from './cron/subscription-renewal.cron';
 import { startSponsorExpirationCron } from './cron/sponsor-expiration.cron';
@@ -79,6 +80,9 @@ export class Main {
     initEventBus();
 
     MainHelper.setDefaultProfile()
+
+    // Espaces (« guichets ») par défaut : insérés si la collection est vide (idempotent).
+    new SpaceService().seedDefaults().catch(() => {});
 
     // Start cleanup cron job
     startCleanupCron();
